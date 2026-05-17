@@ -39,7 +39,7 @@ jobs:
         run: cosign sign-blob --yes dist/checksums.txt --output-signature dist/checksums.txt.sig --output-certificate dist/checksums.txt.pem
 
       - name: Publish release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/portlyn-server-linux-amd64
