@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"portlyn/internal/domain"
+	"portlyn/internal/secureconfig"
 )
 
 type CertificateMeta struct {
@@ -29,11 +30,20 @@ type CertificateStore interface {
 }
 
 type DBCertificateStore struct {
-	db *gorm.DB
+	db          *gorm.DB
+	dataSecrets [][]byte
 }
 
-func NewDBCertificateStore(db *gorm.DB) *DBCertificateStore {
-	return &DBCertificateStore{db: db}
+func NewDBCertificateStore(db *gorm.DB, dataSecrets []string) *DBCertificateStore {
+	normalized := make([][]byte, 0, len(dataSecrets))
+	for _, value := range dataSecrets {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		normalized = append(normalized, []byte(trimmed))
+	}
+	return &DBCertificateStore{db: db, dataSecrets: normalized}
 }
 
 func (s *DBCertificateStore) GetCertificate(ctx context.Context, domainName string) (*tls.Certificate, error) {
@@ -46,7 +56,15 @@ func (s *DBCertificateStore) GetCertificate(ctx context.Context, domainName stri
 		return nil, err
 	}
 
-	pair, err := tls.X509KeyPair(item.Certificate, item.PrivateKey)
+	privateKey := item.PrivateKey
+	if secureconfig.IsEncryptedBytesV1(item.PrivateKey) {
+		privateKey, err = secureconfig.DecryptBytesV1WithSecrets(s.dataSecrets, item.PrivateKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	pair, err := tls.X509KeyPair(item.Certificate, privateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +81,13 @@ func (s *DBCertificateStore) StoreCertificate(ctx context.Context, domainName st
 	certPEM, keyPEM, notBefore, notAfter, err := marshalCertificate(cert)
 	if err != nil {
 		return err
+	}
+	if len(s.dataSecrets) > 0 && !secureconfig.IsEncryptedBytesV1(keyPEM) {
+		encryptedKey, encryptErr := secureconfig.EncryptBytesV1(s.dataSecrets[0], keyPEM)
+		if encryptErr != nil {
+			return encryptErr
+		}
+		keyPEM = encryptedKey
 	}
 
 	var existing domain.StoredTLSCertificate
@@ -89,6 +114,15 @@ func (s *DBCertificateStore) StoreCertificate(ctx context.Context, domainName st
 }
 
 func (s *DBCertificateStore) StorePEM(ctx context.Context, domainName, issuerKey string, certPEM, keyPEM []byte, metadata []byte) error {
+	storedKey := append([]byte(nil), keyPEM...)
+	if len(s.dataSecrets) > 0 && !secureconfig.IsEncryptedBytesV1(storedKey) {
+		encryptedKey, encryptErr := secureconfig.EncryptBytesV1(s.dataSecrets[0], storedKey)
+		if encryptErr != nil {
+			return encryptErr
+		}
+		storedKey = encryptedKey
+	}
+
 	pair, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return err
@@ -105,7 +139,7 @@ func (s *DBCertificateStore) StorePEM(ctx context.Context, domainName, issuerKey
 		Domain:       normalizeDomain(domainName),
 		IssuerKey:    issuerKey,
 		Certificate:  certPEM,
-		PrivateKey:   keyPEM,
+		PrivateKey:   storedKey,
 		MetadataJSON: string(metadata),
 		NotBefore:    leaf.NotBefore.UTC(),
 		NotAfter:     leaf.NotAfter.UTC(),
@@ -142,6 +176,31 @@ func (s *DBCertificateStore) ListExpiringCertificates(ctx context.Context, withi
 		})
 	}
 	return out, nil
+}
+
+func (s *DBCertificateStore) MigrateStoredPrivateKeys(ctx context.Context) (int, error) {
+	if len(s.dataSecrets) == 0 {
+		return 0, nil
+	}
+	var rows []domain.StoredTLSCertificate
+	if err := s.db.WithContext(ctx).Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	updated := 0
+	for _, row := range rows {
+		if secureconfig.IsEncryptedBytesV1(row.PrivateKey) || len(row.PrivateKey) == 0 {
+			continue
+		}
+		encrypted, err := secureconfig.EncryptBytesV1(s.dataSecrets[0], row.PrivateKey)
+		if err != nil {
+			return updated, err
+		}
+		if err := s.db.WithContext(ctx).Model(&domain.StoredTLSCertificate{}).Where("id = ?", row.ID).Update("private_key", encrypted).Error; err != nil {
+			return updated, err
+		}
+		updated++
+	}
+	return updated, nil
 }
 
 func marshalCertificate(cert *tls.Certificate) ([]byte, []byte, time.Time, time.Time, error) {

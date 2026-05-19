@@ -459,7 +459,7 @@ type AppSettings struct {
 	OIDCEnabled               bool            `gorm:"not null;default:false" json:"oidc_enabled"`
 	OIDCIssuerURL             string          `gorm:"size:512" json:"oidc_issuer_url"`
 	OIDCClientID              string          `gorm:"size:255" json:"oidc_client_id"`
-	OIDCClientSecret          string          `gorm:"size:512" json:"-"`
+	OIDCClientSecret          string          `gorm:"type:text" json:"-"`
 	OIDCRedirectURL           string          `gorm:"size:512" json:"oidc_redirect_url"`
 	OIDCAllowedEmailDomains   JSONStringSlice `gorm:"type:text;not null;default:'[]'" json:"oidc_allowed_email_domains"`
 	OIDCAdminRoleClaimPath    string          `gorm:"size:255" json:"oidc_admin_role_claim_path"`
@@ -476,7 +476,7 @@ type AppSettings struct {
 	SMTPHost                  string          `gorm:"size:255" json:"smtp_host"`
 	SMTPPort                  int             `gorm:"not null;default:587" json:"smtp_port"`
 	SMTPUsername              string          `gorm:"size:255" json:"smtp_username"`
-	SMTPPassword              string          `gorm:"size:512" json:"-"`
+	SMTPPassword              string          `gorm:"type:text" json:"-"`
 	SMTPFromEmail             string          `gorm:"size:255" json:"smtp_from_email"`
 	SMTPFromName              string          `gorm:"size:255" json:"smtp_from_name"`
 	SMTPEncryption            string          `gorm:"size:32;not null;default:starttls" json:"smtp_encryption"`

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 type LoginTokenStore struct {
 	db *gorm.DB
 }
+
+var sha256HexPattern = regexp.MustCompile("^[a-f0-9]{64}$")
 
 func NewLoginTokenStore(db *gorm.DB) *LoginTokenStore {
 	return &LoginTokenStore{db: db}
@@ -77,4 +80,23 @@ func (s *LoginTokenStore) MarkUsed(ctx context.Context, id uint, usedAt time.Tim
 func hashLoginToken(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
+}
+
+func (s *LoginTokenStore) MigratePlainTokens(ctx context.Context) (int, error) {
+	var rows []domain.LoginToken
+	if err := s.db.WithContext(ctx).Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	updated := 0
+	for _, row := range rows {
+		token := strings.TrimSpace(row.Token)
+		if token == "" || sha256HexPattern.MatchString(token) {
+			continue
+		}
+		if err := s.db.WithContext(ctx).Model(&domain.LoginToken{}).Where("id = ?", row.ID).Update("token", hashLoginToken(token)).Error; err != nil {
+			return updated, err
+		}
+		updated++
+	}
+	return updated, nil
 }

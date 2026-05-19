@@ -3,27 +3,45 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"gorm.io/gorm"
 
 	"portlyn/internal/config"
 	"portlyn/internal/domain"
+	"portlyn/internal/secureconfig"
 )
 
 const appSettingsSingletonID uint = 1
 
 type AppSettingsStore struct {
-	db *gorm.DB
+	db                  *gorm.DB
+	dataEncryptionBytes [][]byte
 }
 
 func NewAppSettingsStore(db *gorm.DB) *AppSettingsStore {
 	return &AppSettingsStore{db: db}
 }
 
+func (s *AppSettingsStore) SetDataEncryptionSecrets(values []string) {
+	out := make([][]byte, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, []byte(trimmed))
+	}
+	s.dataEncryptionBytes = out
+}
+
 func (s *AppSettingsStore) Get(ctx context.Context) (*domain.AppSettings, error) {
 	var item domain.AppSettings
 	err := s.db.WithContext(ctx).First(&item, appSettingsSingletonID).Error
 	if err == nil {
+		if decryptErr := s.decryptSecretFields(&item); decryptErr != nil {
+			return nil, decryptErr
+		}
 		return &item, nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -34,10 +52,15 @@ func (s *AppSettingsStore) Get(ctx context.Context) (*domain.AppSettings, error)
 
 func (s *AppSettingsStore) Upsert(ctx context.Context, item *domain.AppSettings) error {
 	item.ID = appSettingsSingletonID
-	return s.db.WithContext(ctx).Save(item).Error
+	encrypted := *item
+	if err := s.encryptSecretFields(&encrypted); err != nil {
+		return err
+	}
+	return s.db.WithContext(ctx).Save(&encrypted).Error
 }
 
 func (s *AppSettingsStore) SeedDefaults(ctx context.Context, cfg config.Config) error {
+	s.SetDataEncryptionSecrets(cfg.DataEncryptionSecrets())
 	_, err := s.Get(ctx)
 	if err == nil {
 		return nil
@@ -89,4 +112,85 @@ func (s *AppSettingsStore) SeedDefaults(ctx context.Context, cfg config.Config) 
 		SMTPEncryption:            "starttls",
 	}
 	return s.Upsert(ctx, item)
+}
+
+func (s *AppSettingsStore) MigrateStoredSecrets(ctx context.Context) (int, error) {
+	if len(s.dataEncryptionBytes) == 0 {
+		return 0, nil
+	}
+	var item domain.AppSettings
+	err := s.db.WithContext(ctx).First(&item, appSettingsSingletonID).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	updated := 0
+	if strings.TrimSpace(item.OIDCClientSecret) != "" && !secureconfig.IsEncryptedValueV1(item.OIDCClientSecret) {
+		encrypted, encryptErr := secureconfig.EncryptStringV1(s.dataEncryptionBytes[0], item.OIDCClientSecret)
+		if encryptErr != nil {
+			return updated, encryptErr
+		}
+		item.OIDCClientSecret = encrypted
+		updated++
+	}
+	if strings.TrimSpace(item.SMTPPassword) != "" && !secureconfig.IsEncryptedValueV1(item.SMTPPassword) {
+		encrypted, encryptErr := secureconfig.EncryptStringV1(s.dataEncryptionBytes[0], item.SMTPPassword)
+		if encryptErr != nil {
+			return updated, encryptErr
+		}
+		item.SMTPPassword = encrypted
+		updated++
+	}
+	if updated == 0 {
+		return 0, nil
+	}
+	return updated, s.db.WithContext(ctx).Save(&item).Error
+}
+
+func (s *AppSettingsStore) encryptSecretFields(item *domain.AppSettings) error {
+	if item == nil {
+		return nil
+	}
+	if len(s.dataEncryptionBytes) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(item.OIDCClientSecret) != "" && !secureconfig.IsEncryptedValueV1(item.OIDCClientSecret) {
+		encrypted, err := secureconfig.EncryptStringV1(s.dataEncryptionBytes[0], item.OIDCClientSecret)
+		if err != nil {
+			return err
+		}
+		item.OIDCClientSecret = encrypted
+	}
+	if strings.TrimSpace(item.SMTPPassword) != "" && !secureconfig.IsEncryptedValueV1(item.SMTPPassword) {
+		encrypted, err := secureconfig.EncryptStringV1(s.dataEncryptionBytes[0], item.SMTPPassword)
+		if err != nil {
+			return err
+		}
+		item.SMTPPassword = encrypted
+	}
+	return nil
+}
+
+func (s *AppSettingsStore) decryptSecretFields(item *domain.AppSettings) error {
+	if item == nil {
+		return nil
+	}
+	if strings.TrimSpace(item.OIDCClientSecret) != "" && secureconfig.IsEncryptedValueV1(item.OIDCClientSecret) {
+		plaintext, err := secureconfig.DecryptStringV1WithSecrets(s.dataEncryptionBytes, item.OIDCClientSecret)
+		if err != nil {
+			return err
+		}
+		item.OIDCClientSecret = plaintext
+	}
+	if strings.TrimSpace(item.SMTPPassword) != "" && secureconfig.IsEncryptedValueV1(item.SMTPPassword) {
+		plaintext, err := secureconfig.DecryptStringV1WithSecrets(s.dataEncryptionBytes, item.SMTPPassword)
+		if err != nil {
+			return err
+		}
+		item.SMTPPassword = plaintext
+	}
+	return nil
 }

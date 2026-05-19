@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+const EncryptedPrefixV1 = "enc:v1:"
+
 func EncryptJSON(secret []byte, value map[string]string) (string, error) {
 	bytes, err := json.Marshal(value)
 	if err != nil {
@@ -69,6 +71,14 @@ func EncryptString(secret []byte, value string) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
+func EncryptStringV1(secret []byte, value string) (string, error) {
+	encrypted, err := EncryptString(secret, value)
+	if err != nil {
+		return "", err
+	}
+	return EncryptedPrefixV1 + encrypted, nil
+}
+
 func DecryptString(secret []byte, value string) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(value)
 	if err != nil {
@@ -93,6 +103,19 @@ func DecryptString(secret []byte, value string) (string, error) {
 	return string(plaintext), nil
 }
 
+func IsEncryptedValueV1(value string) bool {
+	return strings.HasPrefix(strings.TrimSpace(value), EncryptedPrefixV1)
+}
+
+func DecryptStringV1WithSecrets(secrets [][]byte, value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if !IsEncryptedValueV1(trimmed) {
+		return "", fmt.Errorf("value is not encrypted with %s", EncryptedPrefixV1)
+	}
+	encoded := strings.TrimPrefix(trimmed, EncryptedPrefixV1)
+	return DecryptStringWithSecrets(secrets, encoded)
+}
+
 func DecryptStringWithSecrets(secrets [][]byte, value string) (string, error) {
 	var lastErr error
 	for _, secret := range secrets {
@@ -109,6 +132,26 @@ func DecryptStringWithSecrets(secrets [][]byte, value string) (string, error) {
 		return "", lastErr
 	}
 	return "", fmt.Errorf("no secrets available for decryption")
+}
+
+func EncryptBytesV1(secret []byte, value []byte) ([]byte, error) {
+	encrypted, err := EncryptStringV1(secret, string(value))
+	if err != nil {
+		return nil, err
+	}
+	return []byte(encrypted), nil
+}
+
+func IsEncryptedBytesV1(value []byte) bool {
+	return IsEncryptedValueV1(string(value))
+}
+
+func DecryptBytesV1WithSecrets(secrets [][]byte, value []byte) ([]byte, error) {
+	plaintext, err := DecryptStringV1WithSecrets(secrets, string(value))
+	if err != nil {
+		return nil, err
+	}
+	return []byte(plaintext), nil
 }
 
 func MaskConfig(config map[string]string) map[string]any {

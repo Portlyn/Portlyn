@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	stdhttp "net/http"
@@ -216,7 +217,7 @@ func (s *Server) authorizeNodeHeartbeat(r *stdhttp.Request, node *domain.Node) b
 	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
 	if strings.HasPrefix(authHeader, "Bearer ") {
 		token := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
-		if token != "" && node.HeartbeatTokenHash != "" && node.HeartbeatTokenHash == hashOpaqueToken(token) {
+		if token != "" && node.HeartbeatTokenHash != "" && hmac.Equal([]byte(node.HeartbeatTokenHash), []byte(hashOpaqueToken(token))) {
 			return true
 		}
 	}

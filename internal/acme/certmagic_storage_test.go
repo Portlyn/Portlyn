@@ -31,8 +31,8 @@ func TestCertMagicStorageTryAcquireReturnsFalseOnExistingLock(t *testing.T) {
 		}
 	})
 
-	storageA := NewCertMagicStorage(db, 30*time.Second)
-	storageB := NewCertMagicStorage(db, 30*time.Second)
+	storageA := NewCertMagicStorage(db, 30*time.Second, []string{"12345678901234567890123456789012"})
+	storageB := NewCertMagicStorage(db, 30*time.Second, []string{"12345678901234567890123456789012"})
 
 	acquired, err := storageA.tryAcquire(context.Background(), "issue_cert_*.example.com")
 	if err != nil {

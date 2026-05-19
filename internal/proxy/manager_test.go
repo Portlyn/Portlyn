@@ -213,6 +213,24 @@ func TestManagerServesBootstrapAdminHosts(t *testing.T) {
 	}
 }
 
+func TestSanitizePortlynIdentityHeaders(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("X-Portlyn-User-Email", "spoof@example.com")
+	headers.Set("X-Portlyn-User-Role", "admin")
+	headers.Set("X-Portlyn-User-ID", "99")
+	headers.Set("X-Portlyn-Client-Cert-SHA256", "deadbeef")
+	headers.Set("X-Forwarded-For", "203.0.113.8")
+
+	sanitizePortlynIdentityHeaders(headers)
+
+	if headers.Get("X-Portlyn-User-Email") != "" || headers.Get("X-Portlyn-User-Role") != "" || headers.Get("X-Portlyn-User-ID") != "" || headers.Get("X-Portlyn-Client-Cert-SHA256") != "" {
+		t.Fatal("expected all X-Portlyn identity headers to be removed")
+	}
+	if headers.Get("X-Forwarded-For") == "" {
+		t.Fatal("expected unrelated headers to remain untouched")
+	}
+}
+
 func testRouteConfig(id, host, path string) routing.RouteConfig {
 	return routing.RouteConfig{
 		ID:          id,

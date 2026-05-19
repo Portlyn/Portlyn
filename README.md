@@ -79,7 +79,7 @@ Default endpoints:
 
 - Audit logs for auth, admin actions, and proxy access
 - Structured JSON logging
-- Prometheus-style metrics on `GET /metrics`
+- Prometheus-style metrics on `GET /metrics` (admin-authenticated by default)
 - Health endpoints: `GET /livez`, `GET /readyz`, `GET /healthz`
 - UI system overview on `GET /api/v1/system/overview`
 - Bundled Grafana + Loki stack
@@ -199,7 +199,7 @@ For external PostgreSQL:
 
 ```env
 DATABASE_DRIVER=postgres
-DATABASE_URL=postgres://user:password@db-host:5432/portlyn?sslmode=disable
+DATABASE_URL=postgres://user:password@db-host:5432/portlyn?sslmode=require
 ```
 
 For SQLite:
@@ -215,7 +215,7 @@ DATABASE_URL=
 
 - Keep `ALLOW_INSECURE_DEV_MODE=false`
 - Keep `OTP_RESPONSE_INCLUDES_CODE=false`
-- Set `REQUIRE_MFA_FOR_ADMINS=true` after every admin has enrolled TOTP MFA
+- Keep `REQUIRE_MFA_FOR_ADMINS=true` (default) and ensure every admin has enrolled TOTP MFA
 - Use strong, distinct secrets for JWT signing, session bridge, OIDC state, MFA encryption, CSRF, data encryption, PostgreSQL, and Grafana
 - Set `ACME_ENABLED=true` and `ACME_EMAIL=...` for public HTTPS on the shared admin/proxy entrypoint
 - Set `REDIRECT_HTTP_TO_HTTPS=true` when TLS is active
@@ -308,7 +308,7 @@ Portlyn emits structured logs and audit records for:
 - Method, path, host, latency, and status code
 - User context when available
 
-Metrics on `GET /metrics` include:
+Metrics on `GET /metrics` (admin-authenticated unless `METRICS_PUBLIC=true`) include:
 
 - API and proxy latency / request totals
 - Auth attempts and rate-limit hits

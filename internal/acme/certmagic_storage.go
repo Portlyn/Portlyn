@@ -16,25 +16,36 @@ import (
 	"gorm.io/gorm/clause"
 
 	"portlyn/internal/domain"
+	"portlyn/internal/secureconfig"
 )
 
 type CertMagicStorage struct {
 	db           *gorm.DB
 	lockTTL      time.Duration
 	renewEvery   time.Duration
+	dataSecrets  [][]byte
 	owners       map[string]string
 	ownerCancels map[string]context.CancelFunc
 	mu           sync.Mutex
 }
 
-func NewCertMagicStorage(db *gorm.DB, lockTTL time.Duration) *CertMagicStorage {
+func NewCertMagicStorage(db *gorm.DB, lockTTL time.Duration, dataSecrets []string) *CertMagicStorage {
 	if lockTTL <= 0 {
 		lockTTL = 30 * time.Second
+	}
+	normalized := make([][]byte, 0, len(dataSecrets))
+	for _, value := range dataSecrets {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		normalized = append(normalized, []byte(trimmed))
 	}
 	return &CertMagicStorage{
 		db:           db,
 		lockTTL:      lockTTL,
 		renewEvery:   lockTTL / 3,
+		dataSecrets:  normalized,
 		owners:       make(map[string]string),
 		ownerCancels: make(map[string]context.CancelFunc),
 	}
@@ -42,10 +53,18 @@ func NewCertMagicStorage(db *gorm.DB, lockTTL time.Duration) *CertMagicStorage {
 
 func (s *CertMagicStorage) Store(ctx context.Context, key string, value []byte) error {
 	key = cleanKey(key)
+	storedValue := append([]byte(nil), value...)
+	if isCertMagicPrivateKeyPath(key) && len(s.dataSecrets) > 0 && !secureconfig.IsEncryptedBytesV1(storedValue) {
+		encrypted, err := secureconfig.EncryptBytesV1(s.dataSecrets[0], storedValue)
+		if err != nil {
+			return err
+		}
+		storedValue = encrypted
+	}
 	item := domain.DistributedKV{
 		Bucket:     "certmagic",
 		Key:        key,
-		Value:      append([]byte(nil), value...),
+		Value:      storedValue,
 		ModifiedAt: time.Now().UTC(),
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -57,13 +76,21 @@ func (s *CertMagicStorage) Store(ctx context.Context, key string, value []byte) 
 }
 
 func (s *CertMagicStorage) Load(ctx context.Context, key string) ([]byte, error) {
+	key = cleanKey(key)
 	var item domain.DistributedKV
-	err := s.db.WithContext(ctx).Where("bucket = ? AND key = ?", "certmagic", cleanKey(key)).First(&item).Error
+	err := s.db.WithContext(ctx).Where("bucket = ? AND key = ?", "certmagic", key).First(&item).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, fs.ErrNotExist
 	}
 	if err != nil {
 		return nil, err
+	}
+	if isCertMagicPrivateKeyPath(key) && secureconfig.IsEncryptedBytesV1(item.Value) {
+		plaintext, decryptErr := secureconfig.DecryptBytesV1WithSecrets(s.dataSecrets, item.Value)
+		if decryptErr != nil {
+			return nil, decryptErr
+		}
+		return plaintext, nil
 	}
 	return append([]byte(nil), item.Value...), nil
 }
@@ -260,6 +287,50 @@ func (s *CertMagicStorage) startLease(name, owner string) {
 			}
 		}
 	}()
+}
+
+func (s *CertMagicStorage) MigrateSensitiveValues(ctx context.Context) (int, error) {
+	if len(s.dataSecrets) == 0 {
+		return 0, nil
+	}
+	var rows []domain.DistributedKV
+	if err := s.db.WithContext(ctx).Where("bucket = ?", "certmagic").Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	updated := 0
+	for _, row := range rows {
+		if !isCertMagicPrivateKeyPath(row.Key) || secureconfig.IsEncryptedBytesV1(row.Value) {
+			continue
+		}
+		encrypted, err := secureconfig.EncryptBytesV1(s.dataSecrets[0], row.Value)
+		if err != nil {
+			return updated, err
+		}
+		if err := s.db.WithContext(ctx).Model(&domain.DistributedKV{}).Where("id = ?", row.ID).Updates(map[string]any{
+			"value":       encrypted,
+			"modified_at": time.Now().UTC(),
+		}).Error; err != nil {
+			return updated, err
+		}
+		updated++
+	}
+	return updated, nil
+}
+
+func isCertMagicPrivateKeyPath(key string) bool {
+	key = strings.ToLower(strings.TrimSpace(key))
+	switch {
+	case strings.HasSuffix(key, ".key"):
+		return true
+	case strings.Contains(key, "/private/"):
+		return true
+	case strings.Contains(key, "siteprivatekey"):
+		return true
+	case strings.Contains(key, "site_private_key"):
+		return true
+	default:
+		return false
+	}
 }
 
 func cleanKey(key string) string {

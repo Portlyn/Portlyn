@@ -323,6 +323,7 @@ func (m *Manager) Handler() http.Handler {
 			return
 		}
 		matchedRoute = &route
+		sanitizePortlynIdentityHeaders(r.Header)
 
 		if ok := m.enforceNetworkRules(writer, r, route); !ok {
 			outcome = "denied"
@@ -383,6 +384,16 @@ func clientCertSHA256(r *http.Request) string {
 	}
 	sum := sha256.Sum256(r.TLS.PeerCertificates[0].Raw)
 	return hex.EncodeToString(sum[:])
+}
+
+func sanitizePortlynIdentityHeaders(headers http.Header) {
+	if headers == nil {
+		return
+	}
+	headers.Del("X-Portlyn-User-Email")
+	headers.Del("X-Portlyn-User-Role")
+	headers.Del("X-Portlyn-User-ID")
+	headers.Del("X-Portlyn-Client-Cert-SHA256")
 }
 
 func (m *Manager) matchRoute(ctx context.Context, host, path string) (Route, bool) {

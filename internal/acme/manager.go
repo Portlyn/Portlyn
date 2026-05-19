@@ -49,14 +49,19 @@ type Status struct {
 	Reason  string
 }
 
+type SecretMigrationSummary struct {
+	CertMagicPrivateKeys int
+	StoredTLSPrivateKeys int
+}
+
 func NewManager(cfg config.Config, db *gorm.DB, certificateStore *store.CertificateStore, domainStore *store.DomainStore, dnsProviderStore *store.DNSProviderStore, metrics *observability.Metrics) (*Manager, error) {
 	manager := &Manager{
 		cfg:          cfg,
 		certificates: certificateStore,
 		domains:      domainStore,
 		dnsProviders: dnsProviderStore,
-		tlsStore:     NewDBCertificateStore(db),
-		storage:      NewCertMagicStorage(db, 30*time.Second),
+		tlsStore:     NewDBCertificateStore(db, cfg.DataEncryptionSecrets()),
+		storage:      NewCertMagicStorage(db, 30*time.Second, cfg.DataEncryptionSecrets()),
 		metrics:      metrics,
 	}
 
@@ -96,6 +101,22 @@ func (m *Manager) StopWorker() {
 		return
 	}
 	m.worker.Stop()
+}
+
+func (m *Manager) MigrateStoredSecrets(ctx context.Context) (SecretMigrationSummary, error) {
+	summary := SecretMigrationSummary{}
+	certMagicCount, err := m.storage.MigrateSensitiveValues(ctx)
+	if err != nil {
+		return summary, err
+	}
+	summary.CertMagicPrivateKeys = certMagicCount
+
+	tlsCount, err := m.tlsStore.MigrateStoredPrivateKeys(ctx)
+	if err != nil {
+		return summary, err
+	}
+	summary.StoredTLSPrivateKeys = tlsCount
+	return summary, nil
 }
 
 func (m *Manager) SyncCertificate(ctx context.Context, item *domain.Certificate) (*domain.Certificate, error) {

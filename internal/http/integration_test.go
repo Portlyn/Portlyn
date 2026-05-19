@@ -95,6 +95,29 @@ func TestIntegrationStartupSmoke(t *testing.T) {
 	}
 }
 
+func TestMetricsRequiresAdminAuthByDefault(t *testing.T) {
+	server, cleanup := newIntegrationServer(t, func(cfg *config.Config) {
+		cfg.MetricsPublic = false
+	})
+	defer cleanup()
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+	server.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected metrics to require auth, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	token := loginAsAdmin(t, server, "metrics-admin@example.com", "StrongPass123!")
+	req = httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec = httptest.NewRecorder()
+	server.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected authenticated admin metrics access, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func newIntegrationServer(t *testing.T, mutate ...func(*config.Config)) (*Server, func()) {
 	t.Helper()
 	dir := t.TempDir()
@@ -119,6 +142,7 @@ func newIntegrationServer(t *testing.T, mutate ...func(*config.Config)) (*Server
 		AuthRateLimit:         config.RateLimitConfig{LoginAttempts: 10, Window: time.Minute},
 		AuthCacheTTL:          time.Minute,
 		AllowInsecureDevMode:  true,
+		MetricsPublic:         true,
 		CSRFTokenTTL:          time.Hour,
 		RequestBodyLimitBytes: 1 << 20,
 		OTP: config.OTPConfig{
@@ -148,6 +172,7 @@ func newIntegrationServer(t *testing.T, mutate ...func(*config.Config)) (*Server
 	loginTokenStore := store.NewLoginTokenStore(db)
 	sessionStore := store.NewSessionStore(db)
 	appSettingsStore := store.NewAppSettingsStore(db)
+	appSettingsStore.SetDataEncryptionSecrets(cfg.DataEncryptionSecrets())
 	if err := appSettingsStore.SeedDefaults(context.Background(), cfg); err != nil {
 		t.Fatalf("seed settings: %v", err)
 	}

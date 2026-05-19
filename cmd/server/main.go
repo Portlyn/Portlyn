@@ -59,8 +59,23 @@ func main() {
 	loginTokenStore := store.NewLoginTokenStore(db)
 	auditStore := store.NewAuditStore(db)
 	appSettingsStore := store.NewAppSettingsStore(db)
+	appSettingsStore.SetDataEncryptionSecrets(cfg.DataEncryptionSecrets())
 	sessionStore := store.NewSessionStore(db)
 	nodeEnrollmentTokenStore := store.NewNodeEnrollmentTokenStore(db)
+
+	if migrated, err := loginTokenStore.MigratePlainTokens(context.Background()); err != nil {
+		logger.Error("failed to migrate legacy login tokens", "error", err)
+		os.Exit(1)
+	} else if migrated > 0 {
+		logger.Info("migrated legacy login tokens", "updated", migrated)
+	}
+
+	if migrated, err := appSettingsStore.MigrateStoredSecrets(context.Background()); err != nil {
+		logger.Error("failed to migrate encrypted app settings", "error", err)
+		os.Exit(1)
+	} else if migrated > 0 {
+		logger.Info("migrated app settings secrets", "updated", migrated)
+	}
 
 	var redisClient *redis.Client
 	bootWarnings := make([]apihttp.StatusCondition, 0)
@@ -132,6 +147,16 @@ func main() {
 	if err != nil {
 		logger.Error("failed to initialize tls manager", "error", err)
 		os.Exit(1)
+	}
+	if migrationSummary, err := acmeManager.MigrateStoredSecrets(context.Background()); err != nil {
+		logger.Error("failed to migrate certificate secrets", "error", err)
+		os.Exit(1)
+	} else if migrationSummary.CertMagicPrivateKeys > 0 || migrationSummary.StoredTLSPrivateKeys > 0 {
+		logger.Info(
+			"migrated certificate secrets",
+			"certmagic_private_keys", migrationSummary.CertMagicPrivateKeys,
+			"stored_tls_private_keys", migrationSummary.StoredTLSPrivateKeys,
+		)
 	}
 	auditSink := audit.NewAsyncSink(auditStore, cfg.AuditBufferSize, cfg.AuditBatchSize, cfg.AuditFlushInterval, cfg.AuditDropPolicy, logger)
 	auditLogger := audit.NewLogger(auditSink)

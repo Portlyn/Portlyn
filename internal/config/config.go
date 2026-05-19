@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/netip"
@@ -69,6 +71,7 @@ type Config struct {
 	AlertNodeHeartbeatFailThreshold int
 	AlertAuditAnomalyThreshold      int
 	AlertWindow                     time.Duration
+	MetricsPublic                   bool
 	OIDC                            OIDCConfig
 	OTP                             OTPConfig
 	RouteAuthTTL                    time.Duration
@@ -123,29 +126,29 @@ type ValidationIssue struct {
 
 func Load() (Config, error) {
 	_ = godotenv.Load()
-	jwtSecret := getEnv("JWT_SECRET", "change-me-in-production")
+	secrets := make(map[string]string, 7)
 
 	cfg := Config{
 		AppVersion:                      getEnv("APP_VERSION", "dev"),
 		HTTPAddr:                        getEnv("HTTP_ADDR", ":8080"),
 		FrontendBaseURL:                 strings.TrimRight(getEnv("FRONTEND_BASE_URL", "http://localhost"), "/"),
-		BootstrapAdminEnabled:           getEnvBool("BOOTSTRAP_ADMIN_ENABLED", true),
+		BootstrapAdminEnabled:           getEnvBool("BOOTSTRAP_ADMIN_ENABLED", false),
 		ProxyHTTPAddr:                   getEnv("PROXY_HTTP_ADDR", ":80"),
 		ProxyHTTPSAddr:                  getEnv("PROXY_HTTPS_ADDR", ":443"),
 		RedisURL:                        strings.TrimSpace(os.Getenv("REDIS_URL")),
 		DatabaseDriver:                  strings.ToLower(getEnv("DATABASE_DRIVER", "")),
 		DatabaseURL:                     strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		DatabasePath:                    getEnv("DATABASE_PATH", "portlyn.db"),
-		JWTSecret:                       jwtSecret,
-		JWTSigningSecret:                getEnv("JWT_SIGNING_SECRET", jwtSecret),
-		SessionBridgeSecret:             getEnv("SESSION_BRIDGE_SECRET", jwtSecret),
-		OIDCStateSecret:                 getEnv("OIDC_STATE_SECRET", jwtSecret),
-		MFAEncryptionSecret:             getEnv("MFA_ENCRYPTION_SECRET", jwtSecret),
-		CSRFSecret:                      getEnv("CSRF_SECRET", jwtSecret),
-		DataEncryptionSecret:            getEnv("DATA_ENCRYPTION_SECRET", jwtSecret),
+		JWTSecret:                       getSecretEnv("JWT_SECRET", secrets),
+		JWTSigningSecret:                getSecretEnv("JWT_SIGNING_SECRET", secrets),
+		SessionBridgeSecret:             getSecretEnv("SESSION_BRIDGE_SECRET", secrets),
+		OIDCStateSecret:                 getSecretEnv("OIDC_STATE_SECRET", secrets),
+		MFAEncryptionSecret:             getSecretEnv("MFA_ENCRYPTION_SECRET", secrets),
+		CSRFSecret:                      getSecretEnv("CSRF_SECRET", secrets),
+		DataEncryptionSecret:            getSecretEnv("DATA_ENCRYPTION_SECRET", secrets),
 		DataEncryptionLegacySecrets:     getEnvList("DATA_ENCRYPTION_LEGACY_SECRETS", []string{}),
 		JWTIssuer:                       getEnv("JWT_ISSUER", "portlyn"),
-		TokenTTL:                        getEnvDuration("TOKEN_TTL", 24*time.Hour),
+		TokenTTL:                        getEnvDuration("TOKEN_TTL", 30*time.Minute),
 		RefreshTokenTTL:                 getEnvDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),
 		LogLevel:                        getEnvLogLevel("LOG_LEVEL", slog.LevelInfo),
 		AllowedOrigins:                  getEnvList("CORS_ALLOWED_ORIGINS", []string{"http://localhost", "http://127.0.0.1"}),
@@ -181,6 +184,7 @@ func Load() (Config, error) {
 		AlertNodeHeartbeatFailThreshold: getEnvInt("ALERT_NODE_HEARTBEAT_FAIL_THRESHOLD", 20),
 		AlertAuditAnomalyThreshold:      getEnvInt("ALERT_AUDIT_ANOMALY_THRESHOLD", 10),
 		AlertWindow:                     getEnvDuration("ALERT_WINDOW", 15*time.Minute),
+		MetricsPublic:                   getEnvBool("METRICS_PUBLIC", false),
 		OIDC: OIDCConfig{
 			Enabled:              getEnvBool("OIDC_ENABLED", false),
 			IssuerURL:            strings.TrimSpace(os.Getenv("OIDC_ISSUER_URL")),
@@ -215,7 +219,7 @@ func Load() (Config, error) {
 		RouteLocalCacheTTL:    getEnvDuration("ROUTE_LOCAL_CACHE_TTL", 5*time.Second),
 		RouteLocalCacheSize:   getEnvInt("ROUTE_LOCAL_CACHE_SIZE", 2048),
 		AllowInsecureDevMode:  getEnvBool("ALLOW_INSECURE_DEV_MODE", false),
-		RequireMFAForAdmins:   getEnvBool("REQUIRE_MFA_FOR_ADMINS", false),
+		RequireMFAForAdmins:   getEnvBool("REQUIRE_MFA_FOR_ADMINS", true),
 		CSRFTokenTTL:          getEnvDuration("CSRF_TOKEN_TTL", 12*time.Hour),
 		RequestBodyLimitBytes: getEnvInt64("REQUEST_BODY_LIMIT_BYTES", 1<<20),
 	}
@@ -271,17 +275,27 @@ func (cfg *Config) ValidationIssues() []ValidationIssue {
 		cfg.DatabaseDriver = "postgres"
 		if cfg.DatabaseURL == "" {
 			add("error", "DATABASE_URL", "missing_database_url", "DATABASE_URL must not be empty when DATABASE_DRIVER=postgres")
+		} else if !cfg.AllowInsecureDevMode {
+			sslMode := postgresSSLMode(cfg.DatabaseURL)
+			if sslMode == "disable" {
+				add("error", "DATABASE_URL", "insecure_database_transport", "DATABASE_URL must not disable TLS in production (avoid sslmode=disable)")
+			}
+			if sslMode == "allow" || sslMode == "prefer" || sslMode == "" {
+				add("warn", "DATABASE_URL", "weak_database_transport", "DATABASE_URL is not enforcing TLS verification; prefer sslmode=require, verify-ca, or verify-full")
+			}
 		}
 	default:
 		add("error", "DATABASE_DRIVER", "unsupported_database_driver", fmt.Sprintf("unsupported DATABASE_DRIVER %q", cfg.DatabaseDriver))
 	}
 	if !cfg.AllowInsecureDevMode {
 		for _, secret := range secretFields {
-			if secret.Value == "change-me-in-production" || len(secret.Value) < 32 {
+			if len(secret.Value) < 32 {
 				add("error", secret.Field, "weak_secret", secret.Field+" must be unique and at least 32 characters unless ALLOW_INSECURE_DEV_MODE=true")
 			}
 		}
-		seenSecrets := map[string]string{}
+		seenSecrets := map[string]string{
+			strings.TrimSpace(secretFields[0].Value): secretFields[0].Field,
+		}
 		for _, secret := range secretFields[1:] {
 			key := strings.TrimSpace(secret.Value)
 			if existingField, exists := seenSecrets[key]; exists {
@@ -418,6 +432,29 @@ func getEnv(key, fallback string) string {
 	return value
 }
 
+func getSecretEnv(key string, generated map[string]string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value != "" {
+		return value
+	}
+	if existing, ok := generated[key]; ok {
+		return existing
+	}
+	generated[key] = randomSecret(48)
+	return generated[key]
+}
+
+func randomSecret(size int) string {
+	if size < 32 {
+		size = 32
+	}
+	buf := make([]byte, size)
+	if _, err := rand.Read(buf); err != nil {
+		panic(fmt.Errorf("unable to generate random secret: %w", err))
+	}
+	return base64.RawURLEncoding.EncodeToString(buf)
+}
+
 func getEnvDuration(key string, fallback time.Duration) time.Duration {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -521,4 +558,12 @@ func secureOrLocalURL(raw string) bool {
 	default:
 		return false
 	}
+}
+
+func postgresSSLMode(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(parsed.Query().Get("sslmode")))
 }

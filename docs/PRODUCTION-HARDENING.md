@@ -7,11 +7,12 @@ production security posture by itself.
 
 - Set `ALLOW_INSECURE_DEV_MODE=false`.
 - Set strong, distinct values for `JWT_SECRET`, `JWT_SIGNING_SECRET`, `SESSION_BRIDGE_SECRET`, `OIDC_STATE_SECRET`, `MFA_ENCRYPTION_SECRET`, `CSRF_SECRET`, `DATA_ENCRYPTION_SECRET`, `POSTGRES_PASSWORD`, and `GRAFANA_ADMIN_PASSWORD`.
-- Disable bootstrap login after the first admin setup: `BOOTSTRAP_ADMIN_ENABLED=false`.
-- Enroll TOTP for every admin, then set `REQUIRE_MFA_FOR_ADMINS=true`.
+- Keep bootstrap login disabled by default (`BOOTSTRAP_ADMIN_ENABLED=false`) and only enable it briefly for controlled first-time setup.
+- Keep admin MFA enforcement enabled (`REQUIRE_MFA_FOR_ADMINS=true`) and enroll TOTP for every admin.
 - Set `FRONTEND_BASE_URL`, `CORS_ALLOWED_ORIGINS`, and OIDC redirect settings to the final public URL.
 - Enable TLS for the shared admin/proxy entrypoint before exposing it publicly.
 - Keep `EXPOSE_AUTH_TOKENS=false` so browser auth uses HttpOnly cookies instead of JSON-exposed bearer tokens.
+- Keep `METRICS_PUBLIC=false` unless `/metrics` is protected by a dedicated network/auth layer.
 - Set `TRUSTED_PROXY_CIDRS` only to the exact CIDR ranges of your TLS-terminating load balancers. Leave it empty when Portlyn receives traffic directly.
 - Keep node transport hardening enabled:
   - `NODE_REQUIRE_HTTPS=true`
@@ -24,6 +25,7 @@ production security posture by itself.
 - Treat the admin UI and API as privileged surfaces.
 - Do not expose Grafana, Loki, or `/metrics` publicly without an explicit access layer.
 - Prefer a private network, VPN, or upstream access control in front of observability endpoints.
+- Require TLS for PostgreSQL transport (`sslmode=require` or stronger verification where available).
 - If you publish the main proxy entrypoint, separate public service routes from operator-only endpoints.
 
 ## Authentication and secrets

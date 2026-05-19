@@ -160,6 +160,13 @@ func (s *Server) Router() stdhttp.Handler {
 			writeErrorRequest(w, r, stdhttp.StatusNotFound, "metrics_disabled", "metrics are not configured")
 			return
 		}
+		if !s.cfg.MetricsPublic {
+			user, _, err := s.auth.AuthenticateRequest(r.Context(), r)
+			if err != nil || user == nil || !user.Active || user.Role != domain.RoleAdmin {
+				writeErrorRequest(w, r, stdhttp.StatusUnauthorized, "unauthorized", "admin authentication required")
+				return
+			}
+		}
 		s.metrics.Handler().ServeHTTP(w, r)
 	})
 
