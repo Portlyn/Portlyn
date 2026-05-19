@@ -1,0 +1,10 @@
+services:
+  portlyn:
+    image: ghcr.io/invaliduser231/portlyn:${PORTLYN_IMAGE_TAG:-latest}
+    pull_policy: always
+    build: null
+
+  frontend:
+    image: ghcr.io/invaliduser231/portlyn-frontend:${PORTLYN_IMAGE_TAG:-latest}
+    pull_policy: always
+    build: null

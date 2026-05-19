@@ -174,6 +174,25 @@ Alternative helper:
 
 If a required secret is missing, `docker compose` fails early instead of starting with blank values.
 
+### Use Published Container Images
+
+For public image-based deployments (no local build):
+
+```bash
+docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.public.yml pull
+docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.public.yml up -d
+```
+
+Optional pinning:
+
+```bash
+PORTLYN_IMAGE_TAG=v1.2.3 docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.public.yml up -d
+```
+
+Note: after the first push to GHCR, set package visibility to `Public` in GitHub Packages for:
+- `ghcr.io/invaliduser231/portlyn`
+- `ghcr.io/invaliduser231/portlyn-frontend`
+
 ## Configuration
 
 Main runtime settings are driven by environment variables.
