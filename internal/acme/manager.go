@@ -275,6 +275,12 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 		if err == nil && cert != nil {
 			return cert, nil
 		}
+		if wildcardName := wildcardDomainForHost(serverName); wildcardName != "" {
+			cert, err = m.tlsStore.GetCertificate(context.Background(), wildcardName)
+			if err == nil && cert != nil {
+				return cert, nil
+			}
+		}
 	}
 
 	if m.httpMagic != nil && serverName != "" {
@@ -290,6 +296,18 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 		return m.staticCert, nil
 	}
 	return nil, fmt.Errorf("no tls certificate available")
+}
+
+func wildcardDomainForHost(host string) string {
+	normalized := normalizeDomain(host)
+	if normalized == "" || strings.HasPrefix(normalized, "*.") {
+		return ""
+	}
+	labels := strings.Split(normalized, ".")
+	if len(labels) < 3 {
+		return ""
+	}
+	return "*." + strings.Join(labels[1:], ".")
 }
 
 func (m *Manager) HasHTTPS() bool {
