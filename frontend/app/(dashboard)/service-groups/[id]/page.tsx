@@ -2,6 +2,7 @@
 
 import { Button, Group as MantineGroup, Paper, Select, Skeleton, Stack, Table, Text, TextInput, Textarea } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { AccessPolicyFields } from "@/components/access-policy-fields";
@@ -14,7 +15,7 @@ import { buildServiceGroupRequestPayload } from "@/lib/access-control";
 import { serviceHostname } from "@/lib/service-host";
 import type { Group as UserGroup, Service, ServiceGroup, ServiceGroupPayload } from "@/lib/types";
 
-export default function ServiceGroupDetailPage({ params }: { params: { id: string } }) {
+export default function ServiceGroupDetailPage() {
   const [item, setItem] = useState<ServiceGroup | null>(null);
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -22,13 +23,20 @@ export default function ServiceGroupDetailPage({ params }: { params: { id: strin
   const [allowedEmailsText, setAllowedEmailsText] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const routeParams = useParams<{ id: string | string[] }>();
+  const serviceGroupID = Array.isArray(routeParams?.id) ? routeParams.id[0] : routeParams?.id;
 
   const loadData = async () => {
+    if (!serviceGroupID) {
+      setError("Missing service group ID.");
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
       const [serviceGroup, groupItems, serviceItems] = await Promise.all([
-        apiFetch<ServiceGroup>(`/api/v1/service-groups/${params.id}`),
+        apiFetch<ServiceGroup>(`/api/v1/service-groups/${serviceGroupID}`),
         apiFetch<UserGroup[]>("/api/v1/groups"),
         apiFetch<Service[]>("/api/v1/services")
       ]);
@@ -45,7 +53,7 @@ export default function ServiceGroupDetailPage({ params }: { params: { id: strin
 
   useEffect(() => {
     void loadData();
-  }, [params.id]);
+  }, [serviceGroupID]);
 
   const availableServices = useMemo(() => {
     const selectedIds = new Set(item?.services?.map((service) => service.id) || []);
@@ -80,9 +88,9 @@ export default function ServiceGroupDetailPage({ params }: { params: { id: strin
   };
 
   const handleAdd = async () => {
-    if (!selectedServiceId) return;
+    if (!selectedServiceId || !serviceGroupID) return;
     try {
-      const updated = await apiFetch<ServiceGroup>(`/api/v1/service-groups/${params.id}/services`, {
+      const updated = await apiFetch<ServiceGroup>(`/api/v1/service-groups/${serviceGroupID}/services`, {
         method: "POST",
         body: JSON.stringify({ service_id: Number(selectedServiceId) })
       });
@@ -95,8 +103,9 @@ export default function ServiceGroupDetailPage({ params }: { params: { id: strin
   };
 
   const handleRemove = async (serviceId: number) => {
+    if (!serviceGroupID) return;
     try {
-      await apiFetch<void>(`/api/v1/service-groups/${params.id}/services/${serviceId}`, { method: "DELETE" });
+      await apiFetch<void>(`/api/v1/service-groups/${serviceGroupID}/services/${serviceId}`, { method: "DELETE" });
       await loadData();
       notifications.show({ color: "green", message: "Service removed" });
     } catch (err) {

@@ -2,7 +2,7 @@
 
 import { Alert, Button, Card, Grid, Group, Loader, Paper, SimpleGrid, Stack, Tabs, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -16,7 +16,7 @@ import { formatDateTime } from "@/lib/format";
 import { serviceHostname } from "@/lib/service-host";
 import type { Domain, Group as UserGroup, Service, ServiceGroup, ServicePayload } from "@/lib/types";
 
-export default function ServiceDetailPage({ params }: { params: { id: string } }) {
+export default function ServiceDetailPage() {
   const [service, setService] = useState<Service | null>(null);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [groups, setGroups] = useState<UserGroup[]>([]);
@@ -26,6 +26,8 @@ export default function ServiceDetailPage({ params }: { params: { id: string } }
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const routeParams = useParams<{ id: string | string[] }>();
+  const serviceId = Array.isArray(routeParams?.id) ? routeParams.id[0] : routeParams?.id;
   const router = useRouter();
   const { user } = useAuth();
   const canManage = user?.role === "admin";
@@ -36,11 +38,16 @@ export default function ServiceDetailPage({ params }: { params: { id: string } }
   );
 
   const loadData = async () => {
+    if (!serviceId) {
+      setError("Missing service ID.");
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
       const [serviceItem, domainItems, groupItems, serviceGroupItems] = await Promise.all([
-        apiFetch<Service>(`/api/v1/services/${params.id}`),
+        apiFetch<Service>(`/api/v1/services/${serviceId}`),
         apiFetch<Domain[]>("/api/v1/domains"),
         canManage ? apiFetch<UserGroup[]>("/api/v1/groups") : Promise.resolve([]),
         canManage ? apiFetch<ServiceGroup[]>("/api/v1/service-groups") : Promise.resolve([])
@@ -62,7 +69,7 @@ export default function ServiceDetailPage({ params }: { params: { id: string } }
       return;
     }
     void loadData();
-  }, [canManage, params.id]);
+  }, [canManage, serviceId]);
 
   useEffect(() => {
     if (user?.role === "viewer") {
@@ -71,9 +78,10 @@ export default function ServiceDetailPage({ params }: { params: { id: string } }
   }, [router, user?.role]);
 
   const handleSave = async (values: ServicePayload) => {
+    if (!serviceId) return;
     setIsSaving(true);
     try {
-      const updated = await apiFetch<Service>(`/api/v1/services/${params.id}`, {
+      const updated = await apiFetch<Service>(`/api/v1/services/${serviceId}`, {
         method: "PATCH",
         body: JSON.stringify({
           ...buildServiceRequestPayload(values),
@@ -90,9 +98,10 @@ export default function ServiceDetailPage({ params }: { params: { id: string } }
   };
 
   const handleDelete = async () => {
+    if (!serviceId) return;
     setIsDeleting(true);
     try {
-      await apiFetch<void>(`/api/v1/services/${params.id}`, { method: "DELETE" });
+      await apiFetch<void>(`/api/v1/services/${serviceId}`, { method: "DELETE" });
       notifications.show({ color: "green", message: "Service deleted" });
       router.push("/services");
     } catch (err) {

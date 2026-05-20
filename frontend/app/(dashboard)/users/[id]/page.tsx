@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, Card, Group, Stack, Table, Text, Title } from "@mantine/core";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ErrorState } from "@/components/error-state";
@@ -9,19 +10,26 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import type { SessionInfo, User } from "@/lib/types";
 
-export default function UserDetailPage({ params }: { params: { id: string } }) {
+export default function UserDetailPage() {
   const [user, setUser] = useState<User | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const routeParams = useParams<{ id: string | string[] }>();
+  const userId = Array.isArray(routeParams?.id) ? routeParams.id[0] : routeParams?.id;
 
   const load = async () => {
+    if (!userId) {
+      setError("Missing user ID.");
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
       const [userItem, sessionItems] = await Promise.all([
-        apiFetch<User>(`/api/v1/users/${params.id}`),
-        apiFetch<SessionInfo[]>(`/api/v1/users/${params.id}/sessions`)
+        apiFetch<User>(`/api/v1/users/${userId}`),
+        apiFetch<SessionInfo[]>(`/api/v1/users/${userId}/sessions`)
       ]);
       setUser(userItem);
       setSessions(sessionItems);
@@ -34,15 +42,17 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     void load();
-  }, [params.id]);
+  }, [userId]);
 
   const revokeSession = async (sessionId: number) => {
-    await apiFetch<{ ok: boolean }>(`/api/v1/users/${params.id}/sessions/${sessionId}`, { method: "DELETE" });
+    if (!userId) return;
+    await apiFetch<{ ok: boolean }>(`/api/v1/users/${userId}/sessions/${sessionId}`, { method: "DELETE" });
     await load();
   };
 
   const revokeAll = async () => {
-    await apiFetch<{ ok: boolean }>(`/api/v1/users/${params.id}/sessions/revoke-all`, { method: "POST" });
+    if (!userId) return;
+    await apiFetch<{ ok: boolean }>(`/api/v1/users/${userId}/sessions/revoke-all`, { method: "POST" });
     await load();
   };
 
@@ -80,7 +90,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
             <Text fw={600}>Multi-factor authentication</Text>
             <Text size="sm" c="dimmed">Reset revokes existing MFA factors and active sessions.</Text>
           </div>
-          <Button variant="default" color="red" onClick={() => void apiFetch<{ ok: boolean }>(`/api/v1/users/${params.id}/mfa/reset`, { method: "POST" }).then(load)}>
+          <Button variant="default" color="red" onClick={() => void (userId ? apiFetch<{ ok: boolean }>(`/api/v1/users/${userId}/mfa/reset`, { method: "POST" }).then(load) : Promise.resolve())}>
             Reset MFA
           </Button>
         </Group>

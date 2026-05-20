@@ -2,6 +2,7 @@
 
 import { Button, Group as MantineGroup, Paper, Select, Skeleton, Stack, Table, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { AdminOnly } from "@/components/admin-only";
@@ -10,19 +11,26 @@ import { ErrorState } from "@/components/error-state";
 import { apiFetch, ApiError } from "@/lib/api";
 import type { Group as UserGroup, User } from "@/lib/types";
 
-export default function GroupDetailPage({ params }: { params: { id: string } }) {
+export default function GroupDetailPage() {
   const [group, setGroup] = useState<UserGroup | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const routeParams = useParams<{ id: string | string[] }>();
+  const groupId = Array.isArray(routeParams?.id) ? routeParams.id[0] : routeParams?.id;
 
   const loadData = async () => {
+    if (!groupId) {
+      setError("Missing group ID.");
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
       const [groupItem, userItems] = await Promise.all([
-        apiFetch<UserGroup>(`/api/v1/groups/${params.id}`),
+        apiFetch<UserGroup>(`/api/v1/groups/${groupId}`),
         apiFetch<User[]>("/api/v1/users")
       ]);
       setGroup(groupItem);
@@ -36,7 +44,7 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
 
   useEffect(() => {
     void loadData();
-  }, [params.id]);
+  }, [groupId]);
 
   const availableUsers = useMemo(() => {
     const memberIds = new Set(group?.members?.map((user) => user.id) || []);
@@ -44,9 +52,9 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
   }, [group?.members, users]);
 
   const handleAdd = async () => {
-    if (!selectedUserId) return;
+    if (!selectedUserId || !groupId) return;
     try {
-      const updated = await apiFetch<UserGroup>(`/api/v1/groups/${params.id}/members`, {
+      const updated = await apiFetch<UserGroup>(`/api/v1/groups/${groupId}/members`, {
         method: "POST",
         body: JSON.stringify({ user_id: Number(selectedUserId) })
       });
@@ -59,8 +67,9 @@ export default function GroupDetailPage({ params }: { params: { id: string } }) 
   };
 
   const handleRemove = async (userId: number) => {
+    if (!groupId) return;
     try {
-      await apiFetch<void>(`/api/v1/groups/${params.id}/members/${userId}`, { method: "DELETE" });
+      await apiFetch<void>(`/api/v1/groups/${groupId}/members/${userId}`, { method: "DELETE" });
       await loadData();
       notifications.show({ color: "green", message: "Member removed" });
     } catch (err) {
