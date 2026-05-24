@@ -18,7 +18,7 @@ require (
 	golang.org/x/crypto v0.50.0
 	golang.org/x/oauth2 v0.36.0
 	gorm.io/driver/postgres v1.6.0
-	gorm.io/gorm v1.25.12
+	gorm.io/gorm v1.31.1
 )
 
 require (
