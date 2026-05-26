@@ -6,7 +6,7 @@ require (
 	github.com/caddyserver/certmagic v0.25.3
 	github.com/coreos/go-oidc/v3 v3.12.0
 	github.com/glebarez/sqlite v1.11.0
-	github.com/go-chi/chi/v5 v5.2.4
+	github.com/go-chi/chi/v5 v5.3.0
 	github.com/go-chi/cors v1.2.1
 	github.com/go-playground/validator/v10 v10.25.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
