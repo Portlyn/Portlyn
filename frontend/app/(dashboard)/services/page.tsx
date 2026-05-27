@@ -94,11 +94,11 @@ export default function ServicesPage() {
           auth_policy: legacyAuthPolicyFromAccessMode(values.access_policy)
         })
       });
-      notifications.show({ color: "green", message: "Service created" });
+      notifications.show({ color: "success", message: "Service created" });
       close();
       await loadData();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to create service." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to create service." });
     } finally {
       setIsSaving(false);
     }
@@ -109,11 +109,11 @@ export default function ServicesPage() {
     setIsDeleting(true);
     try {
       await apiFetch<void>(`/api/v1/services/${serviceToDelete.id}`, { method: "DELETE" });
-      notifications.show({ color: "green", message: "Service deleted" });
+      notifications.show({ color: "success", message: "Service deleted" });
       setServiceToDelete(null);
       await loadData();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to delete service." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to delete service." });
     } finally {
       setIsDeleting(false);
     }

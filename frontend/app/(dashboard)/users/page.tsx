@@ -70,15 +70,15 @@ export default function UsersPage() {
 
       if (selectedUser) {
         await apiFetch<User>(`/api/v1/users/${selectedUser.id}`, { method: "PATCH", body: JSON.stringify(payload) });
-        notifications.show({ color: "green", message: "User updated" });
+        notifications.show({ color: "success", message: "User updated" });
       } else {
         await apiFetch<User>("/api/v1/users", { method: "POST", body: JSON.stringify(payload) });
-        notifications.show({ color: "green", message: "User created" });
+        notifications.show({ color: "success", message: "User created" });
       }
       close();
       await loadUsers();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to save user." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to save user." });
     } finally {
       setIsSaving(false);
     }
@@ -89,11 +89,11 @@ export default function UsersPage() {
     setIsToggling(true);
     try {
       await apiFetch<User>(`/api/v1/users/${userToToggle.id}`, { method: "PATCH", body: JSON.stringify({ active: !userToToggle.active }) });
-      notifications.show({ color: "green", message: userToToggle.active ? "User deactivated" : "User activated" });
+      notifications.show({ color: "success", message: userToToggle.active ? "User deactivated" : "User activated" });
       setUserToToggle(null);
       await loadUsers();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to change user status." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to change user status." });
     } finally {
       setIsToggling(false);
     }
@@ -104,11 +104,11 @@ export default function UsersPage() {
     setIsDeleting(true);
     try {
       await apiFetch<void>(`/api/v1/users/${userToDelete.id}`, { method: "DELETE" });
-      notifications.show({ color: "green", message: "User deleted" });
+      notifications.show({ color: "success", message: "User deleted" });
       setUserToDelete(null);
       await loadUsers();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to delete user." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to delete user." });
     } finally {
       setIsDeleting(false);
     }

@@ -28,7 +28,7 @@ export default function PasskeysPage() {
       const response = await apiFetch<UserCredential[]>("/api/v1/me/passkeys");
       setCredentials(response);
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Failed to load passkeys." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Failed to load passkeys." });
     } finally {
       setLoading(false);
     }
@@ -40,7 +40,7 @@ export default function PasskeysPage() {
 
   const register = async () => {
     if (typeof window === "undefined" || !window.PublicKeyCredential) {
-      notifications.show({ color: "red", message: "Browser does not support WebAuthn." });
+      notifications.show({ color: "danger", message: "Browser does not support WebAuthn." });
       return;
     }
     setRegistering(true);
@@ -57,12 +57,12 @@ export default function PasskeysPage() {
         method: "POST",
         body: JSON.stringify(encoded),
       });
-      notifications.show({ color: "green", message: "Passkey registered." });
+      notifications.show({ color: "success", message: "Passkey registered." });
       setLabel("");
       await load();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Registration failed";
-      notifications.show({ color: "red", message });
+      notifications.show({ color: "danger", message });
     } finally {
       setRegistering(false);
     }
@@ -72,9 +72,9 @@ export default function PasskeysPage() {
     try {
       await apiFetch(`/api/v1/me/passkeys/${id}`, { method: "DELETE" });
       setCredentials((current) => current.filter((c) => c.id !== id));
-      notifications.show({ color: "green", message: "Passkey removed." });
+      notifications.show({ color: "success", message: "Passkey removed." });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Delete failed." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Delete failed." });
     }
   };
 
@@ -129,12 +129,12 @@ export default function PasskeysPage() {
                   <Table.Td>{formatDateTime(cred.created_at)}</Table.Td>
                   <Table.Td>{formatDateTime(cred.last_used_at)}</Table.Td>
                   <Table.Td>
-                    <Badge color={cred.user_verified ? "teal" : "gray"} variant="light">
+                    <Badge color={cred.user_verified ? "success" : "gray"} variant="light">
                       {cred.user_verified ? "User verified" : "Unverified"}
                     </Badge>
                   </Table.Td>
                   <Table.Td>
-                    <ActionIcon variant="subtle" color="red" onClick={() => void remove(cred.id)}>
+                    <ActionIcon variant="subtle" color="danger" onClick={() => void remove(cred.id)}>
                       <IconTrash size={16} />
                     </ActionIcon>
                   </Table.Td>

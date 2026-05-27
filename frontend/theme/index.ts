@@ -3,6 +3,7 @@ import { createTheme } from "@mantine/core";
 const theme = createTheme({
   primaryColor: "brand",
   primaryShade: 5,
+  autoContrast: true,
   defaultRadius: "lg",
   fontFamily: "Inter, Segoe UI, Arial, sans-serif",
   headings: {
@@ -16,16 +17,76 @@ const theme = createTheme({
   },
   colors: {
     brand: [
-      "#f1edf7",
-      "#e0d5ef",
-      "#c8b6e0",
-      "#ad96cf",
-      "#8e72b8",
+      "#f5f0fc",
+      "#e8def5",
+      "#d4c1ec",
+      "#b89ade",
+      "#9c79d0",
       "#6a4a99",
-      "#573a82",
-      "#442e68",
-      "#33234e",
-      "#241836"
+      "#553a7e",
+      "#422c63",
+      "#2f1f48",
+      "#1d1330"
+    ],
+    success: [
+      "#e9faf3",
+      "#ccf3e0",
+      "#9ce8c2",
+      "#69dca3",
+      "#3fd28a",
+      "#22c97a",
+      "#179c5e",
+      "#0e7a48",
+      "#075833",
+      "#03361f"
+    ],
+    warning: [
+      "#fff6e5",
+      "#ffe8bf",
+      "#fcd58c",
+      "#fac15a",
+      "#f8b13a",
+      "#f6a522",
+      "#cd8413",
+      "#a3660c",
+      "#794907",
+      "#502d03"
+    ],
+    danger: [
+      "#fdecec",
+      "#f9cccc",
+      "#f3a1a1",
+      "#ed7575",
+      "#ea5050",
+      "#e63d3d",
+      "#bd2a2a",
+      "#931e1e",
+      "#691414",
+      "#400a0a"
+    ],
+    info: [
+      "#e6f5ff",
+      "#bee2ff",
+      "#8fccff",
+      "#5cb5ff",
+      "#34a3ff",
+      "#1493ee",
+      "#0a74c0",
+      "#055691",
+      "#023b65",
+      "#01233e"
+    ],
+    accent: [
+      "#e8fbfa",
+      "#c2f4f0",
+      "#8fe8e2",
+      "#5edcd3",
+      "#37d2c7",
+      "#1ac9bc",
+      "#0d9d92",
+      "#077871",
+      "#035351",
+      "#012f30"
     ],
     dark: [
       "#d5d9e2",
@@ -126,6 +187,17 @@ const theme = createTheme({
     NumberInput: {
       defaultProps: {
         size: "md"
+      }
+    },
+    Avatar: {
+      defaultProps: {
+        color: "brand.4",
+        variant: "light"
+      },
+      styles: {
+        placeholder: {
+          fontWeight: 600
+        }
       }
     },
     Table: {

@@ -400,7 +400,7 @@ export function ServiceForm({
                       <Button
                         size="xs"
                         variant="subtle"
-                        color="red"
+                        color="danger"
                         onClick={() =>
                           setValues((current) => ({
                             ...current,

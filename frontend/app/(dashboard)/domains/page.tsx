@@ -57,18 +57,18 @@ export default function DomainsPage() {
           method: "PATCH",
           body: JSON.stringify(values)
         });
-        notifications.show({ color: "green", message: "Domain updated" });
+        notifications.show({ color: "success", message: "Domain updated" });
       } else {
         await apiFetch<Domain>("/api/v1/domains", {
           method: "POST",
           body: JSON.stringify(values)
         });
-        notifications.show({ color: "green", message: "Domain created" });
+        notifications.show({ color: "success", message: "Domain created" });
       }
       close();
       await loadDomains();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to save domain." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to save domain." });
     } finally {
       setIsSaving(false);
     }
@@ -79,11 +79,11 @@ export default function DomainsPage() {
     setIsDeleting(true);
     try {
       await apiFetch<void>(`/api/v1/domains/${domainToDelete.id}`, { method: "DELETE" });
-      notifications.show({ color: "green", message: "Domain deleted" });
+      notifications.show({ color: "success", message: "Domain deleted" });
       setDomainToDelete(null);
       await loadDomains();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to delete domain." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to delete domain." });
     } finally {
       setIsDeleting(false);
     }

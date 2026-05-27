@@ -74,9 +74,9 @@ export default function TunnelPage() {
         }),
       });
       setSettings(response);
-      notifications.show({ color: "green", message: "Tunnel settings saved." });
+      notifications.show({ color: "success", message: "Tunnel settings saved." });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Save failed." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Save failed." });
     } finally {
       setSaving(false);
     }
@@ -99,7 +99,7 @@ export default function TunnelPage() {
         </Stack>
 
         {settings && !settings.configured && enabled ? (
-          <Alert color="yellow" variant="light">
+          <Alert color="warning" variant="light">
             Set a public endpoint (host:port) so nodes can reach this server. Once saved, the server keypair is generated automatically.
           </Alert>
         ) : null}
@@ -169,7 +169,7 @@ export default function TunnelPage() {
             <Stack gap="sm">
               <Group justify="space-between">
                 <Text fw={600}>Server public key</Text>
-                <Badge color="teal" variant="light">{settings.configured_peer_count} peers</Badge>
+                <Badge color="success" variant="light">{settings.configured_peer_count} peers</Badge>
               </Group>
               <Code block>{settings.server_public_key}</Code>
               <Text size="sm" c="dimmed">

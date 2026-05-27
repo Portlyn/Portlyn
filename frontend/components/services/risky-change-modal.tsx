@@ -40,7 +40,7 @@ export function RiskyChangeModal({
     >
       <Stack gap="md">
         {assessment.level === "high" ? (
-          <Alert color="red" variant="filled">
+          <Alert color="danger" variant="filled">
             This change increases exposure. Review carefully before applying.
           </Alert>
         ) : null}
@@ -91,7 +91,7 @@ export function RiskyChangeModal({
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Cancel</Button>
           <Button
-            color={assessment.level === "high" ? "red" : "brand"}
+            color={assessment.level === "high" ? "danger" : "brand"}
             disabled={!confirmEnabled}
             loading={isLoading}
             onClick={onConfirm}

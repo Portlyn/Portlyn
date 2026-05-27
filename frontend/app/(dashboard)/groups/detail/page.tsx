@@ -61,9 +61,9 @@ function GroupDetailContent() {
       });
       setGroup(updated);
       setSelectedUserId(null);
-      notifications.show({ color: "green", message: "Member added" });
+      notifications.show({ color: "success", message: "Member added" });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to add member." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to add member." });
     }
   };
 
@@ -72,9 +72,9 @@ function GroupDetailContent() {
     try {
       await apiFetch<void>(`/api/v1/groups/${groupId}/members/${userId}`, { method: "DELETE" });
       await loadData();
-      notifications.show({ color: "green", message: "Member removed" });
+      notifications.show({ color: "success", message: "Member removed" });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to remove member." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to remove member." });
     }
   };
 
@@ -131,7 +131,7 @@ function GroupDetailContent() {
                             <Table.Td>{user.active ? "active" : "inactive"}</Table.Td>
                             <Table.Td>
                               <MantineGroup justify="flex-end">
-                                <Button variant="subtle" color="red" onClick={() => void handleRemove(user.id)}>
+                                <Button variant="subtle" color="danger" onClick={() => void handleRemove(user.id)}>
                                   Remove
                                 </Button>
                               </MantineGroup>

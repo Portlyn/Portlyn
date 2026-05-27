@@ -90,7 +90,7 @@ function UserDetailContent() {
             <Text fw={600}>Multi-factor authentication</Text>
             <Text size="sm" c="dimmed">Reset revokes existing MFA factors and active sessions.</Text>
           </div>
-          <Button variant="default" color="red" onClick={() => void (userId ? apiFetch<{ ok: boolean }>(`/api/v1/users/${userId}/mfa/reset`, { method: "POST" }).then(load) : Promise.resolve())}>
+          <Button variant="default" color="danger" onClick={() => void (userId ? apiFetch<{ ok: boolean }>(`/api/v1/users/${userId}/mfa/reset`, { method: "POST" }).then(load) : Promise.resolve())}>
             Reset MFA
           </Button>
         </Group>
@@ -126,7 +126,7 @@ function UserDetailContent() {
                     <Table.Td><StatusBadge status={session.revoked_at ? "revoked" : "active"} /></Table.Td>
                     <Table.Td>
                       <Group justify="flex-end">
-                        <Button size="xs" variant="subtle" color="red" onClick={() => void revokeSession(session.id)} disabled={Boolean(session.revoked_at)}>
+                        <Button size="xs" variant="subtle" color="danger" onClick={() => void revokeSession(session.id)} disabled={Boolean(session.revoked_at)}>
                           Revoke
                         </Button>
                       </Group>

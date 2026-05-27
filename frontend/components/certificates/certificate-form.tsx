@@ -136,12 +136,12 @@ export function CertificateForm({
       <TextInput label="Expected expiry override" type="date" value={values.expires_at || ""} onChange={(event) => setValues({ ...values, expires_at: event.currentTarget.value })} />
       <Checkbox checked={values.is_auto_renew} onChange={(event) => setValues({ ...values, is_auto_renew: event.currentTarget.checked })} label="Auto renew" />
       {wildcardNeedsDNS ? (
-        <Alert color={values.challenge_type === "dns-01" ? "brand" : "orange"} variant="light" title="Wildcard validation">
+        <Alert color={values.challenge_type === "dns-01" ? "brand" : "warning"} variant="light" title="Wildcard validation">
           Wildcard certificates require DNS-01.
         </Alert>
       ) : null}
       {providerRequired && !values.dns_provider_id ? (
-        <Alert color="orange" variant="light" title="DNS provider required">
+        <Alert color="warning" variant="light" title="DNS provider required">
           DNS-01 requires a configured DNS provider.
         </Alert>
       ) : null}

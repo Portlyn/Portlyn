@@ -81,15 +81,15 @@ export default function CertificatesPage() {
       };
       if (selectedCertificate) {
         await apiFetch<Certificate>(`/api/v1/certificates/${selectedCertificate.id}`, { method: "PATCH", body: JSON.stringify(payload) });
-        notifications.show({ color: "green", message: "Certificate updated" });
+        notifications.show({ color: "success", message: "Certificate updated" });
       } else {
         await apiFetch<Certificate>("/api/v1/certificates", { method: "POST", body: JSON.stringify(payload) });
-        notifications.show({ color: "green", message: "Certificate created" });
+        notifications.show({ color: "success", message: "Certificate created" });
       }
       close();
       await loadData();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to save certificate." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to save certificate." });
     } finally {
       setIsSaving(false);
     }
@@ -100,11 +100,11 @@ export default function CertificatesPage() {
     setIsDeleting(true);
     try {
       await apiFetch<void>(`/api/v1/certificates/${certificateToDelete.id}`, { method: "DELETE" });
-      notifications.show({ color: "green", message: "Certificate deleted" });
+      notifications.show({ color: "success", message: "Certificate deleted" });
       setCertificateToDelete(null);
       await loadData();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to delete certificate." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to delete certificate." });
     } finally {
       setIsDeleting(false);
     }
@@ -114,10 +114,10 @@ export default function CertificatesPage() {
     setIsOperating(true);
     try {
       await apiFetch<Certificate>(`/api/v1/certificates/${certificate.id}/${action}`, { method: "POST" });
-      notifications.show({ color: "green", message: `Certificate ${action.replace("-", " ")} completed` });
+      notifications.show({ color: "success", message: `Certificate ${action.replace("-", " ")} completed` });
       await loadData();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : `Unable to ${action} certificate.` });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : `Unable to ${action} certificate.` });
     } finally {
       setIsOperating(false);
     }
@@ -155,7 +155,7 @@ export default function CertificatesPage() {
       </Group>
 
       {failedCertificates.length > 0 || expiringSoon.length > 0 ? (
-        <Alert color="orange" variant="light" title="Certificate attention needed">
+        <Alert color="warning" variant="light" title="Certificate attention needed">
           {failedCertificates.length} failed, {expiringSoon.length} expiring within 14 days.
         </Alert>
       ) : null}
@@ -189,7 +189,7 @@ export default function CertificatesPage() {
                 <Text fw={700} fz="lg">{inspectedCertificate.primary_domain}</Text>
                 <Text size="sm" c="dimmed">{inspectedCertificate.domain?.name || `Domain #${inspectedCertificate.domain_id}`}</Text>
               </div>
-              <Badge color={inspectedCertificate.issuer === "letsencrypt_staging" ? "orange" : "brand"} variant="light">
+              <Badge color={inspectedCertificate.issuer === "letsencrypt_staging" ? "warning" : "brand"} variant="light">
                 {inspectedCertificate.issuer === "letsencrypt_staging" ? "Let's Encrypt Staging" : "Let's Encrypt Production"}
               </Badge>
             </Group>

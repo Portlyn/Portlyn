@@ -69,7 +69,7 @@ export function ServiceTable({
               <Table.Td>
                 <StatusBadge status={service.service_status || (service.last_deployed_at ? "healthy" : "pending")} />
                 <Text c="#7e8795" size="xs" mt={4}>{formatDateTime(service.last_deployed_at)}</Text>
-                {service.service_status_error ? <Text c="red" size="xs" mt={4}>{service.service_status_error}</Text> : null}
+                {service.service_status_error ? <Text c="danger" size="xs" mt={4}>{service.service_status_error}</Text> : null}
               </Table.Td>
               <Table.Td>
                 <Group justify="flex-end" gap="xs">

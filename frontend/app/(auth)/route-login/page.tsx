@@ -251,7 +251,7 @@ function RouteLoginContent() {
             </Stack>
           ) : null}
 
-          {error ? <Alert color="red" variant="light">{error}</Alert> : null}
+          {error ? <Alert color="danger" variant="light">{error}</Alert> : null}
         </Stack>
       </Paper>
     </Center>

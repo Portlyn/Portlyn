@@ -112,11 +112,11 @@ export default function ServiceGroupsPage() {
           body: JSON.stringify(payload)
         });
       }
-      notifications.show({ color: "green", message: selected ? "Service group updated" : "Service group created" });
+      notifications.show({ color: "success", message: selected ? "Service group updated" : "Service group created" });
       close();
       await loadData();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to save service group." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to save service group." });
     } finally {
       setIsSaving(false);
     }
@@ -127,11 +127,11 @@ export default function ServiceGroupsPage() {
     setIsDeleting(true);
     try {
       await apiFetch<void>(`/api/v1/service-groups/${deleteTarget.id}`, { method: "DELETE" });
-      notifications.show({ color: "green", message: "Service group deleted" });
+      notifications.show({ color: "success", message: "Service group deleted" });
       setDeleteTarget(null);
       await loadData();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to delete service group." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to delete service group." });
     } finally {
       setIsDeleting(false);
     }
@@ -179,7 +179,7 @@ export default function ServiceGroupsPage() {
                       <Table.Td>
                         <MantineGroup justify="flex-end">
                           <Button variant="subtle" onClick={() => beginEdit(item)}>Edit</Button>
-                          <Button variant="subtle" color="red" onClick={() => setDeleteTarget(item)}>Delete</Button>
+                          <Button variant="subtle" color="danger" onClick={() => setDeleteTarget(item)}>Delete</Button>
                         </MantineGroup>
                       </Table.Td>
                     </Table.Tr>

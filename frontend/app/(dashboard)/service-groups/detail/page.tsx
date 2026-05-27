@@ -81,9 +81,9 @@ function ServiceGroupDetailContent() {
         }, { omitEmptyAccessMethod: true }))
       });
       setItem(updated);
-      notifications.show({ color: "green", message: "Default policy updated" });
+      notifications.show({ color: "success", message: "Default policy updated" });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to update policy." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to update policy." });
     }
   };
 
@@ -96,9 +96,9 @@ function ServiceGroupDetailContent() {
       });
       setItem(updated);
       setSelectedServiceId(null);
-      notifications.show({ color: "green", message: "Service assigned" });
+      notifications.show({ color: "success", message: "Service assigned" });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to assign service." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to assign service." });
     }
   };
 
@@ -107,9 +107,9 @@ function ServiceGroupDetailContent() {
     try {
       await apiFetch<void>(`/api/v1/service-groups/${serviceGroupId}/services/${serviceId}`, { method: "DELETE" });
       await loadData();
-      notifications.show({ color: "green", message: "Service removed" });
+      notifications.show({ color: "success", message: "Service removed" });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to remove service." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to remove service." });
     }
   };
 
@@ -236,7 +236,7 @@ function ServiceGroupDetailContent() {
                             <Table.Td><AccessMethodBadge value={service.effective_access_method || service.access_method || "session"} /></Table.Td>
                             <Table.Td>
                               <MantineGroup justify="flex-end">
-                                <Button variant="subtle" color="red" onClick={() => void handleRemove(service.id)}>
+                                <Button variant="subtle" color="danger" onClick={() => void handleRemove(service.id)}>
                                   Remove
                                 </Button>
                               </MantineGroup>

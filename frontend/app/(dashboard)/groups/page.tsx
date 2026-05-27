@@ -62,11 +62,11 @@ export default function GroupsPage() {
           body: JSON.stringify({ name, description })
         });
       }
-      notifications.show({ color: "green", message: selected ? "Group updated" : "Group created" });
+      notifications.show({ color: "success", message: selected ? "Group updated" : "Group created" });
       close();
       await loadData();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to save group." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to save group." });
     } finally {
       setIsSaving(false);
     }
@@ -77,11 +77,11 @@ export default function GroupsPage() {
     setIsDeleting(true);
     try {
       await apiFetch<void>(`/api/v1/groups/${deleteTarget.id}`, { method: "DELETE" });
-      notifications.show({ color: "green", message: "Group deleted" });
+      notifications.show({ color: "success", message: "Group deleted" });
       setDeleteTarget(null);
       await loadData();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to delete group." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to delete group." });
     } finally {
       setIsDeleting(false);
     }
@@ -125,7 +125,7 @@ export default function GroupsPage() {
                       <Table.Td>
                         <Group justify="flex-end">
                           <Button variant="subtle" onClick={() => beginEdit(group)}>Edit</Button>
-                          <Button variant="subtle" color="red" onClick={() => setDeleteTarget(group)} disabled={group.is_system_group}>
+                          <Button variant="subtle" color="danger" onClick={() => setDeleteTarget(group)} disabled={group.is_system_group}>
                             Delete
                           </Button>
                         </Group>

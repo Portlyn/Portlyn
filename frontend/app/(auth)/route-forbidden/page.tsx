@@ -54,7 +54,7 @@ function RouteForbiddenContent() {
 
           {ui.forbidden_subtitle ? <Text c={ui.muted_text_color}>{ui.forbidden_subtitle}</Text> : null}
 
-          {error ? <Text c="red">{error}</Text> : null}
+          {error ? <Text c="danger">{error}</Text> : null}
 
           {returnTo ? (
             <Button component="a" href={returnTo} style={buttonStyle(ui)}>

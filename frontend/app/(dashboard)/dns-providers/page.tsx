@@ -74,16 +74,16 @@ export default function DNSProvidersPage() {
     try {
       if (selected) {
         await apiFetch(`/api/v1/dns-providers/${selected.id}`, { method: "PATCH", body: JSON.stringify(form) });
-        notifications.show({ color: "green", message: "DNS provider updated" });
+        notifications.show({ color: "success", message: "DNS provider updated" });
       } else {
         await apiFetch("/api/v1/dns-providers", { method: "POST", body: JSON.stringify(form) });
-        notifications.show({ color: "green", message: "DNS provider created" });
+        notifications.show({ color: "success", message: "DNS provider created" });
       }
       close();
       setSelected(null);
       await load();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to save DNS provider." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to save DNS provider." });
     } finally {
       setIsSaving(false);
     }
@@ -94,11 +94,11 @@ export default function DNSProvidersPage() {
     setIsDeleting(true);
     try {
       await apiFetch(`/api/v1/dns-providers/${toDelete.id}`, { method: "DELETE" });
-      notifications.show({ color: "green", message: "DNS provider deleted" });
+      notifications.show({ color: "success", message: "DNS provider deleted" });
       setToDelete(null);
       await load();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to delete DNS provider." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to delete DNS provider." });
     } finally {
       setIsDeleting(false);
     }
@@ -107,10 +107,10 @@ export default function DNSProvidersPage() {
   const handleTest = async (item: DNSProvider) => {
     try {
       await apiFetch(`/api/v1/dns-providers/${item.id}/test`, { method: "POST" });
-      notifications.show({ color: "green", message: "DNS provider validation passed" });
+      notifications.show({ color: "success", message: "DNS provider validation passed" });
       await load();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Provider validation failed." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Provider validation failed." });
       await load();
     }
   };
@@ -163,7 +163,7 @@ export default function DNSProvidersPage() {
                       <Group justify="flex-end">
                         <Button size="xs" variant="default" onClick={() => void handleTest(item)}>Test</Button>
                         <Button size="xs" variant="default" onClick={() => { setSelected(item); open(); }}>Edit</Button>
-                        <Button size="xs" color="red" variant="light" onClick={() => setToDelete(item)}>Delete</Button>
+                        <Button size="xs" color="danger" variant="light" onClick={() => setToDelete(item)}>Delete</Button>
                       </Group>
                     </Table.Td>
                   </Table.Tr>

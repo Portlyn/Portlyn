@@ -84,7 +84,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
       notifications.show({
         title: "Signed in",
         message: `Role: ${response.user.role}`,
-        color: "green"
+        color: "success"
       });
     },
     []
@@ -145,11 +145,11 @@ function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (setupPassword.length < 8) {
-      notifications.show({ color: "red", message: "Password must be at least 8 characters." });
+      notifications.show({ color: "danger", message: "Password must be at least 8 characters." });
       return;
     }
     if (setupPassword !== setupConfirmPassword) {
-      notifications.show({ color: "red", message: "Passwords do not match." });
+      notifications.show({ color: "danger", message: "Passwords do not match." });
       return;
     }
     setIsCompletingSetup(true);
@@ -158,10 +158,10 @@ function AuthProvider({ children }: { children: ReactNode }) {
       setUser(updatedUser);
       setSetupPassword("");
       setSetupConfirmPassword("");
-      notifications.show({ color: "green", message: "Account setup completed" });
+      notifications.show({ color: "success", message: "Account setup completed" });
     } catch (error) {
       notifications.show({
-        color: "red",
+        color: "danger",
         message: error instanceof Error ? error.message : "Unable to complete account setup."
       });
     } finally {
@@ -233,5 +233,5 @@ export function UserAvatar() {
   const { user } = useAuth();
   const seed = user?.display_name || user?.username || user?.email || "PL";
   const initials = seed.slice(0, 2).toUpperCase();
-  return <Avatar radius="xl" size="sm" color="brand">{initials}</Avatar>;
+  return <Avatar radius="xl" size="sm" color="brand.4">{initials}</Avatar>;
 }

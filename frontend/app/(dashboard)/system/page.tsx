@@ -122,7 +122,7 @@ export default function SystemPage() {
       </SimpleGrid>
 
       {overview.warnings.config.length > 0 ? (
-        <Alert color="orange" variant="light" title="Configuration warnings">
+        <Alert color="warning" variant="light" title="Configuration warnings">
           {overview.warnings.config.map((item) => item.message).join(" ")}
         </Alert>
       ) : null}

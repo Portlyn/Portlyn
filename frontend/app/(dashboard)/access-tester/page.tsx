@@ -35,8 +35,8 @@ interface ExplainResponse {
 }
 
 function statusColor(status: string): string {
-  if (status === "ok") return "teal";
-  if (status === "fail") return "red";
+  if (status === "ok") return "success";
+  if (status === "fail") return "danger";
   return "gray";
 }
 
@@ -158,13 +158,13 @@ export default function AccessTesterPage() {
               </Button>
             </Group>
 
-            {runError ? <Alert color="red" variant="light">{runError}</Alert> : null}
+            {runError ? <Alert color="danger" variant="light">{runError}</Alert> : null}
 
             {result ? (
               <Card withBorder padding="md" radius="md">
                 <Group justify="space-between" mb="sm">
                   <Text fw={700}>{result.allowed ? "Request would be allowed" : "Request would be denied"}</Text>
-                  <Badge color={result.allowed ? "teal" : "red"} variant="filled">{result.decision}</Badge>
+                  <Badge color={result.allowed ? "success" : "danger"} variant="filled">{result.decision}</Badge>
                 </Group>
                 <Stack gap="xs">
                   {result.steps.map((step, idx) => (

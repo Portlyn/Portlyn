@@ -153,15 +153,15 @@ export default function NodesPage() {
     try {
       if (selectedNode) {
         await apiFetch<Node>(`/api/v1/nodes/${selectedNode.id}`, { method: "PATCH", body: JSON.stringify(values) });
-        notifications.show({ color: "green", message: "Node updated" });
+        notifications.show({ color: "success", message: "Node updated" });
       } else {
         await apiFetch<Node>("/api/v1/nodes", { method: "POST", body: JSON.stringify(values) });
-        notifications.show({ color: "green", message: "Node created" });
+        notifications.show({ color: "success", message: "Node created" });
       }
       closeManual();
       await loadNodes();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to save node." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to save node." });
     } finally {
       setIsSaving(false);
     }
@@ -172,11 +172,11 @@ export default function NodesPage() {
     setIsDeleting(true);
     try {
       await apiFetch<void>(`/api/v1/nodes/${nodeToDelete.id}`, { method: "DELETE" });
-      notifications.show({ color: "green", message: "Node deleted" });
+      notifications.show({ color: "success", message: "Node deleted" });
       setNodeToDelete(null);
       await loadNodes();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to delete node." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to delete node." });
     } finally {
       setIsDeleting(false);
     }
@@ -198,10 +198,10 @@ export default function NodesPage() {
       setLatestToken(response);
       setConnectedNode(null);
       setIsPollingInstall(true);
-      notifications.show({ color: "green", message: "Enrollment token created" });
+      notifications.show({ color: "success", message: "Enrollment token created" });
       await loadNodes();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to create enrollment token." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to create enrollment token." });
     } finally {
       setIsCreatingToken(false);
     }
@@ -217,7 +217,7 @@ export default function NodesPage() {
         if (matchedNode) {
           setConnectedNode(matchedNode);
           setIsPollingInstall(false);
-          notifications.show({ color: "green", message: `Node ${matchedNode.name} connected` });
+          notifications.show({ color: "success", message: `Node ${matchedNode.name} connected` });
         }
       }).catch(() => undefined);
     }, 3000);
@@ -260,17 +260,17 @@ export default function NodesPage() {
         setIsPollingInstall(false);
       }
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to refresh node status." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to refresh node status." });
     }
   };
 
   const handleDeleteToken = async (tokenId: number) => {
     try {
       await apiFetch<void>(`/api/v1/node-enrollment-tokens/${tokenId}`, { method: "DELETE" });
-      notifications.show({ color: "green", message: "Enrollment token deleted" });
+      notifications.show({ color: "success", message: "Enrollment token deleted" });
       await loadNodes();
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to delete enrollment token." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to delete enrollment token." });
     }
   };
 
@@ -292,7 +292,7 @@ export default function NodesPage() {
                 <Button onClick={() => openInstall()}>Open installer</Button>
               </Group>
               {latestToken ? (
-                <Alert color={connectedNode ? "teal" : "brand"} variant="light" title={connectedNode ? "Node connected" : "Waiting for node connection"}>
+                <Alert color={connectedNode ? "success" : "brand"} variant="light" title={connectedNode ? "Node connected" : "Waiting for node connection"}>
                   <Group justify="space-between" align="center">
                     <div>
                       <Text size="sm">Token label: {latestToken.name}</Text>
@@ -301,7 +301,7 @@ export default function NodesPage() {
                       {connectedNode ? <Text size="sm">Connected node: {connectedNode.name}</Text> : null}
                     </div>
                     <Group gap="xs">
-                      {!connectedNode ? <Loader size="sm" color="brand" /> : <Badge color="teal" variant="light">connected</Badge>}
+                      {!connectedNode ? <Loader size="sm" color="brand" /> : <Badge color="success" variant="light">connected</Badge>}
                       <Button size="xs" variant="subtle" leftSection={<IconRefresh size={14} />} onClick={() => void refreshInstallStatus()}>
                         Refresh
                       </Button>
@@ -330,7 +330,7 @@ export default function NodesPage() {
                           <Table.Td>{token.used_at ? formatDateTime(token.used_at) : "No"}</Table.Td>
                           <Table.Td>
                             <Group justify="flex-end">
-                              <Button size="xs" variant="subtle" color="red" onClick={() => void handleDeleteToken(token.id)}>
+                              <Button size="xs" variant="subtle" color="danger" onClick={() => void handleDeleteToken(token.id)}>
                                 Delete
                               </Button>
                             </Group>
@@ -386,7 +386,7 @@ export default function NodesPage() {
           </Stack>
         ) : (
           <Stack gap="lg">
-            <Alert color={connectedNode ? "teal" : "brand"} variant="light" title={connectedNode ? "Connection established" : "Waiting for first heartbeat"}>
+            <Alert color={connectedNode ? "success" : "brand"} variant="light" title={connectedNode ? "Connection established" : "Waiting for first heartbeat"}>
               <Group justify="space-between" align="center">
                 <div>
                   <Text size="sm">Node name: {installNodeName}</Text>
@@ -394,7 +394,7 @@ export default function NodesPage() {
                   <Text size="sm">Created: {formatDateTime(latestToken.created_at)}</Text>
                   {connectedNode ? <Text size="sm">Connected as node #{connectedNode.id} with status {connectedNode.status}</Text> : null}
                 </div>
-                {!connectedNode ? <Loader size="sm" color="brand" /> : <Badge color="teal" leftSection={<IconCheck size={12} />}>Connected</Badge>}
+                {!connectedNode ? <Loader size="sm" color="brand" /> : <Badge color="success" leftSection={<IconCheck size={12} />}>Connected</Badge>}
               </Group>
             </Alert>
 

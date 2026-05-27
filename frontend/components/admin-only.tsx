@@ -14,7 +14,7 @@ export function AdminOnly({ children, title = "Admin access required" }: { child
   }
 
   return (
-    <Alert icon={<IconAlertTriangle size={16} />} title={title} color="yellow" variant="light">
+    <Alert icon={<IconAlertTriangle size={16} />} title={title} color="warning" variant="light">
       You can view the platform, but this section is reserved for admins.
     </Alert>
   );

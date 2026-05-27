@@ -29,7 +29,7 @@ export function ConfirmDialog({
           <Button variant="subtle" color="gray" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="subtle" color="red" loading={isLoading} onClick={() => void onConfirm()}>
+          <Button variant="subtle" color="danger" loading={isLoading} onClick={() => void onConfirm()}>
             {confirmLabel}
           </Button>
         </Group>

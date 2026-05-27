@@ -35,14 +35,14 @@ function parseDetails(value: string | null | undefined): ParsedDetails {
 }
 
 function outcomeColor(outcome: string | undefined, statusCode: number | undefined): string {
-  if (outcome === "proxied" || outcome === "session_bridge") return "teal";
-  if (outcome === "denied") return "red";
+  if (outcome === "proxied" || outcome === "session_bridge") return "success";
+  if (outcome === "denied") return "danger";
   if (outcome === "not_found") return "gray";
   if (outcome === "admin") return "blue";
-  if (outcome === "degraded") return "orange";
-  if (statusCode && statusCode >= 500) return "red";
-  if (statusCode && statusCode >= 400) return "orange";
-  if (statusCode && statusCode >= 300) return "yellow";
+  if (outcome === "degraded") return "warning";
+  if (statusCode && statusCode >= 500) return "danger";
+  if (statusCode && statusCode >= 400) return "warning";
+  if (statusCode && statusCode >= 300) return "warning";
   return "gray";
 }
 

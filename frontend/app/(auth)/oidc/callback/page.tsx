@@ -76,7 +76,7 @@ function CallbackContent() {
             </Button>
           </>
         ) : (
-          error ? <Alert color="red" variant="light" w="100%" styles={authInfoAlertStyle(ui)}>{error}</Alert> : null
+          error ? <Alert color="danger" variant="light" w="100%" styles={authInfoAlertStyle(ui)}>{error}</Alert> : null
         )}
       </Stack>
     </Paper>

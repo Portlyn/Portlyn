@@ -11,9 +11,9 @@ import type { Node, TunnelBootstrapResponse, TunnelStatus } from "@/lib/types";
 
 const STATUS_COLOR: Record<string, string> = {
   inactive: "gray",
-  provisioned: "yellow",
-  connected: "teal",
-  stale: "orange",
+  provisioned: "warning",
+  connected: "success",
+  stale: "warning",
 };
 
 export function NodeTunnelPanel({ node, onChange }: { node: Node; onChange: (updated: Node) => void }) {
@@ -41,9 +41,9 @@ export function NodeTunnelPanel({ node, onChange }: { node: Node; onChange: (upd
         wg_endpoint: response.server_endpoint,
         tunnel_status: "provisioned",
       });
-      notifications.show({ color: "green", message: "Tunnel config issued. Save it now — the private key is shown only once." });
+      notifications.show({ color: "success", message: "Tunnel config issued. Save it now — the private key is shown only once." });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Bootstrap failed." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Bootstrap failed." });
     } finally {
       setLoading(false);
     }
@@ -60,9 +60,9 @@ export function NodeTunnelPanel({ node, onChange }: { node: Node; onChange: (upd
         wg_endpoint: "",
         tunnel_status: "inactive",
       });
-      notifications.show({ color: "green", message: "Tunnel revoked." });
+      notifications.show({ color: "success", message: "Tunnel revoked." });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Revoke failed." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Revoke failed." });
     } finally {
       setRevoking(false);
     }
@@ -81,7 +81,7 @@ export function NodeTunnelPanel({ node, onChange }: { node: Node; onChange: (upd
             <Button size="xs" variant="light" leftSection={<IconLink size={14} />} loading={loading} onClick={() => bootstrap(true)}>
               Re-issue
             </Button>
-            <Button size="xs" variant="subtle" color="red" leftSection={<IconLinkOff size={14} />} loading={revoking} onClick={revoke}>
+            <Button size="xs" variant="subtle" color="danger" leftSection={<IconLinkOff size={14} />} loading={revoking} onClick={revoke}>
               Revoke
             </Button>
           </Group>
@@ -104,7 +104,7 @@ export function NodeTunnelPanel({ node, onChange }: { node: Node; onChange: (upd
       <Modal opened={opened} onClose={() => setOpened(false)} title="Wireguard client config" size="lg">
         {config ? (
           <Stack gap="md">
-            <Alert color="yellow" variant="light">
+            <Alert color="warning" variant="light">
               Save this config now. The private key is not stored on the server and will not be shown again.
             </Alert>
             <Textarea value={config.config_text} autosize minRows={10} maxRows={20} readOnly />

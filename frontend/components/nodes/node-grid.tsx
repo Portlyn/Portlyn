@@ -40,7 +40,7 @@ export function NodeGrid({
                   <ActionIcon variant="subtle" color="gray" onClick={() => onEdit?.(node)}>
                     <IconEdit size={16} />
                   </ActionIcon>
-                  <ActionIcon variant="subtle" color="red" onClick={() => onDelete?.(node)}>
+                  <ActionIcon variant="subtle" color="danger" onClick={() => onDelete?.(node)}>
                     <IconTrash size={16} />
                   </ActionIcon>
                 </Group>

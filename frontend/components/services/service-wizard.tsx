@@ -340,7 +340,7 @@ export function ServiceWizard({
                   />
                 </Group>
                 {selectedTemplate?.notes ? (
-                  <Alert color="yellow" variant="light" title="Recommendation">
+                  <Alert color="warning" variant="light" title="Recommendation">
                     {selectedTemplate.notes}
                   </Alert>
                 ) : null}

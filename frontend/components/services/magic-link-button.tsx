@@ -25,7 +25,7 @@ export function MagicLinkButton({ serviceId, serviceName }: { serviceId: number;
       });
       setIssued(response);
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Could not issue magic link." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Could not issue magic link." });
     } finally {
       setIssuing(false);
     }
@@ -47,7 +47,7 @@ export function MagicLinkButton({ serviceId, serviceName }: { serviceId: number;
         <Stack gap="md">
           {issued ? (
             <>
-              <Alert color="yellow" variant="light">
+              <Alert color="warning" variant="light">
                 Single-use link. Anyone with the URL gains access until {new Date(issued.expires_at).toLocaleString()}.
               </Alert>
               <Textarea value={issued.url} autosize readOnly />

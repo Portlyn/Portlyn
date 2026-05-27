@@ -92,9 +92,9 @@ function ServiceDetailContent() {
         })
       });
       setService(updated);
-      notifications.show({ color: "green", message: "Service updated" });
+      notifications.show({ color: "success", message: "Service updated" });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to update service." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to update service." });
     } finally {
       setIsSaving(false);
     }
@@ -105,10 +105,10 @@ function ServiceDetailContent() {
     setIsDeleting(true);
     try {
       await apiFetch<void>(`/api/v1/services/${serviceId}`, { method: "DELETE" });
-      notifications.show({ color: "green", message: "Service deleted" });
+      notifications.show({ color: "success", message: "Service deleted" });
       router.push("/services");
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to delete service." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to delete service." });
     } finally {
       setIsDeleting(false);
       setConfirmDelete(false);
@@ -151,11 +151,11 @@ function ServiceDetailContent() {
               </div>
               <Stack gap="xs" align="flex-end">
                 <StatusBadge status={service.service_status || (service.last_deployed_at ? "healthy" : "pending")} />
-                {service.service_status_error ? <Text c="red" size="xs">{service.service_status_error}</Text> : null}
+                {service.service_status_error ? <Text c="danger" size="xs">{service.service_status_error}</Text> : null}
                 {canManage ? (
                   <Group gap="xs">
                     <MagicLinkButton serviceId={service.id} serviceName={service.name} />
-                    <Button variant="subtle" color="red" onClick={() => setConfirmDelete(true)}>
+                    <Button variant="subtle" color="danger" onClick={() => setConfirmDelete(true)}>
                       Delete Service
                     </Button>
                   </Group>

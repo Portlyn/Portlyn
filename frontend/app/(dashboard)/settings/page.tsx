@@ -186,9 +186,9 @@ export default function SettingsPage() {
       });
       setSettings(response);
       setForm(toForm(response));
-      notifications.show({ color: "green", message: "Authentication settings updated" });
+      notifications.show({ color: "success", message: "Authentication settings updated" });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to save settings." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to save settings." });
     } finally {
       setIsSaving(false);
     }
@@ -201,9 +201,9 @@ export default function SettingsPage() {
         method: "POST",
         body: JSON.stringify({ email: testEmail })
       });
-      notifications.show({ color: "green", message: "Test email sent" });
+      notifications.show({ color: "success", message: "Test email sent" });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Unable to send test email." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Unable to send test email." });
     } finally {
       setIsSending(false);
     }
@@ -216,7 +216,7 @@ export default function SettingsPage() {
           <Title order={2}>Authentication & Mail</Title>
         </div>
 
-        {error ? <Alert color="red" variant="light">{error}</Alert> : null}
+        {error ? <Alert color="danger" variant="light">{error}</Alert> : null}
         {isLoading || !form ? <Text c="dimmed">Loading settings...</Text> : (
           <>
             <Tabs value={activeTab} onChange={(value) => setActiveTab(value || "general")}>

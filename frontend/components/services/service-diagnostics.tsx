@@ -54,8 +54,8 @@ interface ExplainResponse {
 }
 
 function statusColor(status: string): string {
-  if (status === "ok") return "teal";
-  if (status === "fail") return "red";
+  if (status === "ok") return "success";
+  if (status === "fail") return "danger";
   return "gray";
 }
 
@@ -142,14 +142,14 @@ export function ServiceDiagnostics({ serviceId }: { serviceId: number | string }
           </Group>
 
           {explainError ? (
-            <Alert color="red" variant="light">{explainError}</Alert>
+            <Alert color="danger" variant="light">{explainError}</Alert>
           ) : null}
 
           {explainResult ? (
             <Card withBorder padding="md" radius="md">
               <Group justify="space-between" mb="sm">
                 <Text fw={600}>{explainResult.allowed ? "Request would be allowed" : "Request would be denied"}</Text>
-                <Badge color={explainResult.allowed ? "teal" : "red"} variant="filled">
+                <Badge color={explainResult.allowed ? "success" : "danger"} variant="filled">
                   {explainResult.decision}
                 </Badge>
               </Group>
@@ -179,7 +179,7 @@ export function ServiceDiagnostics({ serviceId }: { serviceId: number | string }
             <Button variant="subtle" onClick={() => void loadDenials()}>Refresh</Button>
           </Group>
 
-          {denialsError ? <Alert color="red" variant="light">{denialsError}</Alert> : null}
+          {denialsError ? <Alert color="danger" variant="light">{denialsError}</Alert> : null}
 
           {loadingDenials ? (
             <Stack align="center" py="md"><Loader size="sm" color="brand" /></Stack>
@@ -206,7 +206,7 @@ export function ServiceDiagnostics({ serviceId }: { serviceId: number | string }
                       <Table.Td>{event.method || "-"}</Table.Td>
                       <Table.Td><Text size="xs" lineClamp={1}>{event.path || "-"}</Text></Table.Td>
                       <Table.Td><Text size="xs">{event.remote_addr || "-"}</Text></Table.Td>
-                      <Table.Td><Badge color="red" variant="light">{event.status_code}</Badge></Table.Td>
+                      <Table.Td><Badge color="danger" variant="light">{event.status_code}</Badge></Table.Td>
                     </Table.Tr>
                   ))}
                 </Table.Tbody>

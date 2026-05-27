@@ -10,10 +10,10 @@ import { formatDateTime } from "@/lib/format";
 import type { ExposureReport } from "@/lib/types";
 
 function scoreColor(score: number): string {
-  if (score >= 80) return "teal";
-  if (score >= 60) return "yellow";
-  if (score >= 30) return "orange";
-  return "red";
+  if (score >= 80) return "success";
+  if (score >= 60) return "warning";
+  if (score >= 30) return "warning";
+  return "danger";
 }
 
 function findingLabel(key: string): string {
@@ -34,7 +34,7 @@ export function ServiceExposurePanel({ serviceId }: { serviceId: number }) {
       if (err instanceof ApiError && err.status === 404) {
         setReport(null);
       } else {
-        notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Failed to load report." });
+        notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Failed to load report." });
       }
     } finally {
       setLoading(false);
@@ -46,9 +46,9 @@ export function ServiceExposurePanel({ serviceId }: { serviceId: number }) {
     try {
       const response = await apiFetch<ExposureReport>(`/api/v1/services/${serviceId}/exposure-scan`, { method: "POST" });
       setReport(response);
-      notifications.show({ color: "green", message: "Scan complete." });
+      notifications.show({ color: "success", message: "Scan complete." });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Scan failed." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Scan failed." });
     } finally {
       setScanning(false);
     }
@@ -82,7 +82,7 @@ export function ServiceExposurePanel({ serviceId }: { serviceId: number }) {
                 <Text size="sm" c="dimmed">Checked {formatDateTime(report.checked_at)}</Text>
               </Group>
               <Progress value={report.score} color={scoreColor(report.score)} size="lg" />
-              {report.last_error ? <Alert color="red" variant="light">{report.last_error}</Alert> : null}
+              {report.last_error ? <Alert color="danger" variant="light">{report.last_error}</Alert> : null}
             </>
           ) : (
             <Alert color="brand" variant="light">No exposure report yet. Run the first scan to get a score.</Alert>
@@ -128,7 +128,7 @@ function CheckRow({ label, pass, extra }: { label: string; pass: boolean; extra?
       <Text size="sm">{label}</Text>
       <Group gap="xs">
         {extra ? <Text size="xs" c="dimmed">{extra}</Text> : null}
-        <Badge color={pass ? "teal" : "red"} variant="light">{pass ? "OK" : "Missing"}</Badge>
+        <Badge color={pass ? "success" : "danger"} variant="light">{pass ? "OK" : "Missing"}</Badge>
       </Group>
     </Group>
   );

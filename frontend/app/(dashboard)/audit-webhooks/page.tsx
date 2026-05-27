@@ -70,7 +70,7 @@ export default function AuditWebhooksPage() {
       const response = await apiFetch<AuditWebhook[]>("/api/v1/audit-webhooks");
       setItems(response);
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Failed to load." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Failed to load." });
     } finally {
       setLoading(false);
     }
@@ -111,7 +111,7 @@ export default function AuditWebhooksPage() {
           body: JSON.stringify({ name, url, format, event_types: eventTypes, active }),
         });
         setItems((current) => current.map((c) => (c.id === updated.id ? updated : c)));
-        notifications.show({ color: "green", message: "Webhook updated." });
+        notifications.show({ color: "success", message: "Webhook updated." });
         setDrawerOpen(false);
       } else {
         const response = await apiFetch<{ webhook: AuditWebhook; secret: string }>("/api/v1/audit-webhooks", {
@@ -120,10 +120,10 @@ export default function AuditWebhooksPage() {
         });
         setItems((current) => [...current, response.webhook]);
         setCreatedSecret(response.secret);
-        notifications.show({ color: "green", message: "Webhook created." });
+        notifications.show({ color: "success", message: "Webhook created." });
       }
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Save failed." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Save failed." });
     } finally {
       setSaving(false);
     }
@@ -133,9 +133,9 @@ export default function AuditWebhooksPage() {
     try {
       await apiFetch(`/api/v1/audit-webhooks/${id}`, { method: "DELETE" });
       setItems((current) => current.filter((c) => c.id !== id));
-      notifications.show({ color: "green", message: "Webhook removed." });
+      notifications.show({ color: "success", message: "Webhook removed." });
     } catch (err) {
-      notifications.show({ color: "red", message: err instanceof ApiError ? err.message : "Delete failed." });
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Delete failed." });
     }
   };
 
@@ -181,11 +181,11 @@ export default function AuditWebhooksPage() {
                     <Table.Td>{hook.event_types.length > 0 ? hook.event_types.join(", ") : "all"}</Table.Td>
                     <Table.Td>{formatDateTime(hook.last_fired_at)}</Table.Td>
                     <Table.Td>
-                      <Badge color={hook.active ? "teal" : "gray"} variant="light">{hook.active ? "active" : "paused"}</Badge>
+                      <Badge color={hook.active ? "success" : "gray"} variant="light">{hook.active ? "active" : "paused"}</Badge>
                       {hook.last_status > 0 ? <Text size="xs" c="dimmed">{hook.last_status} {hook.last_error}</Text> : null}
                     </Table.Td>
                     <Table.Td>
-                      <ActionIcon variant="subtle" color="red" onClick={(event) => { event.stopPropagation(); void remove(hook.id); }}>
+                      <ActionIcon variant="subtle" color="danger" onClick={(event) => { event.stopPropagation(); void remove(hook.id); }}>
                         <IconTrash size={16} />
                       </ActionIcon>
                     </Table.Td>
@@ -199,7 +199,7 @@ export default function AuditWebhooksPage() {
         <Drawer opened={drawerOpen} onClose={() => setDrawerOpen(false)} title={editing ? `Edit webhook — ${editing.name}` : "New webhook"} size="lg" position="right">
           <Stack gap="md">
             {createdSecret ? (
-              <Alert color="yellow" variant="light">
+              <Alert color="warning" variant="light">
                 Save this secret now. It is shown only once.
                 <Code block>{createdSecret}</Code>
               </Alert>
