@@ -6,7 +6,6 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/providers";
-import { AccessMethodBadge } from "@/components/status-badge";
 import { ApiError } from "@/lib/api";
 import { authCardStyle, authInfoAlertStyle, authShellStyle, buttonStyle, inputStyles, mergeAuthUI } from "@/lib/auth-ui";
 import {
@@ -170,7 +169,7 @@ function RouteLoginContent() {
 
   return (
     <Center mih="100vh" p="md" style={authShellStyle(ui)}>
-      <Paper withBorder radius="md" p="xl" maw={460} w="100%" style={authCardStyle(ui)}>
+      <Paper withBorder radius="md" p="xl" maw={580} w="100%" style={authCardStyle(ui)}>
         <Stack gap="lg">
           <div>
             {ui.logo_url ? <img src={ui.logo_url} alt={ui.brand_name} style={{ maxHeight: 36, maxWidth: 180, objectFit: "contain", marginBottom: 12, borderRadius: 12 }} /> : null}
@@ -184,7 +183,6 @@ function RouteLoginContent() {
             <Stack gap="xs">
               <Text fw={600} c={ui.text_color}>{service.name}</Text>
               <Text size="sm" c={ui.muted_text_color}>{service.domain_name}{service.path}</Text>
-              {service.access_method !== "session" ? <AccessMethodBadge value={service.access_method} /> : null}
               {service.access_message ? <Alert color="gray" variant="light" styles={authInfoAlertStyle(ui)}>{service.access_message}</Alert> : null}
             </Stack>
           ) : null}

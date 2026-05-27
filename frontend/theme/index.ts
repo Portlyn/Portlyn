@@ -15,8 +15,30 @@ const theme = createTheme({
     }
   },
   colors: {
-    brand: ["#f1ecf8", "#e1d5f0", "#d0bee9", "#bfa7e1", "#ae90da", "#9d79d2", "#8760bb", "#6d4c96", "#553b74", "#3c2952"],
-    dark: ["#d5d9e2", "#b6bdcc", "#8d96a8", "#6a7282", "#4d5463", "#292c33", "#1f1f23", "#1a1b1e", "#121316", "#0d0e11"]
+    brand: [
+      "#f1edf7",
+      "#e0d5ef",
+      "#c8b6e0",
+      "#ad96cf",
+      "#8e72b8",
+      "#6a4a99",
+      "#573a82",
+      "#442e68",
+      "#33234e",
+      "#241836"
+    ],
+    dark: [
+      "#d5d9e2",
+      "#b6bdcc",
+      "#8d96a8",
+      "#6a7282",
+      "#4d5463",
+      "#292c33",
+      "#1f1f23",
+      "#1a1b1e",
+      "#121316",
+      "#0d0e11"
+    ]
   },
   black: "#0d0e11",
   white: "#f4f7fb",
@@ -64,7 +86,7 @@ const theme = createTheme({
       styles: {
         root: {
           fontWeight: 600,
-          letterSpacing: "-0.01em"
+          letterSpacing: "-0.005em"
         }
       }
     },
@@ -91,7 +113,17 @@ const theme = createTheme({
         size: "md"
       }
     },
+    PasswordInput: {
+      defaultProps: {
+        size: "md"
+      }
+    },
     Select: {
+      defaultProps: {
+        size: "md"
+      }
+    },
+    NumberInput: {
       defaultProps: {
         size: "md"
       }
@@ -119,12 +151,14 @@ const theme = createTheme({
     },
     Badge: {
       defaultProps: {
-        radius: "xl"
+        radius: "sm",
+        variant: "light"
       },
       styles: {
         root: {
           fontWeight: 600,
-          letterSpacing: "0.01em"
+          letterSpacing: "0.02em",
+          textTransform: "none"
         }
       }
     },

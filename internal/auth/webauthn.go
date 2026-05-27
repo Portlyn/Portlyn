@@ -329,7 +329,6 @@ func firstNonEmptyAuth(values ...string) string {
 	return ""
 }
 
-// ParseClientResponseRequest is a helper for tests that synthesize JSON bodies.
 func ParseClientResponseRequest(body string) (*http.Request, error) {
 	if !json.Valid([]byte(body)) {
 		return nil, errors.New("invalid json")

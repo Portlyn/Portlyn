@@ -59,6 +59,7 @@ type Config struct {
 	NodeRequireHTTPS                bool
 	NodeTrustForwardedProto         bool
 	NodeAllowMTLSHeaderFallback     bool
+	RequestClientCert               bool
 	NodeEnrollRateLimit             int
 	NodeEnrollRateWindow            time.Duration
 	NodeHeartbeatAuthFailRateLimit  int
@@ -173,6 +174,7 @@ func Load() (Config, error) {
 		NodeRequireHTTPS:                getEnvBool("NODE_REQUIRE_HTTPS", true),
 		NodeTrustForwardedProto:         getEnvBool("NODE_TRUST_FORWARDED_PROTO", false),
 		NodeAllowMTLSHeaderFallback:     getEnvBool("NODE_ALLOW_MTLS_HEADER_FALLBACK", false),
+		RequestClientCert:               getEnvBool("REQUEST_CLIENT_CERT", false),
 		NodeEnrollRateLimit:             getEnvInt("NODE_ENROLL_RATE_LIMIT", 20),
 		NodeEnrollRateWindow:            getEnvDuration("NODE_ENROLL_RATE_WINDOW", 10*time.Minute),
 		NodeHeartbeatAuthFailRateLimit:  getEnvInt("NODE_HEARTBEAT_AUTH_FAIL_RATE_LIMIT", 20),

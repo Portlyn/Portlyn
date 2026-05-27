@@ -260,9 +260,13 @@ func (m *Manager) ImportPEMCertificate(ctx context.Context, item *domain.Certifi
 }
 
 func (m *Manager) TLSConfig() *tls.Config {
+	clientAuth := tls.NoClientCert
+	if m.cfg.RequestClientCert {
+		clientAuth = tls.RequestClientCert
+	}
 	return &tls.Config{
 		MinVersion:     tls.VersionTLS12,
-		ClientAuth:     tls.RequestClientCert,
+		ClientAuth:     clientAuth,
 		GetCertificate: m.GetCertificate,
 		NextProtos:     []string{"h2", "http/1.1"},
 	}

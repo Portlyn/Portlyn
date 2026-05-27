@@ -53,7 +53,6 @@ func otpEmailHTML(title, intro, code string, expiresAt time.Time, outro string) 
   <body style="margin:0;padding:0;background:#0b1220;color:#e5e7eb;font-family:Arial,sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
       <div style="background:linear-gradient(180deg,#111827 0%%,#0f172a 100%%);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:32px;">
-        <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#60a5fa;margin-bottom:18px;">Portlyn</div>
         <h1 style="margin:0 0 12px 0;font-size:26px;line-height:1.2;color:#f8fafc;">%s</h1>
         <p style="margin:0 0 24px 0;font-size:15px;line-height:1.6;color:#cbd5e1;">%s</p>
         <div style="margin:0 0 24px 0;padding:18px 20px;border-radius:14px;background:#020617;border:1px solid rgba(96,165,250,0.25);text-align:center;">
@@ -74,7 +73,6 @@ func testEmailHTML() string {
   <body style="margin:0;padding:0;background:#0b1220;color:#e5e7eb;font-family:Arial,sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
       <div style="background:linear-gradient(180deg,#111827 0%,#0f172a 100%);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:32px;">
-        <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#60a5fa;margin-bottom:18px;">Portlyn</div>
         <h1 style="margin:0 0 12px 0;font-size:26px;line-height:1.2;color:#f8fafc;">SMTP test</h1>
         <p style="margin:0;font-size:15px;line-height:1.6;color:#cbd5e1;">This is a test email sent from Portlyn. SMTP delivery is working.</p>
       </div>

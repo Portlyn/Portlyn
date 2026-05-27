@@ -96,7 +96,6 @@ func (s *Server) handleRoutePIN(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		s.internalError(w, err)
 		return
 	}
-	// keep a route cookie on the API host as a fallback for same-host deployments
 	_ = s.auth.SetRouteAccessCookie(w, service.ID, domain.AccessMethodPIN, "")
 	_ = s.audit.LogRequest(r.Context(), r, nil, "route_pin_succeeded", "service", &service.ID, map[string]any{"service_id": service.ID})
 	writeJSON(w, stdhttp.StatusOK, map[string]any{"ok": true, "bridge_url": bridgeURL})
@@ -146,7 +145,6 @@ func (s *Server) handleRouteRequestEmailCode(w stdhttp.ResponseWriter, r *stdhtt
 		return
 	}
 
-	// TODO: Replace response-included code with actual email delivery when mail infrastructure is available.
 	_ = s.audit.LogRequest(r.Context(), r, nil, "route_email_code_requested", "service", &service.ID, map[string]any{"service_id": service.ID, "email": req.Email, "expires_at": result.ExpiresAt})
 	writeJSON(w, stdhttp.StatusOK, result)
 }

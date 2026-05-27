@@ -107,7 +107,6 @@ func IsEncryptedValue(value string) bool {
 	return IsEncryptedValueV1(value) || IsEncryptedValueV2(value)
 }
 
-// EncryptStringLatest produces the strongest current format (v2).
 func EncryptStringLatest(secret []byte, value string) (string, error) {
 	return EncryptStringV2(secret, value)
 }
@@ -131,8 +130,6 @@ func DecryptBytesAuto(secrets [][]byte, value []byte) ([]byte, error) {
 	return []byte(plaintext), nil
 }
 
-// DecryptStringAuto handles both v1 (sha256-derived) and v2 (argon2id-derived) formats,
-// trying each provided secret. Use this for migration paths.
 func DecryptStringAuto(secrets [][]byte, value string) (string, error) {
 	trimmed := strings.TrimSpace(value)
 	if IsEncryptedValueV2(trimmed) {

@@ -105,7 +105,6 @@ func (s *Service) SetRefreshCookie(w http.ResponseWriter, token string, secure b
 func (s *Service) SetSessionCookieForHost(w http.ResponseWriter, token, host string, secure bool) {
 	host = strings.TrimSpace(host)
 	if host != "" {
-		// Remove legacy domain-scoped cookies so host-only bridge cookies are unambiguous.
 		http.SetCookie(w, &http.Cookie{
 			Name:     SessionCookieName,
 			Value:    "",

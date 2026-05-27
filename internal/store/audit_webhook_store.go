@@ -23,6 +23,27 @@ func (s *AuditWebhookStore) List(ctx context.Context) ([]domain.AuditWebhook, er
 	return items, err
 }
 
+var DefaultWebhookEvents = map[string]struct{}{
+	"login_succeeded":            {},
+	"login_failed":               {},
+	"mfa_verify_succeeded":       {},
+	"mfa_verify_failed":          {},
+	"create":                     {},
+	"update":                     {},
+	"delete":                     {},
+	"enroll":                     {},
+	"magic_link_issued":          {},
+	"tunnel_bootstrap":           {},
+	"tunnel_revoke":              {},
+	"passkey_registered":         {},
+	"passkey_deleted":            {},
+	"node_heartbeat_rejected":    {},
+	"route_pin_failed":           {},
+	"route_email_code_verify_failed": {},
+	"security_alert":             {},
+	"break_glass_login":          {},
+}
+
 func (s *AuditWebhookStore) ActiveByEvent(ctx context.Context, action string) ([]domain.AuditWebhook, error) {
 	var items []domain.AuditWebhook
 	err := s.db.WithContext(ctx).Where("active = ?", true).Find(&items).Error
@@ -32,7 +53,9 @@ func (s *AuditWebhookStore) ActiveByEvent(ctx context.Context, action string) ([
 	out := items[:0]
 	for _, item := range items {
 		if len(item.EventTypes) == 0 {
-			out = append(out, item)
+			if _, ok := DefaultWebhookEvents[action]; ok {
+				out = append(out, item)
+			}
 			continue
 		}
 		for _, allowed := range item.EventTypes {

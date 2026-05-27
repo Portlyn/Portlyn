@@ -30,7 +30,6 @@ function parseDetails(value: string | null | undefined): ParsedDetails {
       };
     }
   } catch {
-    // not JSON — keep raw as the string
   }
   return { raw: value };
 }

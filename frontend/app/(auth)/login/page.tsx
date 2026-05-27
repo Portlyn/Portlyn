@@ -139,7 +139,7 @@ function LoginContent() {
 
   return (
     <div style={authShellStyle(ui)}>
-      <Paper withBorder radius="md" p="xl" w="100%" maw={420} style={authCardStyle(ui)}>
+      <Paper withBorder radius="md" p="xl" w="100%" maw={520} style={authCardStyle(ui)}>
         <Stack gap="lg">
           <div>
             {ui.logo_url ? <img src={ui.logo_url} alt={ui.brand_name} style={{ maxHeight: 36, maxWidth: 180, objectFit: "contain", marginBottom: 12, borderRadius: 12 }} /> : null}
