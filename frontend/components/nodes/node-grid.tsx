@@ -1,8 +1,9 @@
 "use client";
 
-import { ActionIcon, Card, Grid, Group, SimpleGrid, Stack, Text } from "@mantine/core";
+import { ActionIcon, Card, Divider, Grid, Group, SimpleGrid, Stack, Text } from "@mantine/core";
 import { IconEdit, IconTrash } from "@tabler/icons-react";
 
+import { NodeTunnelPanel } from "@/components/nodes/node-tunnel-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import type { Node } from "@/lib/types";
@@ -11,12 +12,14 @@ export function NodeGrid({
   nodes,
   canManage,
   onEdit,
-  onDelete
+  onDelete,
+  onNodeUpdated,
 }: {
   nodes: Node[];
   canManage?: boolean;
   onEdit?: (node: Node) => void;
   onDelete?: (node: Node) => void;
+  onNodeUpdated?: (node: Node) => void;
 }) {
   return (
     <Grid>
@@ -87,6 +90,13 @@ export function NodeGrid({
                   <Text size="sm">{node.last_heartbeat_code || 0} {node.last_heartbeat_error || ""}</Text>
                 </div>
               </SimpleGrid>
+
+              {canManage ? (
+                <>
+                  <Divider />
+                  <NodeTunnelPanel node={node} onChange={(updated) => onNodeUpdated?.(updated)} />
+                </>
+              ) : null}
             </Stack>
           </Card>
         </Grid.Col>

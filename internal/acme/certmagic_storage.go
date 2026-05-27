@@ -54,8 +54,8 @@ func NewCertMagicStorage(db *gorm.DB, lockTTL time.Duration, dataSecrets []strin
 func (s *CertMagicStorage) Store(ctx context.Context, key string, value []byte) error {
 	key = cleanKey(key)
 	storedValue := append([]byte(nil), value...)
-	if isCertMagicPrivateKeyPath(key) && len(s.dataSecrets) > 0 && !secureconfig.IsEncryptedBytesV1(storedValue) {
-		encrypted, err := secureconfig.EncryptBytesV1(s.dataSecrets[0], storedValue)
+	if isCertMagicPrivateKeyPath(key) && len(s.dataSecrets) > 0 && !secureconfig.IsEncryptedBytes(storedValue) {
+		encrypted, err := secureconfig.EncryptBytesV2(s.dataSecrets[0], storedValue)
 		if err != nil {
 			return err
 		}
@@ -85,8 +85,8 @@ func (s *CertMagicStorage) Load(ctx context.Context, key string) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	if isCertMagicPrivateKeyPath(key) && secureconfig.IsEncryptedBytesV1(item.Value) {
-		plaintext, decryptErr := secureconfig.DecryptBytesV1WithSecrets(s.dataSecrets, item.Value)
+	if isCertMagicPrivateKeyPath(key) && secureconfig.IsEncryptedBytes(item.Value) {
+		plaintext, decryptErr := secureconfig.DecryptBytesAuto(s.dataSecrets, item.Value)
 		if decryptErr != nil {
 			return nil, decryptErr
 		}
@@ -299,10 +299,10 @@ func (s *CertMagicStorage) MigrateSensitiveValues(ctx context.Context) (int, err
 	}
 	updated := 0
 	for _, row := range rows {
-		if !isCertMagicPrivateKeyPath(row.Key) || secureconfig.IsEncryptedBytesV1(row.Value) {
+		if !isCertMagicPrivateKeyPath(row.Key) || secureconfig.IsEncryptedBytes(row.Value) {
 			continue
 		}
-		encrypted, err := secureconfig.EncryptBytesV1(s.dataSecrets[0], row.Value)
+		encrypted, err := secureconfig.EncryptBytesV2(s.dataSecrets[0], row.Value)
 		if err != nil {
 			return updated, err
 		}

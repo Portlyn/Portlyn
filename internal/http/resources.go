@@ -17,6 +17,7 @@ import (
 
 	"portlyn/internal/auth"
 	"portlyn/internal/domain"
+	"portlyn/internal/geoip"
 	"portlyn/internal/proxy"
 	"portlyn/internal/store"
 )
@@ -198,6 +199,23 @@ func (s *Server) handleHeartbeatNode(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	}
 	if req.BandwidthOutKbps != nil {
 		node.BandwidthOutKbps = *req.BandwidthOutKbps
+	}
+	if req.WGLastHandshake != nil {
+		t := req.WGLastHandshake.UTC()
+		node.WGLastHandshake = &t
+	}
+	if req.WGRxBytes != nil {
+		node.WGRxBytes = *req.WGRxBytes
+	}
+	if req.WGTxBytes != nil {
+		node.WGTxBytes = *req.WGTxBytes
+	}
+	if req.TunnelStatus != nil {
+		node.TunnelStatus = *req.TunnelStatus
+	} else if node.WGLastHandshake != nil && time.Since(*node.WGLastHandshake) < 3*time.Minute {
+		node.TunnelStatus = domain.TunnelStatusConnected
+	} else if node.WGPublicKey != "" && node.TunnelStatus != domain.TunnelStatusProvisioned {
+		node.TunnelStatus = domain.TunnelStatusStale
 	}
 
 	if err := s.nodes.UpdateHeartbeat(r.Context(), node); err != nil {
@@ -728,7 +746,10 @@ func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		AccessMessage:        strings.TrimSpace(req.AccessMessage),
 		IPAllowlist:          normalizeStringList(req.IPAllowlist),
 		IPBlocklist:          normalizeStringList(req.IPBlocklist),
+		AllowedCountries:     normalizeCountryList(req.AllowedCountries),
+		BlockedCountries:     normalizeCountryList(req.BlockedCountries),
 		AccessWindows:        toAccessWindows(req.AccessWindows),
+		NodeID:               req.NodeID,
 	}
 	if err := validateServiceTargetURL(item.TargetURL); err != nil {
 		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
@@ -834,8 +855,20 @@ func (s *Server) handleUpdateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	if req.IPBlocklist != nil {
 		item.IPBlocklist = normalizeStringList(*req.IPBlocklist)
 	}
+	if req.AllowedCountries != nil {
+		item.AllowedCountries = normalizeCountryList(*req.AllowedCountries)
+	}
+	if req.BlockedCountries != nil {
+		item.BlockedCountries = normalizeCountryList(*req.BlockedCountries)
+	}
 	if req.AccessWindows != nil {
 		item.AccessWindows = toAccessWindows(*req.AccessWindows)
+	}
+	if req.ClearNodeID != nil && *req.ClearNodeID {
+		item.NodeID = nil
+	} else if req.NodeID != nil {
+		nodeIDCopy := *req.NodeID
+		item.NodeID = &nodeIDCopy
 	}
 
 	if err := s.services.Update(r.Context(), item); err != nil {
@@ -1075,6 +1108,10 @@ func normalizeStringList(values []string) domain.JSONStringSlice {
 		}
 	}
 	return out
+}
+
+func normalizeCountryList(values []string) domain.JSONStringSlice {
+	return domain.JSONStringSlice(geoip.NormalizeCountryList(values))
 }
 
 func toAccessWindows(values []accessWindowRequest) domain.AccessWindowList {

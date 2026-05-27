@@ -32,6 +32,8 @@ type RouteConfig struct {
 	InheritedFromGroup    *domain.ServiceGroup  `json:"inherited_from_group,omitempty"`
 	AllowCIDRs            []string              `json:"allow_cidrs"`
 	BlockCIDRs            []string              `json:"block_cidrs"`
+	AllowedCountries      []string              `json:"allowed_countries"`
+	BlockedCountries      []string              `json:"blocked_countries"`
 	AccessWindows         []domain.AccessWindow `json:"access_windows"`
 	DeploymentRevision    uint64                `json:"deployment_revision"`
 	LastDeployedAt        *time.Time            `json:"last_deployed_at,omitempty"`

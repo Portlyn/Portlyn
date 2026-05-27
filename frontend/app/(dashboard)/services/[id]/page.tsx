@@ -8,7 +8,10 @@ import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorState } from "@/components/error-state";
 import { useAuth } from "@/components/providers";
+import { MagicLinkButton } from "@/components/services/magic-link-button";
 import { ServiceForm } from "@/components/services/service-form";
+import { ServiceDiagnostics } from "@/components/services/service-diagnostics";
+import { ServiceExposurePanel } from "@/components/services/service-exposure-panel";
 import { AccessMethodBadge, AccessModeBadge, AuthPolicyBadge, StatusBadge } from "@/components/status-badge";
 import { buildServiceRequestPayload, legacyAuthPolicyFromAccessMode } from "@/lib/access-control";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -150,9 +153,12 @@ export default function ServiceDetailPage() {
                 <StatusBadge status={service.service_status || (service.last_deployed_at ? "healthy" : "pending")} />
                 {service.service_status_error ? <Text c="red" size="xs">{service.service_status_error}</Text> : null}
                 {canManage ? (
-                  <Button variant="subtle" color="red" onClick={() => setConfirmDelete(true)}>
-                    Delete Service
-                  </Button>
+                  <Group gap="xs">
+                    <MagicLinkButton serviceId={service.id} serviceName={service.name} />
+                    <Button variant="subtle" color="red" onClick={() => setConfirmDelete(true)}>
+                      Delete Service
+                    </Button>
+                  </Group>
                 ) : null}
               </Stack>
             </Group>
@@ -190,6 +196,8 @@ export default function ServiceDetailPage() {
         <Tabs.List>
           <Tabs.Tab value="general">General</Tabs.Tab>
           <Tabs.Tab value="security">Access Control</Tabs.Tab>
+          <Tabs.Tab value="diagnostics">Diagnostics</Tabs.Tab>
+          <Tabs.Tab value="exposure">Exposure</Tabs.Tab>
           <Tabs.Tab value="deployment">Deployment</Tabs.Tab>
         </Tabs.List>
 
@@ -205,6 +213,7 @@ export default function ServiceDetailPage() {
                 onSubmit={handleSave}
                 submitLabel="Save Changes"
                 isLoading={isSaving}
+                confirmRiskyChanges
               />
             ) : (
               <Stack gap="md">
@@ -273,6 +282,14 @@ export default function ServiceDetailPage() {
               ) : null}
             </Stack>
           </Paper>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="diagnostics" pt="md">
+          <ServiceDiagnostics serviceId={service.id} />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="exposure" pt="md">
+          <ServiceExposurePanel serviceId={service.id} />
         </Tabs.Panel>
 
         <Tabs.Panel value="deployment" pt="md">

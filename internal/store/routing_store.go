@@ -137,6 +137,7 @@ func (s *SQLRoutingStore) baseQuery(ctx context.Context) *gorm.DB {
 		Model(&domain.Service{}).
 		Joins("Domain").
 		Preload("Domain").
+		Preload("Node").
 		Preload("ServiceGroups")
 }
 
@@ -164,6 +165,8 @@ func (s *SQLRoutingStore) toRouteConfigs(services []domain.Service) []routing.Ro
 			InheritedFromGroup:    inherited,
 			AllowCIDRs:            append([]string{}, append(append([]string{}, service.Domain.IPAllowlist...), service.IPAllowlist...)...),
 			BlockCIDRs:            append([]string{}, append(append([]string{}, service.Domain.IPBlocklist...), service.IPBlocklist...)...),
+			AllowedCountries:      append([]string{}, service.AllowedCountries...),
+			BlockedCountries:      append([]string{}, service.BlockedCountries...),
 			AccessWindows:         append([]domain.AccessWindow{}, service.AccessWindows...),
 			DeploymentRevision:    service.DeploymentRevision,
 			LastDeployedAt:        service.LastDeployedAt,

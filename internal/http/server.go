@@ -23,7 +23,9 @@ import (
 	"portlyn/internal/observability"
 	"portlyn/internal/proxy"
 	"portlyn/internal/rate"
+	"portlyn/internal/scanner"
 	"portlyn/internal/store"
+	"portlyn/internal/tunnel"
 )
 
 type Server struct {
@@ -50,6 +52,11 @@ type Server struct {
 	auditStore       *store.AuditStore
 	sessions         *store.SessionStore
 	enrollmentTokens *store.NodeEnrollmentTokenStore
+	auditWebhooks    *store.AuditWebhookStore
+	exposureReports  *store.ExposureReportStore
+	exposureScanner  *scanner.Scanner
+	tunnel           *tunnel.Manager
+	webauthn         *auth.WebAuthnService
 	nodeRateLimiter  rate.RateLimiter
 	bootWarnings     []StatusCondition
 	breakGlass       breakGlassState
@@ -76,6 +83,11 @@ func NewServer(
 	auditStore *store.AuditStore,
 	sessionStore *store.SessionStore,
 	enrollmentTokenStore *store.NodeEnrollmentTokenStore,
+	auditWebhookStore *store.AuditWebhookStore,
+	exposureReportStore *store.ExposureReportStore,
+	exposureScanner *scanner.Scanner,
+	tunnelManager *tunnel.Manager,
+	webAuthnService *auth.WebAuthnService,
 	metrics *observability.Metrics,
 	bootWarnings []StatusCondition,
 	healthChecks ...HealthCheck,
@@ -113,6 +125,11 @@ func NewServer(
 		auditStore:       auditStore,
 		sessions:         sessionStore,
 		enrollmentTokens: enrollmentTokenStore,
+		auditWebhooks:    auditWebhookStore,
+		exposureReports:  exposureReportStore,
+		exposureScanner:  exposureScanner,
+		tunnel:           tunnelManager,
+		webauthn:         webAuthnService,
 		nodeRateLimiter:  rate.NewLocalLimiter(),
 		bootWarnings:     append([]StatusCondition(nil), bootWarnings...),
 		breakGlass: breakGlassState{
@@ -203,6 +220,11 @@ func (s *Server) Router() stdhttp.Handler {
 			r.Post("/sessions/revoke-all", s.handleRevokeAllMySessions)
 			r.Post("/route-auth/session-bridge-token", s.handleCreateSessionBridgeToken)
 
+			r.Get("/me/passkeys", s.handleListPasskeys)
+			r.Post("/me/passkeys/begin-registration", s.handleBeginPasskeyRegistration)
+			r.Post("/me/passkeys/finish-registration", s.handleFinishPasskeyRegistration)
+			r.Delete("/me/passkeys/{id}", s.handleDeletePasskey)
+
 			r.Get("/services", s.handleListServices)
 
 			r.Group(func(r chi.Router) {
@@ -216,6 +238,8 @@ func (s *Server) Router() stdhttp.Handler {
 				r.Get("/dns-providers", s.handleListDNSProviders)
 				r.Get("/dns-providers/{id}", s.handleGetDNSProvider)
 				r.Get("/services/{id}", s.handleGetService)
+				r.Get("/services/{id}/last-denials", s.handleListServiceDenials)
+				r.Post("/services/{id}/explain", s.handleExplainServiceAccess)
 				r.Get("/audit-logs", s.handleListAuditLogs)
 				r.Get("/settings/auth", s.handleGetAuthSettings)
 				r.Patch("/settings/auth", s.handleUpdateAuthSettings)
@@ -273,6 +297,22 @@ func (s *Server) Router() stdhttp.Handler {
 				r.Get("/node-enrollment-tokens", s.handleListNodeEnrollmentTokens)
 				r.Post("/node-enrollment-tokens", s.handleCreateNodeEnrollmentToken)
 				r.Delete("/node-enrollment-tokens/{id}", s.handleDeleteNodeEnrollmentToken)
+
+				r.Get("/tunnel/settings", s.handleGetTunnelSettings)
+				r.Patch("/tunnel/settings", s.handleUpdateTunnelSettings)
+				r.Post("/nodes/{id}/wg-bootstrap", s.handleBootstrapNodeTunnel)
+				r.Delete("/nodes/{id}/wg-tunnel", s.handleRevokeNodeTunnel)
+
+				r.Post("/services/{id}/magic-link", s.handleIssueMagicLink)
+
+				r.Get("/audit-webhooks", s.handleListAuditWebhooks)
+				r.Post("/audit-webhooks", s.handleCreateAuditWebhook)
+				r.Patch("/audit-webhooks/{id}", s.handleUpdateAuditWebhook)
+				r.Delete("/audit-webhooks/{id}", s.handleDeleteAuditWebhook)
+
+				r.Get("/exposure-reports", s.handleListExposureReports)
+				r.Get("/exposure-reports/{id}", s.handleGetExposureReport)
+				r.Post("/services/{id}/exposure-scan", s.handleRunExposureScan)
 			})
 		})
 	})

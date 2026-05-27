@@ -204,6 +204,11 @@ func newIntegrationServer(t *testing.T, mutate ...func(*config.Config)) (*Server
 		auditStore,
 		sessionStore,
 		store.NewNodeEnrollmentTokenStore(db),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 		observability.NewMetrics(),
 		nil,
 		NewDBHealthCheck(func(ctx context.Context) error {

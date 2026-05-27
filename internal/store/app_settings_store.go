@@ -128,16 +128,16 @@ func (s *AppSettingsStore) MigrateStoredSecrets(ctx context.Context) (int, error
 	}
 
 	updated := 0
-	if strings.TrimSpace(item.OIDCClientSecret) != "" && !secureconfig.IsEncryptedValueV1(item.OIDCClientSecret) {
-		encrypted, encryptErr := secureconfig.EncryptStringV1(s.dataEncryptionBytes[0], item.OIDCClientSecret)
+	if strings.TrimSpace(item.OIDCClientSecret) != "" && !secureconfig.IsEncryptedValue(item.OIDCClientSecret) {
+		encrypted, encryptErr := secureconfig.EncryptStringV2(s.dataEncryptionBytes[0], item.OIDCClientSecret)
 		if encryptErr != nil {
 			return updated, encryptErr
 		}
 		item.OIDCClientSecret = encrypted
 		updated++
 	}
-	if strings.TrimSpace(item.SMTPPassword) != "" && !secureconfig.IsEncryptedValueV1(item.SMTPPassword) {
-		encrypted, encryptErr := secureconfig.EncryptStringV1(s.dataEncryptionBytes[0], item.SMTPPassword)
+	if strings.TrimSpace(item.SMTPPassword) != "" && !secureconfig.IsEncryptedValue(item.SMTPPassword) {
+		encrypted, encryptErr := secureconfig.EncryptStringV2(s.dataEncryptionBytes[0], item.SMTPPassword)
 		if encryptErr != nil {
 			return updated, encryptErr
 		}
@@ -157,19 +157,33 @@ func (s *AppSettingsStore) encryptSecretFields(item *domain.AppSettings) error {
 	if len(s.dataEncryptionBytes) == 0 {
 		return nil
 	}
-	if strings.TrimSpace(item.OIDCClientSecret) != "" && !secureconfig.IsEncryptedValueV1(item.OIDCClientSecret) {
-		encrypted, err := secureconfig.EncryptStringV1(s.dataEncryptionBytes[0], item.OIDCClientSecret)
+	if strings.TrimSpace(item.OIDCClientSecret) != "" && !secureconfig.IsEncryptedValue(item.OIDCClientSecret) {
+		encrypted, err := secureconfig.EncryptStringV2(s.dataEncryptionBytes[0], item.OIDCClientSecret)
 		if err != nil {
 			return err
 		}
 		item.OIDCClientSecret = encrypted
 	}
-	if strings.TrimSpace(item.SMTPPassword) != "" && !secureconfig.IsEncryptedValueV1(item.SMTPPassword) {
-		encrypted, err := secureconfig.EncryptStringV1(s.dataEncryptionBytes[0], item.SMTPPassword)
+	if strings.TrimSpace(item.SMTPPassword) != "" && !secureconfig.IsEncryptedValue(item.SMTPPassword) {
+		encrypted, err := secureconfig.EncryptStringV2(s.dataEncryptionBytes[0], item.SMTPPassword)
 		if err != nil {
 			return err
 		}
 		item.SMTPPassword = encrypted
+	}
+	if strings.TrimSpace(item.TunnelServerPrivateKey) != "" && !secureconfig.IsEncryptedValue(item.TunnelServerPrivateKey) {
+		encrypted, err := secureconfig.EncryptStringV2(s.dataEncryptionBytes[0], item.TunnelServerPrivateKey)
+		if err != nil {
+			return err
+		}
+		item.TunnelServerPrivateKey = encrypted
+	}
+	if strings.TrimSpace(item.CrowdSecAPIKeyEncrypted) != "" && !secureconfig.IsEncryptedValue(item.CrowdSecAPIKeyEncrypted) {
+		encrypted, err := secureconfig.EncryptStringV2(s.dataEncryptionBytes[0], item.CrowdSecAPIKeyEncrypted)
+		if err != nil {
+			return err
+		}
+		item.CrowdSecAPIKeyEncrypted = encrypted
 	}
 	return nil
 }
@@ -178,19 +192,33 @@ func (s *AppSettingsStore) decryptSecretFields(item *domain.AppSettings) error {
 	if item == nil {
 		return nil
 	}
-	if strings.TrimSpace(item.OIDCClientSecret) != "" && secureconfig.IsEncryptedValueV1(item.OIDCClientSecret) {
-		plaintext, err := secureconfig.DecryptStringV1WithSecrets(s.dataEncryptionBytes, item.OIDCClientSecret)
+	if strings.TrimSpace(item.OIDCClientSecret) != "" && secureconfig.IsEncryptedValue(item.OIDCClientSecret) {
+		plaintext, err := secureconfig.DecryptStringAuto(s.dataEncryptionBytes, item.OIDCClientSecret)
 		if err != nil {
 			return err
 		}
 		item.OIDCClientSecret = plaintext
 	}
-	if strings.TrimSpace(item.SMTPPassword) != "" && secureconfig.IsEncryptedValueV1(item.SMTPPassword) {
-		plaintext, err := secureconfig.DecryptStringV1WithSecrets(s.dataEncryptionBytes, item.SMTPPassword)
+	if strings.TrimSpace(item.SMTPPassword) != "" && secureconfig.IsEncryptedValue(item.SMTPPassword) {
+		plaintext, err := secureconfig.DecryptStringAuto(s.dataEncryptionBytes, item.SMTPPassword)
 		if err != nil {
 			return err
 		}
 		item.SMTPPassword = plaintext
+	}
+	if strings.TrimSpace(item.TunnelServerPrivateKey) != "" && secureconfig.IsEncryptedValue(item.TunnelServerPrivateKey) {
+		plaintext, err := secureconfig.DecryptStringAuto(s.dataEncryptionBytes, item.TunnelServerPrivateKey)
+		if err != nil {
+			return err
+		}
+		item.TunnelServerPrivateKey = plaintext
+	}
+	if strings.TrimSpace(item.CrowdSecAPIKeyEncrypted) != "" && secureconfig.IsEncryptedValue(item.CrowdSecAPIKeyEncrypted) {
+		plaintext, err := secureconfig.DecryptStringAuto(s.dataEncryptionBytes, item.CrowdSecAPIKeyEncrypted)
+		if err != nil {
+			return err
+		}
+		item.CrowdSecAPIKeyEncrypted = plaintext
 	}
 	return nil
 }

@@ -1,0 +1,448 @@
+openapi: 3.0.3
+info:
+  title: Portlyn Admin API
+  version: "1.0.0"
+  description: |
+    Administrative and operational API for Portlyn — a self-hosted reverse proxy
+    and zero-trust control plane. All endpoints under `/api/v1` require a valid
+    session cookie or `Authorization: Bearer <token>` header unless documented
+    as public.
+  license:
+    name: TBD
+servers:
+  - url: https://{host}/api/v1
+    variables:
+      host:
+        default: portlyn.example.com
+        description: Your Portlyn deployment host
+
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: portlyn_session
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            status: { type: integer }
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        email: { type: string, format: email }
+        role: { type: string, enum: [admin, viewer] }
+        active: { type: boolean }
+        mfa_enabled: { type: boolean }
+        auth_provider: { type: string, enum: [local, oidc] }
+        created_at: { type: string, format: date-time }
+    Service:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        domain_id: { type: integer }
+        subdomain: { type: string }
+        path: { type: string }
+        target_url: { type: string, format: uri }
+        tls_mode: { type: string, enum: [offload, passthrough, none] }
+        access_mode: { type: string, enum: [public, authenticated, restricted] }
+        access_method:
+          type: string
+          enum: ["", session, oidc_only, pin, email_code]
+        node_id:
+          type: integer
+          nullable: true
+          description: If set, traffic to this service is routed via the WireGuard tunnel to this node
+        allowed_countries:
+          type: array
+          items: { type: string, minLength: 2, maxLength: 2 }
+        blocked_countries:
+          type: array
+          items: { type: string, minLength: 2, maxLength: 2 }
+        ip_allowlist:
+          type: array
+          items: { type: string }
+        ip_blocklist:
+          type: array
+          items: { type: string }
+    Node:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        status: { type: string, enum: [unknown, online, offline] }
+        wg_public_key: { type: string }
+        wg_tunnel_ip: { type: string }
+        wg_endpoint: { type: string }
+        tunnel_status:
+          type: string
+          enum: [inactive, provisioned, connected, stale]
+    TunnelBootstrapResponse:
+      type: object
+      properties:
+        node_id: { type: integer }
+        public_key: { type: string }
+        private_key:
+          type: string
+          description: Shown only once. Store it on the agent side immediately.
+        address: { type: string }
+        server_public_key: { type: string }
+        server_endpoint: { type: string }
+        allowed_ips:
+          type: array
+          items: { type: string }
+        config_text:
+          type: string
+          description: A ready-to-paste wg-quick config
+    ExposureReport:
+      type: object
+      properties:
+        service_id: { type: integer }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        checked_at: { type: string, format: date-time }
+        dns_resolvable: { type: boolean }
+        https_valid: { type: boolean }
+        https_expires_in_days: { type: integer }
+        http_to_https_redirect: { type: boolean }
+        hsts_present: { type: boolean }
+        csp_present: { type: boolean }
+        x_frame_options: { type: boolean }
+        auth_enforced: { type: boolean }
+        findings:
+          type: array
+          items: { type: string }
+    AuditWebhook:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        url: { type: string, format: uri }
+        format: { type: string, enum: [generic, slack, discord, ntfy] }
+        event_types:
+          type: array
+          items: { type: string }
+        active: { type: boolean }
+        last_status: { type: integer }
+        last_fired_at: { type: string, format: date-time, nullable: true }
+    UserCredential:
+      type: object
+      properties:
+        id: { type: integer }
+        label: { type: string }
+        credential_id: { type: string }
+        sign_count: { type: integer }
+        user_verified: { type: boolean }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time, nullable: true }
+    MagicLinkResponse:
+      type: object
+      properties:
+        url: { type: string, format: uri }
+        token: { type: string }
+        expires_at: { type: string, format: date-time }
+
+paths:
+  /auth/login:
+    post:
+      summary: Email + password login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Session issued
+        "401": { description: Invalid credentials, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { description: Rate limited }
+
+  /auth/oidc/start:
+    get:
+      summary: Begin OIDC login redirect
+      security: []
+      responses:
+        "302": { description: Redirect to identity provider }
+
+  /me:
+    get:
+      summary: Current user profile
+      responses:
+        "200": { description: Profile, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+
+  /me/passkeys:
+    get:
+      summary: List registered passkeys for the current user
+      responses:
+        "200":
+          description: List
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/UserCredential" } } } }
+
+  /me/passkeys/begin-registration:
+    post:
+      summary: Begin WebAuthn credential registration
+      responses:
+        "200":
+          description: Challenge options
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id: { type: string }
+                  options: { type: object }
+                  expires_at: { type: string, format: date-time }
+
+  /me/passkeys/finish-registration:
+    post:
+      summary: Finalize WebAuthn registration
+      parameters:
+        - in: query
+          name: session_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: label
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Attestation response from navigator.credentials.create()
+      responses:
+        "201":
+          description: Credential stored
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserCredential" } } }
+
+  /services:
+    get:
+      summary: List services
+      responses:
+        "200":
+          description: List
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Service" } } } }
+    post:
+      summary: Create service (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Service" }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Service" } } }
+
+  /services/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get service
+      responses:
+        "200": { description: Service, content: { application/json: { schema: { $ref: "#/components/schemas/Service" } } } }
+    patch:
+      summary: Update service
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/Service" } } }
+      responses:
+        "200": { description: Updated }
+    delete:
+      summary: Delete service
+      responses:
+        "204": { description: Deleted }
+
+  /services/{id}/magic-link:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    post:
+      summary: Issue a single-use magic-link URL for temporary access
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ttl_seconds: { type: integer, minimum: 60, maximum: 2592000 }
+                label: { type: string }
+      responses:
+        "201":
+          description: Magic link
+          content: { application/json: { schema: { $ref: "#/components/schemas/MagicLinkResponse" } } }
+
+  /services/{id}/last-denials:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      summary: List the last N denial events for a service
+      responses:
+        "200": { description: List of denial events }
+
+  /services/{id}/explain:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    post:
+      summary: Simulate a request and explain each step
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_email: { type: string, format: email }
+                client_ip: { type: string }
+                time: { type: string, format: date-time }
+      responses:
+        "200": { description: Explanation }
+
+  /services/{id}/exposure-scan:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    post:
+      summary: Trigger an immediate exposure scan for a service
+      responses:
+        "200": { description: Report, content: { application/json: { schema: { $ref: "#/components/schemas/ExposureReport" } } } }
+
+  /exposure-reports:
+    get:
+      summary: List exposure reports across all services
+      responses:
+        "200": { description: List }
+
+  /exposure-reports/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get exposure report for a service
+      responses:
+        "200": { description: Report, content: { application/json: { schema: { $ref: "#/components/schemas/ExposureReport" } } } }
+
+  /tunnel/settings:
+    get:
+      summary: Read tunnel server settings
+      responses:
+        "200": { description: Settings }
+    patch:
+      summary: Update tunnel server settings (and start/stop the server)
+      responses:
+        "200": { description: Updated }
+
+  /nodes/{id}/wg-bootstrap:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    post:
+      summary: Generate a fresh WireGuard keypair and bind a tunnel IP to a node
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force_reissue: { type: boolean }
+                allowed_ips: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Client config bundle
+          content: { application/json: { schema: { $ref: "#/components/schemas/TunnelBootstrapResponse" } } }
+        "409": { description: Node already provisioned (pass force_reissue=true to override) }
+
+  /nodes/{id}/wg-tunnel:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    delete:
+      summary: Revoke a node's tunnel assignment
+      responses:
+        "204": { description: Revoked }
+
+  /audit-webhooks:
+    get:
+      summary: List configured webhooks
+      responses:
+        "200": { description: List, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/AuditWebhook" } } } } }
+    post:
+      summary: Create webhook
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AuditWebhook" } } }
+      responses:
+        "201":
+          description: Created (response includes one-time `secret`)
+
+  /audit-webhooks/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    patch:
+      summary: Update webhook
+      responses:
+        "200": { description: Updated }
+    delete:
+      summary: Delete webhook
+      responses:
+        "204": { description: Deleted }
+
+  /audit-logs:
+    get:
+      summary: List audit log entries (hash-chained)
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50, maximum: 500 }
+        - in: query
+          name: offset
+          schema: { type: integer }
+      responses:
+        "200": { description: List }
+
+  /system/overview:
+    get:
+      summary: System overview, health, counts and warnings
+      responses:
+        "200": { description: Overview }

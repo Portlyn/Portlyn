@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -19,14 +20,25 @@ import (
 	"portlyn/internal/audit"
 	"portlyn/internal/auth"
 	"portlyn/internal/config"
+	"portlyn/internal/geoip"
 	apihttp "portlyn/internal/http"
 	"portlyn/internal/observability"
 	"portlyn/internal/proxy"
 	"portlyn/internal/rate"
+	"portlyn/internal/scanner"
+	"portlyn/internal/security"
 	"portlyn/internal/store"
+	"portlyn/internal/tunnel"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "init" {
+		if err := runInitWizard(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "init failed:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		panic(err)
@@ -160,12 +172,54 @@ func main() {
 	}
 	auditSink := audit.NewAsyncSink(auditStore, cfg.AuditBufferSize, cfg.AuditBatchSize, cfg.AuditFlushInterval, cfg.AuditDropPolicy, logger)
 	auditLogger := audit.NewLogger(auditSink)
+	auditWebhookStore := store.NewAuditWebhookStore(db)
+	auditLogger.SetWebhookDispatcher(audit.NewWebhookDispatcher(auditWebhookStore))
+	exposureReportStore := store.NewExposureReportStore(db)
+	exposureScanner := scanner.NewScanner(serviceStore, exposureReportStore, logger)
+
+	userCredentialStore := store.NewUserCredentialStore(db)
+	webAuthnService := auth.NewWebAuthnService(userCredentialStore, userStore)
+	webAuthnService.Configure("Portlyn", cfg.FrontendBaseURL)
+	if redisClient != nil {
+		webAuthnService.SetSessionStore(auth.NewRedisWebAuthnSessionStore(redisClient, "portlyn:webauthn:session:"))
+	}
 
 	var configCache proxy.ConfigCache = proxy.NewInMemoryConfigCache()
 	var configBus proxy.ConfigBus = proxy.NewInMemoryConfigBus()
 	if redisClient != nil {
 		configCache = proxy.NewRedisConfigCache(redisClient, "portlyn:proxy:routes")
 		configBus = proxy.NewRedisConfigBus(redisClient, "portlyn:proxy:route-changed")
+	}
+
+	geoipLookup := geoip.NewLookup()
+	crowdSecClient := security.NewCrowdSec()
+	if currentSettings, err := appSettingsStore.Get(context.Background()); err == nil {
+		if path := strings.TrimSpace(currentSettings.GeoIPDBPath); path != "" {
+			if err := geoipLookup.Load(path); err != nil {
+				logger.Warn("geoip: load failed", "path", path, "error", err)
+			}
+		}
+		if currentSettings.CrowdSecEnabled {
+			interval := time.Duration(currentSettings.CrowdSecPollIntervalSecs) * time.Second
+			crowdSecClient.Configure(currentSettings.CrowdSecAPIURL, currentSettings.CrowdSecAPIKeyEncrypted, interval)
+		}
+	}
+
+	tunnelManager := tunnel.NewManager(nodeStore, appSettingsStore)
+	tunnelServer := tunnel.NewServer(tunnel.ServerOptions{MTU: 1420})
+	tunnelManager.AttachServer(tunnelServer)
+	if startSettings, err := appSettingsStore.Get(context.Background()); err == nil && startSettings.TunnelEnabled {
+		if _, ensureErr := tunnelManager.EnsureServerKey(context.Background()); ensureErr != nil {
+			logger.Warn("tunnel: ensure server key", "error", ensureErr)
+		} else if refreshed, refreshErr := appSettingsStore.Get(context.Background()); refreshErr != nil {
+			logger.Warn("tunnel: reload settings", "error", refreshErr)
+		} else if startErr := tunnelServer.Start(context.Background(), refreshed); startErr != nil {
+			logger.Warn("tunnel: start server", "error", startErr)
+		} else if nodes, listErr := nodeStore.List(context.Background()); listErr == nil {
+			if err := tunnelServer.ApplyPeers(nodes); err != nil {
+				logger.Warn("tunnel: apply peers", "error", err)
+			}
+		}
 	}
 
 	proxyManager := proxy.NewManager(
@@ -184,6 +238,10 @@ func main() {
 			BootstrapAdminEnabled:  cfg.BootstrapAdminEnabled,
 			AdminUITargetURL:       "http://frontend:3000",
 			AdminAPITargetURL:      "http://127.0.0.1:8080",
+			EmbeddedAdminUI:        embeddedFrontendHandler(),
+			TunnelDialer:           tunnelServer,
+			CountryLookup:          geoipLookup,
+			Reputation:             crowdSecClient,
 			ServiceDeploymentStore: serviceStore,
 		},
 	)
@@ -224,6 +282,11 @@ func main() {
 		auditStore,
 		sessionStore,
 		nodeEnrollmentTokenStore,
+		auditWebhookStore,
+		exposureReportStore,
+		exposureScanner,
+		tunnelManager,
+		webAuthnService,
 		metrics,
 		bootWarnings,
 		healthChecks...,
@@ -237,6 +300,10 @@ func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	proxyManager.Start(rootCtx)
+	if crowdSecClient.Enabled() {
+		crowdSecClient.Start(rootCtx)
+	}
+	exposureScanner.Start(rootCtx)
 
 	apiServer := &http.Server{
 		Addr:              cfg.HTTPAddr,

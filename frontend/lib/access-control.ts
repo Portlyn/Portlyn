@@ -48,7 +48,10 @@ export function defaultServicePayload(service?: Partial<Service>): ServicePayloa
     service_group_ids: service?.service_groups?.map((group) => group.id) || [],
     ip_allowlist: [...(service?.ip_allowlist || [])],
     ip_blocklist: [...(service?.ip_blocklist || [])],
-    access_windows: [...(service?.access_windows || [])]
+    allowed_countries: [...(service?.allowed_countries || [])],
+    blocked_countries: [...(service?.blocked_countries || [])],
+    access_windows: [...(service?.access_windows || [])],
+    node_id: service?.node_id ?? null
   };
 }
 
@@ -117,6 +120,10 @@ export function buildServiceRequestPayload(values: ServicePayload, options?: { o
   if (options?.omitEmptyAccessMethod && !values.access_method) {
     delete payload.access_method;
     delete payload.access_method_config;
+  }
+  if (values.node_id == null) {
+    delete payload.node_id;
+    payload.clear_node_id = true;
   }
   return payload;
 }

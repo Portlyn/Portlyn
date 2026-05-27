@@ -39,6 +39,7 @@ const (
 const (
 	LoginTokenScopeAccountLogin = "account_login"
 	LoginTokenScopeRouteAccess  = "route_access"
+	LoginTokenScopeMagicLink    = "magic_link"
 )
 
 const (
@@ -76,6 +77,13 @@ const (
 	NodeStatusUnknown = "unknown"
 	NodeStatusOnline  = "online"
 	NodeStatusOffline = "offline"
+)
+
+const (
+	TunnelStatusInactive    = "inactive"
+	TunnelStatusProvisioned = "provisioned"
+	TunnelStatusConnected   = "connected"
+	TunnelStatusStale       = "stale"
 )
 
 type JSONStringSlice []string
@@ -253,6 +261,14 @@ type Node struct {
 	BandwidthOutKbps   float64    `gorm:"not null;default:0" json:"bandwidth_out_kbps"`
 	HeartbeatTokenHash string     `gorm:"size:128" json:"-"`
 	MTLSCertSHA256     string     `gorm:"size:128" json:"mtls_cert_sha256"`
+	WGPublicKey        string     `gorm:"size:64;index" json:"wg_public_key"`
+	WGEndpoint         string     `gorm:"size:255" json:"wg_endpoint"`
+	WGAllowedIPs       string     `gorm:"size:255" json:"wg_allowed_ips"`
+	WGTunnelIP         string     `gorm:"size:64;index" json:"wg_tunnel_ip"`
+	WGLastHandshake    *time.Time `json:"wg_last_handshake"`
+	WGRxBytes          int64      `gorm:"not null;default:0" json:"wg_rx_bytes"`
+	WGTxBytes          int64      `gorm:"not null;default:0" json:"wg_tx_bytes"`
+	TunnelStatus       string     `gorm:"size:32;not null;default:inactive" json:"tunnel_status"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
 }
@@ -369,9 +385,13 @@ type Service struct {
 	AccessMessage        string           `gorm:"type:text" json:"access_message"`
 	IPAllowlist          JSONStringSlice  `gorm:"type:text;not null;default:'[]'" json:"ip_allowlist"`
 	IPBlocklist          JSONStringSlice  `gorm:"type:text;not null;default:'[]'" json:"ip_blocklist"`
+	AllowedCountries     JSONStringSlice  `gorm:"type:text;not null;default:'[]'" json:"allowed_countries"`
+	BlockedCountries     JSONStringSlice  `gorm:"type:text;not null;default:'[]'" json:"blocked_countries"`
 	AccessWindows        AccessWindowList `gorm:"type:text;not null;default:'[]'" json:"access_windows"`
 	LastDeployedAt       *time.Time       `json:"last_deployed_at"`
 	DeploymentRevision   uint64           `gorm:"not null;default:0" json:"deployment_revision"`
+	NodeID               *uint            `gorm:"index" json:"node_id"`
+	Node                 *Node            `gorm:"foreignKey:NodeID;references:ID" json:"node,omitempty"`
 	ServiceGroups        []ServiceGroup   `gorm:"many2many:service_group_memberships" json:"service_groups,omitempty"`
 	CreatedAt            time.Time        `json:"created_at"`
 	UpdatedAt            time.Time        `json:"updated_at"`
@@ -429,6 +449,57 @@ type AuditLog struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
+type UserCredential struct {
+	ID              uint            `gorm:"primaryKey" json:"id"`
+	UserID          uint            `gorm:"index;not null" json:"user_id"`
+	CredentialID    string          `gorm:"size:512;uniqueIndex;not null" json:"credential_id"`
+	PublicKey       string          `gorm:"type:text;not null" json:"-"`
+	AttestationType string          `gorm:"size:64" json:"attestation_type"`
+	AAGUID          string          `gorm:"size:64" json:"aaguid"`
+	SignCount       uint32          `gorm:"not null;default:0" json:"sign_count"`
+	Transports      JSONStringSlice `gorm:"type:text;not null;default:'[]'" json:"transports"`
+	Label           string          `gorm:"size:255" json:"label"`
+	UserVerified    bool            `gorm:"not null;default:false" json:"user_verified"`
+	CreatedAt       time.Time       `json:"created_at"`
+	LastUsedAt      *time.Time      `json:"last_used_at"`
+}
+
+type ServiceExposureReport struct {
+	ID              uint            `gorm:"primaryKey" json:"id"`
+	ServiceID       uint            `gorm:"uniqueIndex;not null" json:"service_id"`
+	Score           int             `gorm:"not null;default:0" json:"score"`
+	CheckedAt       time.Time       `json:"checked_at"`
+	DNSResolvable   bool            `gorm:"not null;default:false" json:"dns_resolvable"`
+	HTTPSValid      bool            `gorm:"not null;default:false" json:"https_valid"`
+	HTTPSExpiresIn  int             `gorm:"not null;default:0" json:"https_expires_in_days"`
+	HTTPSRedirect   bool            `gorm:"not null;default:false" json:"http_to_https_redirect"`
+	HSTSPresent     bool            `gorm:"not null;default:false" json:"hsts_present"`
+	CSPPresent      bool            `gorm:"not null;default:false" json:"csp_present"`
+	XFrameOptions   bool            `gorm:"not null;default:false" json:"x_frame_options"`
+	AuthEnforced    bool            `gorm:"not null;default:false" json:"auth_enforced"`
+	GeoIPConfigured bool            `gorm:"not null;default:false" json:"geoip_configured"`
+	Findings        JSONStringSlice `gorm:"type:text;not null;default:'[]'" json:"findings"`
+	LastError       string          `gorm:"type:text" json:"last_error"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+type AuditWebhook struct {
+	ID            uint            `gorm:"primaryKey" json:"id"`
+	Name          string          `gorm:"size:255;not null" json:"name"`
+	URL           string          `gorm:"size:1024;not null" json:"url"`
+	Format        string          `gorm:"size:32;not null;default:generic" json:"format"`
+	SecretHashed  string          `gorm:"size:128" json:"-"`
+	SecretPreview string          `gorm:"size:32" json:"secret_preview"`
+	EventTypes    JSONStringSlice `gorm:"type:text;not null;default:'[]'" json:"event_types"`
+	Active        bool            `gorm:"not null;default:true" json:"active"`
+	LastFiredAt   *time.Time      `json:"last_fired_at"`
+	LastStatus    int             `gorm:"not null;default:0" json:"last_status"`
+	LastError     string          `gorm:"type:text" json:"last_error"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
 type AppSettings struct {
 	ID                        uint            `gorm:"primaryKey" json:"id"`
 	FrontendBaseURL           string          `gorm:"size:512" json:"frontend_base_url"`
@@ -481,6 +552,19 @@ type AppSettings struct {
 	SMTPFromName              string          `gorm:"size:255" json:"smtp_from_name"`
 	SMTPEncryption            string          `gorm:"size:32;not null;default:starttls" json:"smtp_encryption"`
 	SMTPInsecureSkipVerify    bool            `gorm:"not null;default:false" json:"smtp_insecure_skip_verify"`
+	TunnelEnabled             bool            `gorm:"not null;default:false" json:"tunnel_enabled"`
+	TunnelServerPrivateKey    string          `gorm:"type:text" json:"-"`
+	TunnelServerPublicKey     string          `gorm:"size:64" json:"tunnel_server_public_key"`
+	TunnelServerEndpoint      string          `gorm:"size:255" json:"tunnel_server_endpoint"`
+	TunnelListenPort          int             `gorm:"not null;default:51820" json:"tunnel_listen_port"`
+	TunnelCIDR                string          `gorm:"size:64;not null;default:'10.42.0.0/16'" json:"tunnel_cidr"`
+	TunnelServerTunnelIP      string          `gorm:"size:64;not null;default:'10.42.0.1'" json:"tunnel_server_tunnel_ip"`
+	TunnelConfigPath          string          `gorm:"size:512" json:"tunnel_config_path"`
+	GeoIPDBPath               string          `gorm:"size:512" json:"geoip_db_path"`
+	CrowdSecEnabled           bool            `gorm:"not null;default:false" json:"crowdsec_enabled"`
+	CrowdSecAPIURL            string          `gorm:"size:512" json:"crowdsec_api_url"`
+	CrowdSecAPIKeyEncrypted   string          `gorm:"type:text" json:"-"`
+	CrowdSecPollIntervalSecs  int             `gorm:"not null;default:60" json:"crowdsec_poll_interval_secs"`
 	CreatedAt                 time.Time       `json:"created_at"`
 	UpdatedAt                 time.Time       `json:"updated_at"`
 }

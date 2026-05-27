@@ -114,8 +114,9 @@ function RouteLoginContent() {
     setIsSubmitting(true);
     setError(null);
     try {
-      await verifyRoutePIN(service.id, pin);
-      window.location.assign(buildReturnTarget(service, returnTo));
+      const target = buildReturnTarget(service, returnTo);
+      const response = await verifyRoutePIN(service.id, pin, target);
+      window.location.assign(response.bridge_url || target);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to verify route PIN.");
     } finally {
@@ -143,8 +144,9 @@ function RouteLoginContent() {
     setIsSubmitting(true);
     setError(null);
     try {
-      await verifyRouteEmailCode(service.id, email, code);
-      window.location.assign(buildReturnTarget(service, returnTo));
+      const target = buildReturnTarget(service, returnTo);
+      const response = await verifyRouteEmailCode(service.id, email, code, target);
+      window.location.assign(response.bridge_url || target);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to verify email code.");
     } finally {

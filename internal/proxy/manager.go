@@ -46,6 +46,10 @@ type Manager struct {
 	bootstrapAdminEnabled bool
 	adminUI               http.Handler
 	adminAPI              http.Handler
+	tunnelTransport       *http.Transport
+	tunnelDialer          TunnelDialer
+	countryLookup         CountryLookup
+	reputation            ReputationBlocklist
 }
 
 type RuntimeRoute struct {
@@ -77,9 +81,20 @@ type Route struct {
 	InheritedFromGroup    *domain.ServiceGroup
 	AllowPrefixes         []netip.Prefix
 	BlockPrefixes         []netip.Prefix
+	AllowedCountries      []string
+	BlockedCountries      []string
 	CompiledWindows       []compiledAccessWindow
 	DeploymentRevision    uint64
 	ReverseProxyHandler   http.Handler
+}
+
+type CountryLookup interface {
+	CountryISO(ip net.IP) string
+	Available() bool
+}
+
+type ReputationBlocklist interface {
+	IsBlocked(ip net.IP) (bool, string)
 }
 
 type compiledAccessWindow struct {
@@ -98,7 +113,16 @@ type ManagerOptions struct {
 	BootstrapAdminEnabled  bool
 	AdminUITargetURL       string
 	AdminAPITargetURL      string
+	EmbeddedAdminUI        http.Handler
+	TunnelDialer           TunnelDialer
+	CountryLookup          CountryLookup
+	Reputation             ReputationBlocklist
 	ServiceDeploymentStore ServiceDeploymentStore
+}
+
+type TunnelDialer interface {
+	DialContext(ctx context.Context, network, address string) (net.Conn, error)
+	Started() bool
 }
 
 type targetCircuitState struct {
@@ -132,7 +156,9 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 	}
 
 	var adminUIHandler http.Handler
-	if strings.TrimSpace(options.AdminUITargetURL) != "" {
+	if options.EmbeddedAdminUI != nil {
+		adminUIHandler = options.EmbeddedAdminUI
+	} else if strings.TrimSpace(options.AdminUITargetURL) != "" {
 		if target, err := url.Parse(strings.TrimSpace(options.AdminUITargetURL)); err == nil {
 			adminUIHandler = reverseProxyForTarget(target, transport, "/", directProto)
 		}
@@ -142,6 +168,20 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 	if strings.TrimSpace(options.AdminAPITargetURL) != "" {
 		if target, err := url.Parse(strings.TrimSpace(options.AdminAPITargetURL)); err == nil {
 			adminAPIHandler = reverseProxyForTarget(target, transport, "/", directProto)
+		}
+	}
+
+	var tunnelTransport *http.Transport
+	if options.TunnelDialer != nil {
+		dialer := options.TunnelDialer
+		tunnelTransport = &http.Transport{
+			DialContext:           dialer.DialContext,
+			MaxIdleConns:          128,
+			MaxIdleConnsPerHost:   32,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
 		}
 	}
 
@@ -162,6 +202,10 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 		bootstrapAdminEnabled: options.BootstrapAdminEnabled,
 		adminUI:               adminUIHandler,
 		adminAPI:              adminAPIHandler,
+		tunnelTransport:       tunnelTransport,
+		tunnelDialer:          options.TunnelDialer,
+		countryLookup:         options.CountryLookup,
+		reputation:            options.Reputation,
 	}
 }
 
@@ -302,6 +346,16 @@ func (m *Manager) Handler() http.Handler {
 		if m.handleSessionBridge(writer, r) {
 			outcome = "session_bridge"
 			reason = "session_bridge"
+			return
+		}
+		if m.handleRouteAccessBridge(writer, r) {
+			outcome = "route_access_bridge"
+			reason = "route_access_bridge"
+			return
+		}
+		if m.handleMagicLink(writer, r) {
+			outcome = "magic_link"
+			reason = "magic_link"
 			return
 		}
 
@@ -522,10 +576,12 @@ func (m *Manager) handleSessionBridge(w http.ResponseWriter, r *http.Request) bo
 }
 
 func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
-	target, err := url.Parse(config.TargetURL)
+	targetURL, viaNode := rewriteTargetForTunnel(config.TargetURL, config.Service)
+	target, err := url.Parse(targetURL)
 	if err != nil {
 		return Route{}, fmt.Errorf("parse target url for service %d: %w", config.ServiceID, err)
 	}
+	_ = viaNode
 
 	allowPrefixes, err := compileCIDRs(config.AllowCIDRs)
 	if err != nil {
@@ -545,7 +601,12 @@ func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
 	}
 
 	routePath := normalizePath(config.Path)
-	proxy := reverseProxyForTarget(target, m.transport, routePath, m.forwardedProto)
+	effectiveTargetURL := targetURL
+	chosenTransport := m.transport
+	if viaNode && m.tunnelTransport != nil && m.tunnelDialer != nil && m.tunnelDialer.Started() {
+		chosenTransport = m.tunnelTransport
+	}
+	proxy := reverseProxyForTarget(target, chosenTransport, routePath, m.forwardedProto)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		m.recordTargetFailure(config.TargetURL, err)
 		writeProxyError(w, http.StatusBadGateway, "upstream_unavailable", "upstream target request failed")
@@ -564,7 +625,7 @@ func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
 		ServiceName:           config.ServiceName,
 		Host:                  normalizeHost(config.Host),
 		Path:                  routePath,
-		TargetURL:             config.TargetURL,
+		TargetURL:             effectiveTargetURL,
 		TLSMode:               config.TLSMode,
 		Service:               config.Service,
 		EffectivePolicy:       normalizedPolicy(config.EffectivePolicy, config.Service.AuthPolicy),
@@ -573,6 +634,8 @@ func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
 		InheritedFromGroup:    config.InheritedFromGroup,
 		AllowPrefixes:         allowPrefixes,
 		BlockPrefixes:         blockPrefixes,
+		AllowedCountries:      append([]string{}, config.AllowedCountries...),
+		BlockedCountries:      append([]string{}, config.BlockedCountries...),
 		CompiledWindows:       compiledWindows,
 		DeploymentRevision:    revision,
 		ReverseProxyHandler:   proxy,
@@ -805,7 +868,43 @@ func (m *Manager) enforceNetworkRules(w http.ResponseWriter, r *http.Request, ro
 		return false
 	}
 
+	if m.reputation != nil {
+		if blocked, reason := m.reputation.IsBlocked(net.IP(clientIP.AsSlice())); blocked {
+			writeProxyError(w, http.StatusForbidden, "forbidden", "reputation block: "+reason)
+			return false
+		}
+	}
+
+	if m.countryLookup != nil && m.countryLookup.Available() && (len(route.AllowedCountries) > 0 || len(route.BlockedCountries) > 0) {
+		country := m.countryLookup.CountryISO(net.IP(clientIP.AsSlice()))
+		ok, reason := countryAllowedByRoute(country, route.AllowedCountries, route.BlockedCountries)
+		if !ok {
+			writeProxyError(w, http.StatusForbidden, "forbidden", "geoip: "+reason)
+			return false
+		}
+	}
+
 	return true
+}
+
+func countryAllowedByRoute(country string, allowed, blocked []string) (bool, string) {
+	if country == "" {
+		return true, ""
+	}
+	for _, c := range blocked {
+		if strings.EqualFold(c, country) {
+			return false, "blocked_country"
+		}
+	}
+	if len(allowed) == 0 {
+		return true, ""
+	}
+	for _, c := range allowed {
+		if strings.EqualFold(c, country) {
+			return true, ""
+		}
+	}
+	return false, "country_not_allowed"
 }
 
 func (m *Manager) enforceAccessWindows(w http.ResponseWriter, route Route) bool {

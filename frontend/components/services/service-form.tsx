@@ -19,12 +19,16 @@ import {
 import { useEffect, useState } from "react";
 
 import { AccessPolicyFields } from "@/components/access-policy-fields";
+import { RiskyChangeModal } from "@/components/services/risky-change-modal";
 import { accessWindowLabel, defaultServicePayload, linesToList, listToLines } from "@/lib/access-control";
+import { countryOptions } from "@/lib/countries";
+import { assessServiceChange, type RiskAssessment } from "@/lib/risk-assessment";
 import { buildServiceHostname } from "@/lib/service-host";
 import type {
   AccessWindow,
   Domain,
   Group as UserGroup,
+  Node as PortlynNode,
   Service,
   ServiceGroup,
   ServicePayload,
@@ -45,26 +49,32 @@ export function ServiceForm({
   domains,
   groups,
   serviceGroups,
+  nodes,
   initialValues,
   onSubmit,
   submitLabel,
   isLoading,
-  inheritedFrom
+  inheritedFrom,
+  confirmRiskyChanges
 }: {
   domains: Domain[];
   groups: UserGroup[];
   serviceGroups: ServiceGroup[];
+  nodes?: PortlynNode[];
   initialValues?: Partial<Service>;
   onSubmit: (values: ServicePayload) => Promise<void>;
   submitLabel: string;
   isLoading?: boolean;
   inheritedFrom?: string | null;
+  confirmRiskyChanges?: boolean;
 }) {
   const [values, setValues] = useState<ServicePayload>(defaultServicePayload(initialValues));
   const [allowlistText, setAllowlistText] = useState(listToLines(initialValues?.ip_allowlist));
   const [blocklistText, setBlocklistText] = useState(listToLines(initialValues?.ip_blocklist));
   const [emailWhitelistText, setEmailWhitelistText] = useState(listToLines(initialValues?.access_method_config?.allowed_emails));
   const [windowDraft, setWindowDraft] = useState<AccessWindow>(blankWindow);
+  const [riskAssessment, setRiskAssessment] = useState<RiskAssessment | null>(null);
+  const [pendingValues, setPendingValues] = useState<ServicePayload | null>(null);
 
   useEffect(() => {
     const next = defaultServicePayload(initialValues);
@@ -81,17 +91,40 @@ export function ServiceForm({
   const selectedDomain = domains.find((domain) => domain.id === values.domain_id);
   const hostnamePreview = buildServiceHostname(selectedDomain?.name, values.subdomain);
 
+  const buildSubmitPayload = (): ServicePayload => ({
+    ...values,
+    auth_policy: values.use_group_policy ? "authenticated" : values.auth_policy,
+    access_method_config: {
+      ...values.access_method_config,
+      allowed_emails: linesToList(emailWhitelistText)
+    },
+    ip_allowlist: linesToList(allowlistText),
+    ip_blocklist: linesToList(blocklistText)
+  });
+
   const handleSubmit = async () => {
-    await onSubmit({
-      ...values,
-      auth_policy: values.use_group_policy ? "authenticated" : values.auth_policy,
-      access_method_config: {
-        ...values.access_method_config,
-        allowed_emails: linesToList(emailWhitelistText)
-      },
-      ip_allowlist: linesToList(allowlistText),
-      ip_blocklist: linesToList(blocklistText)
-    });
+    const payload = buildSubmitPayload();
+    if (confirmRiskyChanges && initialValues) {
+      const assessment = assessServiceChange(initialValues, payload);
+      if (assessment.changes.length > 0) {
+        setRiskAssessment(assessment);
+        setPendingValues(payload);
+        return;
+      }
+    }
+    await onSubmit(payload);
+  };
+
+  const handleConfirmPending = async () => {
+    if (!pendingValues) return;
+    await onSubmit(pendingValues);
+    setPendingValues(null);
+    setRiskAssessment(null);
+  };
+
+  const handleCancelPending = () => {
+    setPendingValues(null);
+    setRiskAssessment(null);
   };
 
   return (
@@ -159,6 +192,26 @@ export function ServiceForm({
                   clearable
                 />
               </Grid.Col>
+              {nodes && nodes.length > 0 ? (
+                <Grid.Col span={12}>
+                  <Select
+                    label="Route via tunnel node"
+                    description="Optional. If set, traffic is forwarded over the Wireguard tunnel to this node's tunnel IP instead of directly hitting the target host."
+                    data={[
+                      { value: "", label: "Direct (no tunnel)" },
+                      ...nodes
+                        .filter((node) => (node.wg_tunnel_ip?.length ?? 0) > 0)
+                        .map((node) => ({
+                          value: String(node.id),
+                          label: `${node.name} — ${node.wg_tunnel_ip} (${node.tunnel_status || "inactive"})`,
+                        })),
+                    ]}
+                    value={values.node_id ? String(values.node_id) : ""}
+                    onChange={(value) => update("node_id", value ? Number(value) : null)}
+                    clearable
+                  />
+                </Grid.Col>
+              ) : null}
             </Grid>
           </Paper>
         </Tabs.Panel>
@@ -277,6 +330,24 @@ export function ServiceForm({
                 value={blocklistText}
                 onChange={(event) => setBlocklistText(event.currentTarget.value)}
               />
+              <MultiSelect
+                label="Allowed countries"
+                description="ISO 3166-1 alpha-2. Empty means all countries allowed. Requires a configured GeoIP database."
+                data={countryOptions}
+                value={values.allowed_countries}
+                onChange={(next) => update("allowed_countries", next)}
+                searchable
+                clearable
+              />
+              <MultiSelect
+                label="Blocked countries"
+                description="Blocked countries always win over the allow list."
+                data={countryOptions}
+                value={values.blocked_countries}
+                onChange={(next) => update("blocked_countries", next)}
+                searchable
+                clearable
+              />
             </Stack>
           </Paper>
         </Tabs.Panel>
@@ -357,6 +428,14 @@ export function ServiceForm({
       >
         {submitLabel}
       </Button>
+
+      <RiskyChangeModal
+        opened={riskAssessment !== null}
+        assessment={riskAssessment}
+        onClose={handleCancelPending}
+        onConfirm={() => void handleConfirmPending()}
+        isLoading={isLoading}
+      />
     </Stack>
   );
 }

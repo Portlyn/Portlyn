@@ -1,0 +1,46 @@
+package main
+
+import (
+	"embed"
+	"io/fs"
+	"net/http"
+	"strings"
+)
+
+//go:embed all:frontend_dist
+var embeddedFrontend embed.FS
+
+func embeddedFrontendHandler() http.Handler {
+	sub, err := fs.Sub(embeddedFrontend, "frontend_dist")
+	if err != nil {
+		return nil
+	}
+	if _, err := fs.Stat(sub, "index.html"); err != nil {
+		return nil
+	}
+	fileServer := http.FileServer(http.FS(sub))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		clean := strings.TrimPrefix(r.URL.Path, "/")
+		if clean == "" {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		if _, err := fs.Stat(sub, clean); err == nil {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		if _, err := fs.Stat(sub, strings.TrimSuffix(clean, "/")+".html"); err == nil {
+			r2 := r.Clone(r.Context())
+			r2.URL.Path = "/" + strings.TrimSuffix(clean, "/") + ".html"
+			fileServer.ServeHTTP(w, r2)
+			return
+		}
+		index, err := embeddedFrontend.ReadFile("frontend_dist/index.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(index)
+	})
+}

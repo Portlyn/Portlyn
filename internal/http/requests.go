@@ -54,11 +54,15 @@ type updateNodeRequest struct {
 }
 
 type heartbeatNodeRequest struct {
-	Version          *string  `json:"version" validate:"omitempty,max=64"`
-	Status           *string  `json:"status" validate:"omitempty,max=64"`
-	Load             *float64 `json:"load"`
-	BandwidthInKbps  *float64 `json:"bandwidth_in_kbps"`
-	BandwidthOutKbps *float64 `json:"bandwidth_out_kbps"`
+	Version          *string    `json:"version" validate:"omitempty,max=64"`
+	Status           *string    `json:"status" validate:"omitempty,max=64"`
+	Load             *float64   `json:"load"`
+	BandwidthInKbps  *float64   `json:"bandwidth_in_kbps"`
+	BandwidthOutKbps *float64   `json:"bandwidth_out_kbps"`
+	WGLastHandshake  *time.Time `json:"wg_last_handshake"`
+	WGRxBytes        *int64     `json:"wg_rx_bytes"`
+	WGTxBytes        *int64     `json:"wg_tx_bytes"`
+	TunnelStatus     *string    `json:"tunnel_status" validate:"omitempty,oneof=inactive provisioned connected stale"`
 }
 
 type createDomainRequest struct {
@@ -165,7 +169,10 @@ type createServiceRequest struct {
 	ServiceGroupIDs    []uint                    `json:"service_group_ids"`
 	IPAllowlist        []string                  `json:"ip_allowlist"`
 	IPBlocklist        []string                  `json:"ip_blocklist"`
+	AllowedCountries   []string                  `json:"allowed_countries"`
+	BlockedCountries   []string                  `json:"blocked_countries"`
 	AccessWindows      []accessWindowRequest     `json:"access_windows"`
+	NodeID             *uint                     `json:"node_id"`
 }
 
 type updateServiceRequest struct {
@@ -184,7 +191,11 @@ type updateServiceRequest struct {
 	ServiceGroupIDs    *[]uint                    `json:"service_group_ids"`
 	IPAllowlist        *[]string                  `json:"ip_allowlist"`
 	IPBlocklist        *[]string                  `json:"ip_blocklist"`
+	AllowedCountries   *[]string                  `json:"allowed_countries"`
+	BlockedCountries   *[]string                  `json:"blocked_countries"`
 	AccessWindows      *[]accessWindowRequest     `json:"access_windows"`
+	NodeID             *uint                      `json:"node_id"`
+	ClearNodeID        *bool                      `json:"clear_node_id"`
 }
 
 type createGroupRequest struct {

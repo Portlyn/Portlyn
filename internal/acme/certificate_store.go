@@ -57,8 +57,8 @@ func (s *DBCertificateStore) GetCertificate(ctx context.Context, domainName stri
 	}
 
 	privateKey := item.PrivateKey
-	if secureconfig.IsEncryptedBytesV1(item.PrivateKey) {
-		privateKey, err = secureconfig.DecryptBytesV1WithSecrets(s.dataSecrets, item.PrivateKey)
+	if secureconfig.IsEncryptedBytes(item.PrivateKey) {
+		privateKey, err = secureconfig.DecryptBytesAuto(s.dataSecrets, item.PrivateKey)
 		if err != nil {
 			return nil, err
 		}
@@ -82,8 +82,8 @@ func (s *DBCertificateStore) StoreCertificate(ctx context.Context, domainName st
 	if err != nil {
 		return err
 	}
-	if len(s.dataSecrets) > 0 && !secureconfig.IsEncryptedBytesV1(keyPEM) {
-		encryptedKey, encryptErr := secureconfig.EncryptBytesV1(s.dataSecrets[0], keyPEM)
+	if len(s.dataSecrets) > 0 && !secureconfig.IsEncryptedBytes(keyPEM) {
+		encryptedKey, encryptErr := secureconfig.EncryptBytesV2(s.dataSecrets[0], keyPEM)
 		if encryptErr != nil {
 			return encryptErr
 		}
@@ -115,8 +115,8 @@ func (s *DBCertificateStore) StoreCertificate(ctx context.Context, domainName st
 
 func (s *DBCertificateStore) StorePEM(ctx context.Context, domainName, issuerKey string, certPEM, keyPEM []byte, metadata []byte) error {
 	storedKey := append([]byte(nil), keyPEM...)
-	if len(s.dataSecrets) > 0 && !secureconfig.IsEncryptedBytesV1(storedKey) {
-		encryptedKey, encryptErr := secureconfig.EncryptBytesV1(s.dataSecrets[0], storedKey)
+	if len(s.dataSecrets) > 0 && !secureconfig.IsEncryptedBytes(storedKey) {
+		encryptedKey, encryptErr := secureconfig.EncryptBytesV2(s.dataSecrets[0], storedKey)
 		if encryptErr != nil {
 			return encryptErr
 		}
@@ -188,10 +188,10 @@ func (s *DBCertificateStore) MigrateStoredPrivateKeys(ctx context.Context) (int,
 	}
 	updated := 0
 	for _, row := range rows {
-		if secureconfig.IsEncryptedBytesV1(row.PrivateKey) || len(row.PrivateKey) == 0 {
+		if secureconfig.IsEncryptedBytes(row.PrivateKey) || len(row.PrivateKey) == 0 {
 			continue
 		}
-		encrypted, err := secureconfig.EncryptBytesV1(s.dataSecrets[0], row.PrivateKey)
+		encrypted, err := secureconfig.EncryptBytesV2(s.dataSecrets[0], row.PrivateKey)
 		if err != nil {
 			return updated, err
 		}

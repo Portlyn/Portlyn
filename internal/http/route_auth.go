@@ -91,12 +91,15 @@ func (s *Server) handleRoutePIN(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		writeError(w, stdhttp.StatusUnauthorized, "invalid_pin", "invalid route pin")
 		return
 	}
-	if err := s.auth.SetRouteAccessCookie(w, service.ID, domain.AccessMethodPIN, ""); err != nil {
+	bridgeURL, err := s.buildRouteAccessBridgeURL(r, service, domain.AccessMethodPIN, "")
+	if err != nil {
 		s.internalError(w, err)
 		return
 	}
+	// keep a route cookie on the API host as a fallback for same-host deployments
+	_ = s.auth.SetRouteAccessCookie(w, service.ID, domain.AccessMethodPIN, "")
 	_ = s.audit.LogRequest(r.Context(), r, nil, "route_pin_succeeded", "service", &service.ID, map[string]any{"service_id": service.ID})
-	writeJSON(w, stdhttp.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, stdhttp.StatusOK, map[string]any{"ok": true, "bridge_url": bridgeURL})
 }
 
 func (s *Server) handleRouteRequestEmailCode(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -186,12 +189,39 @@ func (s *Server) handleRouteVerifyEmailCode(w stdhttp.ResponseWriter, r *stdhttp
 		}
 		return
 	}
-	if err := s.auth.SetRouteAccessCookie(w, service.ID, domain.AccessMethodEmailCode, req.Email); err != nil {
+	bridgeURL, err := s.buildRouteAccessBridgeURL(r, service, domain.AccessMethodEmailCode, req.Email)
+	if err != nil {
 		s.internalError(w, err)
 		return
 	}
+	_ = s.auth.SetRouteAccessCookie(w, service.ID, domain.AccessMethodEmailCode, req.Email)
 	_ = s.audit.LogRequest(r.Context(), r, nil, "route_email_code_verified", "service", &service.ID, map[string]any{"service_id": service.ID, "email": req.Email})
-	writeJSON(w, stdhttp.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, stdhttp.StatusOK, map[string]any{"ok": true, "bridge_url": bridgeURL})
+}
+
+func (s *Server) buildRouteAccessBridgeURL(r *stdhttp.Request, service *domain.Service, method, email string) (string, error) {
+	host := domain.ServiceHost(*service)
+	if strings.TrimSpace(host) == "" {
+		return "", fmt.Errorf("service has no host")
+	}
+	returnTo := strings.TrimSpace(r.URL.Query().Get("returnTo"))
+	if returnTo == "" {
+		returnTo = strings.TrimSpace(r.Header.Get("X-Portlyn-Return-To"))
+	}
+	token, err := s.auth.IssueRouteAccessBridgeToken(service.ID, host, method, email, returnTo)
+	if err != nil {
+		return "", err
+	}
+	scheme := "https"
+	if s.cfg.AllowInsecureDevMode {
+		scheme = "http"
+	}
+	values := url.Values{}
+	values.Set("token", token)
+	if returnTo != "" {
+		values.Set("returnTo", returnTo)
+	}
+	return scheme + "://" + host + "/_portlyn/route-access?" + values.Encode(), nil
 }
 
 func buildRouteAuthServiceResponse(service domain.Service) routeAuthServiceResponse {

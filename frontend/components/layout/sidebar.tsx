@@ -3,12 +3,16 @@
 import { Badge, Box, NavLink, Stack, Text } from "@mantine/core";
 import {
   IconActivity,
+  IconBolt,
   IconFileText,
   IconGlobe,
   IconGridDots,
+  IconKey,
   IconLock,
   IconSettings,
-  IconUsers
+  IconShieldCheck,
+  IconUsers,
+  IconWebhook
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -26,6 +30,7 @@ const items: Array<{
   { label: "Services", href: "/services", icon: IconGridDots, roles: ["admin", "viewer"] },
   { label: "Domains", href: "/domains", icon: IconGlobe, roles: ["admin"] },
   { label: "Nodes", href: "/nodes", icon: IconActivity, roles: ["admin"] },
+  { label: "Tunnel", href: "/tunnel", icon: IconBolt, roles: ["admin"] },
   { label: "Certificates", href: "/certificates", icon: IconLock, roles: ["admin"] },
   { label: "DNS Providers", href: "/dns-providers", icon: IconGlobe, roles: ["admin"] },
   { label: "System", href: "/system", icon: IconActivity, roles: ["admin"] },
@@ -33,6 +38,9 @@ const items: Array<{
   { label: "Service Groups", href: "/service-groups", icon: IconGridDots, roles: ["admin"] },
   { label: "Users", href: "/users", icon: IconUsers, roles: ["admin"] },
   { label: "Audit Logs", href: "/audit-logs", icon: IconFileText, roles: ["admin"] },
+  { label: "Audit Webhooks", href: "/audit-webhooks", icon: IconWebhook, roles: ["admin"] },
+  { label: "Access Tester", href: "/access-tester", icon: IconShieldCheck, roles: ["admin"] },
+  { label: "Passkeys", href: "/passkeys", icon: IconKey, roles: ["admin", "viewer"] },
   { label: "Settings", href: "/settings", icon: IconSettings, roles: ["admin"] }
 ];
 

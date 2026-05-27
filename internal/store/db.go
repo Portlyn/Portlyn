@@ -96,5 +96,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.StoredTLSCertificate{},
 		&domain.DistributedKV{},
 		&domain.DistributedLock{},
+		&domain.AuditWebhook{},
+		&domain.UserCredential{},
+		&domain.ServiceExposureReport{},
 	)
 }

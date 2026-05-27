@@ -35,6 +35,15 @@ type SessionBridgeClaims struct {
 	jwt.RegisteredClaims
 }
 
+type RouteAccessBridgeClaims struct {
+	ServiceID uint   `json:"service_id"`
+	Host      string `json:"host"`
+	Method    string `json:"method"`
+	Email     string `json:"email,omitempty"`
+	ReturnTo  string `json:"return_to,omitempty"`
+	jwt.RegisteredClaims
+}
+
 type RouteEmailCodeResult struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	Code      string    `json:"code,omitempty"`
@@ -342,6 +351,53 @@ func (s *Service) IssueSessionBridgeToken(accessToken, host string) (string, err
 		},
 	})
 	return token.SignedString(s.sessionBridgeSecret)
+}
+
+func (s *Service) IssueRouteAccessBridgeToken(serviceID uint, host, method, email, returnTo string) (string, error) {
+	host = normalizeBridgeHost(host)
+	if serviceID == 0 || host == "" {
+		return "", ErrInvalidToken
+	}
+	now := time.Now().UTC()
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, RouteAccessBridgeClaims{
+		ServiceID: serviceID,
+		Host:      host,
+		Method:    strings.TrimSpace(method),
+		Email:     strings.ToLower(strings.TrimSpace(email)),
+		ReturnTo:  sanitizeReturnTo(returnTo),
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    s.issuer,
+			Subject:   fmt.Sprintf("route_bridge:%d", serviceID),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(2 * time.Minute)),
+		},
+	})
+	return token.SignedString(s.sessionBridgeSecret)
+}
+
+func (s *Service) ParseRouteAccessBridgeToken(tokenString string) (*RouteAccessBridgeClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &RouteAccessBridgeClaims{}, func(token *jwt.Token) (any, error) {
+		if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+			return nil, fmt.Errorf("unexpected signing method: %s", token.Method.Alg())
+		}
+		return s.sessionBridgeSecret, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	claims, ok := token.Claims.(*RouteAccessBridgeClaims)
+	if !ok || !token.Valid {
+		return nil, ErrInvalidToken
+	}
+	return claims, nil
+}
+
+func normalizeBridgeHost(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if idx := strings.Index(host, ":"); idx >= 0 {
+		return host[:idx]
+	}
+	return host
 }
 
 func (s *Service) ParseSessionBridgeToken(tokenString string) (*SessionBridgeClaims, error) {

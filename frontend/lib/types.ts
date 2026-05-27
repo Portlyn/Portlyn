@@ -119,6 +119,8 @@ export interface DNSProvider {
   updated_at: string;
 }
 
+export type TunnelStatus = "inactive" | "provisioned" | "connected" | "stale";
+
 export interface Node {
   id: number;
   name: string;
@@ -139,8 +141,95 @@ export interface Node {
   load: number;
   bandwidth_in_kbps: number;
   bandwidth_out_kbps: number;
+  wg_public_key?: string;
+  wg_endpoint?: string;
+  wg_allowed_ips?: string;
+  wg_tunnel_ip?: string;
+  wg_last_handshake?: string | null;
+  wg_rx_bytes?: number;
+  wg_tx_bytes?: number;
+  tunnel_status?: TunnelStatus | string;
   created_at: string;
   updated_at: string;
+}
+
+export interface TunnelSettings {
+  enabled: boolean;
+  configured: boolean;
+  server_public_key?: string;
+  server_endpoint?: string;
+  listen_port?: number;
+  cidr?: string;
+  server_tunnel_ip?: string;
+  config_path?: string;
+  configured_peer_count: number;
+  connected_peer_count: number;
+}
+
+export interface ExposureReport {
+  id: number;
+  service_id: number;
+  score: number;
+  checked_at: string;
+  dns_resolvable: boolean;
+  https_valid: boolean;
+  https_expires_in_days: number;
+  http_to_https_redirect: boolean;
+  hsts_present: boolean;
+  csp_present: boolean;
+  x_frame_options: boolean;
+  auth_enforced: boolean;
+  geoip_configured: boolean;
+  findings: string[];
+  last_error: string;
+}
+
+export interface AuditWebhook {
+  id: number;
+  name: string;
+  url: string;
+  format: "generic" | "slack" | "discord" | "ntfy";
+  secret_preview?: string;
+  event_types: string[];
+  active: boolean;
+  last_fired_at: string | null;
+  last_status: number;
+  last_error: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserCredential {
+  id: number;
+  user_id: number;
+  credential_id: string;
+  attestation_type: string;
+  aaguid: string;
+  sign_count: number;
+  transports: string[];
+  label: string;
+  user_verified: boolean;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface MagicLinkResponse {
+  url: string;
+  token: string;
+  expires_at: string;
+}
+
+export interface TunnelBootstrapResponse {
+  node_id: number;
+  public_key: string;
+  private_key: string;
+  address: string;
+  server_public_key: string;
+  server_endpoint: string;
+  allowed_ips: string[];
+  persistent_keepalive: number;
+  config_text: string;
+  issued_at: string;
 }
 
 export interface ServiceGroup {
@@ -182,10 +271,14 @@ export interface Service {
   risk_reasons?: string[];
   ip_allowlist: string[];
   ip_blocklist: string[];
+  allowed_countries: string[];
+  blocked_countries: string[];
   access_windows: AccessWindow[];
   service_groups?: ServiceGroup[];
   inherited_from_group?: { id: number; name: string } | null;
   service_overrides_group?: boolean;
+  node_id?: number | null;
+  node?: Node | null;
   last_deployed_at: string | null;
   deployment_revision: number;
   service_status?: string;
@@ -198,10 +291,16 @@ export interface Service {
 export interface AuditLog {
   id: number;
   timestamp: string;
+  request_id?: string;
   user_id: number | null;
   action: string;
   resource_type: string;
   resource_id: number | null;
+  method?: string;
+  host?: string;
+  path?: string;
+  status_code?: number;
+  latency_ms?: number;
   remote_addr?: string;
   user_agent?: string;
   details: string;
@@ -499,7 +598,10 @@ export interface ServicePayload {
   service_group_ids: number[];
   ip_allowlist: string[];
   ip_blocklist: string[];
+  allowed_countries: string[];
+  blocked_countries: string[];
   access_windows: AccessWindow[];
+  node_id?: number | null;
 }
 
 export interface ServiceGroupPayload {

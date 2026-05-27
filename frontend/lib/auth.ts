@@ -155,9 +155,10 @@ export async function getRouteAuthService(serviceId: string | number) {
   return apiFetch<RouteAuthService>(`/api/v1/route-auth/service/${serviceId}`, undefined, { auth: false });
 }
 
-export async function verifyRoutePIN(serviceId: number, pin: string) {
-  return apiFetch<{ ok: boolean }>(
-    "/api/v1/route-auth/pin",
+export async function verifyRoutePIN(serviceId: number, pin: string, returnTo?: string) {
+  const query = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "";
+  return apiFetch<{ ok: boolean; bridge_url?: string }>(
+    `/api/v1/route-auth/pin${query}`,
     {
       method: "POST",
       body: JSON.stringify({ service_id: serviceId, pin })
@@ -177,9 +178,10 @@ export async function requestRouteEmailCode(serviceId: number, email: string) {
   );
 }
 
-export async function verifyRouteEmailCode(serviceId: number, email: string, code: string) {
-  return apiFetch<{ ok: boolean }>(
-    "/api/v1/route-auth/verify-email-code",
+export async function verifyRouteEmailCode(serviceId: number, email: string, code: string, returnTo?: string) {
+  const query = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "";
+  return apiFetch<{ ok: boolean; bridge_url?: string }>(
+    `/api/v1/route-auth/verify-email-code${query}`,
     {
       method: "POST",
       body: JSON.stringify({ service_id: serviceId, email, code })

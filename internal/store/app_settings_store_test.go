@@ -49,7 +49,7 @@ func TestAppSettingsStoreEncryptsAndDecryptsSecrets(t *testing.T) {
 	if err := db.WithContext(context.Background()).First(&raw, 1).Error; err != nil {
 		t.Fatalf("load raw app settings: %v", err)
 	}
-	if !secureconfig.IsEncryptedValueV1(raw.OIDCClientSecret) || !secureconfig.IsEncryptedValueV1(raw.SMTPPassword) {
+	if !secureconfig.IsEncryptedValue(raw.OIDCClientSecret) || !secureconfig.IsEncryptedValue(raw.SMTPPassword) {
 		t.Fatal("expected secrets to be encrypted at rest")
 	}
 
@@ -106,7 +106,9 @@ func TestAppSettingsStoreMigratesLegacyPlaintextSecrets(t *testing.T) {
 	if err := db.WithContext(context.Background()).First(&raw, 1).Error; err != nil {
 		t.Fatalf("load migrated settings: %v", err)
 	}
-	if !strings.HasPrefix(raw.OIDCClientSecret, secureconfig.EncryptedPrefixV1) || !strings.HasPrefix(raw.SMTPPassword, secureconfig.EncryptedPrefixV1) {
+	if !secureconfig.IsEncryptedValue(raw.OIDCClientSecret) || !secureconfig.IsEncryptedValue(raw.SMTPPassword) {
 		t.Fatal("expected migrated secrets to be stored with encryption prefix")
 	}
 }
+
+var _ = strings.HasPrefix

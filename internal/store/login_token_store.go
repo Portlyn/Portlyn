@@ -77,6 +77,22 @@ func (s *LoginTokenStore) MarkUsed(ctx context.Context, id uint, usedAt time.Tim
 	return s.db.WithContext(ctx).Model(&domain.LoginToken{}).Where("id = ?", id).Update("used_at", usedAt).Error
 }
 
+func (s *LoginTokenStore) GetMagicLink(ctx context.Context, serviceID uint, token string) (*domain.LoginToken, error) {
+	var item domain.LoginToken
+	hashed := hashLoginToken(strings.TrimSpace(token))
+	err := s.db.WithContext(ctx).
+		Where("scope = ? AND service_id = ? AND token = ?", domain.LoginTokenScopeMagicLink, serviceID, hashed).
+		Order("id desc").
+		First(&item).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func hashLoginToken(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])

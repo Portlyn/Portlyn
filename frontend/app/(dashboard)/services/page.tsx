@@ -9,8 +9,8 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { useAuth } from "@/components/providers";
-import { ServiceForm } from "@/components/services/service-form";
 import { ServiceTable } from "@/components/services/service-table";
+import { ServiceWizard } from "@/components/services/service-wizard";
 import { accessMethodLabel, buildServiceRequestPayload, legacyAuthPolicyFromAccessMode } from "@/lib/access-control";
 import { apiFetch, ApiError } from "@/lib/api";
 import { serviceHostname } from "@/lib/service-host";
@@ -210,12 +210,12 @@ export default function ServicesPage() {
       )}
 
       <Drawer opened={opened} onClose={close} title="Create service" position="right" size="xl">
-        <ServiceForm
+        <ServiceWizard
           domains={domains}
           groups={groups}
           serviceGroups={serviceGroups}
-          submitLabel="Create Service"
           onSubmit={handleCreate}
+          onCancel={close}
           isLoading={isSaving}
         />
       </Drawer>

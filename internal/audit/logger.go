@@ -70,7 +70,8 @@ type HTTPAccessEvent struct {
 }
 
 type Logger struct {
-	sink AuditSink
+	sink       AuditSink
+	dispatcher *WebhookDispatcher
 }
 
 type AuditBatchWriter interface {
@@ -208,6 +209,10 @@ func NewLogger(sink AuditSink) *Logger {
 	return &Logger{sink: sink}
 }
 
+func (l *Logger) SetWebhookDispatcher(dispatcher *WebhookDispatcher) {
+	l.dispatcher = dispatcher
+}
+
 func (l *Logger) Log(ctx context.Context, userID *uint, action, resourceType string, resourceID *uint, details any) error {
 	return l.write(ctx, AuditEvent{
 		Timestamp:    time.Now().UTC(),
@@ -283,6 +288,10 @@ func (l *Logger) LogHTTPAccess(ctx context.Context, event HTTPAccessEvent) error
 }
 
 func (l *Logger) write(ctx context.Context, ev AuditEvent) error {
+	if l.dispatcher != nil {
+		details, _ := ev.Details.(map[string]any)
+		l.dispatcher.Dispatch(ctx, *toAuditLog(ev), details)
+	}
 	return l.sink.WriteEvent(ctx, ev)
 }
 
