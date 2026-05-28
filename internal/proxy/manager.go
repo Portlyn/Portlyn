@@ -484,7 +484,7 @@ func (m *Manager) allowAdminHost(host string, r *http.Request) bool {
 }
 
 func (m *Manager) handleAdminHost(w http.ResponseWriter, r *http.Request, path string) bool {
-	if strings.HasPrefix(path, "/api/") || path == "/livez" || path == "/readyz" || path == "/healthz" || path == "/metrics" {
+	if strings.HasPrefix(path, "/api/") || path == "/livez" || path == "/readyz" || path == "/healthz" || path == "/metrics" || path == "/install.sh" {
 		if m.adminAPI != nil {
 			m.adminAPI.ServeHTTP(w, r)
 			return true
