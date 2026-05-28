@@ -287,7 +287,6 @@ export default function NodesPage() {
   return (
     <Stack gap="lg">
       <PageHeader
-        description="Agents installed on remote machines that expose their local services over the WireGuard tunnel."
         action={canManage ? <Button onClick={() => { setSelectedNode(null); openInstall(); }}>Install Node</Button> : undefined}
       />
       {canManage ? (

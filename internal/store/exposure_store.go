@@ -41,6 +41,10 @@ func (s *ExposureReportStore) List(ctx context.Context) ([]domain.ServiceExposur
 	return items, err
 }
 
+func (s *ExposureReportStore) DeleteByServiceID(ctx context.Context, serviceID uint) error {
+	return s.db.WithContext(ctx).Where("service_id = ?", serviceID).Delete(&domain.ServiceExposureReport{}).Error
+}
+
 func (s *ExposureReportStore) GetByServiceID(ctx context.Context, serviceID uint) (*domain.ServiceExposureReport, error) {
 	var item domain.ServiceExposureReport
 	err := s.db.WithContext(ctx).Where("service_id = ?", serviceID).First(&item).Error

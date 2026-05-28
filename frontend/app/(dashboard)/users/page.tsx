@@ -119,7 +119,6 @@ export default function UsersPage() {
     <AdminOnly>
       <Stack gap="lg">
         <PageHeader
-          description="Manage who can sign in and what role they hold."
           action={<Button onClick={() => { setSelectedUser(null); open(); }}>New User</Button>}
         >
           <Group grow>

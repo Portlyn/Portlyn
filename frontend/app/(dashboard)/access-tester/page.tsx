@@ -17,7 +17,6 @@ import { useEffect, useState } from "react";
 
 import { AdminOnly } from "@/components/admin-only";
 import { ErrorState } from "@/components/error-state";
-import { PageHeader } from "@/components/layout/page-header";
 import { apiFetch, ApiError } from "@/lib/api";
 import type { Service } from "@/lib/types";
 
@@ -101,8 +100,6 @@ export default function AccessTesterPage() {
   return (
     <AdminOnly>
       <Stack gap="lg">
-        <PageHeader description="Simulate a request against a service and see, step by step, whether it would be allowed." />
-
         {loadError ? <ErrorState title="Failed to load services" message={loadError} onRetry={() => void loadServices()} /> : null}
 
         <Paper withBorder radius="md" p="lg">

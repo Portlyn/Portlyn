@@ -7,7 +7,6 @@ import { AdminOnly } from "@/components/admin-only";
 import { AuditLogTable } from "@/components/audit/audit-log-table";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
-import { PageHeader } from "@/components/layout/page-header";
 import { apiFetch, ApiError } from "@/lib/api";
 import type { AuditLogListResponse } from "@/lib/types";
 
@@ -67,7 +66,6 @@ export default function AuditLogsPage() {
   return (
     <AdminOnly>
       <Stack gap="lg">
-        <PageHeader description="Tamper-evident, hash-chained record of every administrative and access event." />
         <Group grow>
           <TextInput placeholder="User ID" value={userId} onChange={(event) => setUserId(event.currentTarget.value)} />
           <Select

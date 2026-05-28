@@ -142,7 +142,6 @@ export default function ServiceGroupsPage() {
     <AdminOnly>
       <Stack gap="lg">
         <PageHeader
-          description="Bundle services to apply a shared access policy across all of them."
           action={<Button onClick={() => beginEdit()}>New service group</Button>}
         />
 

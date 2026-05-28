@@ -92,7 +92,6 @@ export default function GroupsPage() {
     <AdminOnly>
       <Stack gap="lg">
         <PageHeader
-          description="User groups for restricting service access to specific members."
           action={<Button onClick={() => beginEdit()}>New group</Button>}
         />
 

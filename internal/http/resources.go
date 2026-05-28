@@ -1054,6 +1054,9 @@ func (s *Server) handleDeleteService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		s.internalError(w, err)
 		return
 	}
+	if s.exposureReports != nil {
+		_ = s.exposureReports.DeleteByServiceID(r.Context(), id)
+	}
 	_ = s.audit.Log(r.Context(), s.currentUserID(r), "delete", "service", &id, map[string]any{"id": id})
 	w.WriteHeader(stdhttp.StatusNoContent)
 }

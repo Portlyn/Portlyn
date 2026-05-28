@@ -143,15 +143,12 @@ export default function ServicesPage() {
     <Stack gap="lg">
       {canManage ? (
         <PageHeader
-          description="Map hostnames to upstream services and control who can reach them."
           action={<Button onClick={open} disabled={domains.length === 0 && !isLoading}>New Service</Button>}
         >
           {filters}
         </PageHeader>
       ) : (
-        <PageHeader description="Only applications you can access are listed here.">
-          {filters}
-        </PageHeader>
+        <PageHeader>{filters}</PageHeader>
       )}
 
       {error ? <ErrorState title="Failed to load services" message={error} onRetry={() => void loadData()} /> : null}

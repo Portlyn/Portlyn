@@ -93,7 +93,6 @@ export default function DomainsPage() {
   return (
     <Stack gap="lg">
       <PageHeader
-        description="Domains and subdomains Portlyn can issue certificates for and route."
         action={canManage ? <Button onClick={() => { setSelectedDomain(null); open(); }}>New Domain</Button> : undefined}
       >
         <TextInput placeholder="Search domains" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />

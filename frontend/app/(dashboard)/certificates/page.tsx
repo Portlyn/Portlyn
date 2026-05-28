@@ -156,7 +156,6 @@ export default function CertificatesPage() {
   return (
     <Stack gap="lg">
       <PageHeader
-        description="TLS certificates issued via ACME or imported, with auto-renew status."
         action={canManage ? (
           <Button onClick={() => { setSelectedCertificate(null); open(); }} disabled={domains.length === 0}>
             New Certificate

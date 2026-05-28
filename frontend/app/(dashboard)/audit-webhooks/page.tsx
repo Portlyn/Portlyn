@@ -167,7 +167,6 @@ export default function AuditWebhooksPage() {
     <AdminOnly>
       <Stack gap="lg">
         <PageHeader
-          description="Forward audit events to Slack, Discord, ntfy or any HMAC-signed JSON endpoint."
           action={<Button leftSection={<IconPlus size={14} />} onClick={openCreate}>New webhook</Button>}
         />
 

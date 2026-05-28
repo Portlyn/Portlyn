@@ -64,13 +64,14 @@ export default function ExposureOverviewPage() {
     }
   };
 
-  const sorted = [...reports].sort((a, b) => a.score - b.score);
+  const sorted = reports
+    .filter((report) => services[report.service_id])
+    .sort((a, b) => a.score - b.score);
 
   return (
     <AdminOnly>
       <Stack gap="lg">
         <PageHeader
-          description="Scans each service for DNS, TLS and access risks and scores its public exposure."
           action={
             <Button variant="light" loading={scanningAll} onClick={() => void scanAll()} disabled={Object.keys(services).length === 0}>
               Scan all services

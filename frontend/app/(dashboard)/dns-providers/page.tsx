@@ -119,7 +119,6 @@ export default function DNSProvidersPage() {
   return (
     <Stack gap="lg">
       <PageHeader
-        description="Credentials for DNS-01 ACME challenges and automated record management."
         action={<Button onClick={() => { setSelected(null); open(); }}>New Provider</Button>}
       />
 

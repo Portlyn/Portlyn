@@ -145,7 +145,6 @@ export default function ClientsPage() {
     <AdminOnly>
       <Stack gap="lg">
         <PageHeader
-          description="Roaming devices that join the mesh with the official WireGuard app. Each client reaches the LAN subnets of the nodes you select."
           action={<Button onClick={openDrawer}>Add client</Button>}
         />
 
