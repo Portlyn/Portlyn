@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,6 +35,8 @@ type NetStack struct {
 	stack          *stack.Stack
 	events         chan tun.Event
 	incomingPacket chan *buffer.View
+	closed         chan struct{}
+	closeOnce      sync.Once
 	mtu            int
 }
 
@@ -48,6 +51,7 @@ func CreateNetStack(localAddrs []netip.Addr, mtu int) (tun.Device, *NetStack, er
 		stack:          stack.New(opts),
 		events:         make(chan tun.Event, 10),
 		incomingPacket: make(chan *buffer.View),
+		closed:         make(chan struct{}),
 		mtu:            mtu,
 	}
 	sackEnabled := tcpip.TCPSACKEnabled(true)
@@ -89,8 +93,10 @@ func (n *NetStack) MTU() (int, error) { return n.mtu, nil }
 func (n *NetStack) BatchSize() int    { return 1 }
 
 func (n *NetStack) Read(buf [][]byte, sizes []int, offset int) (int, error) {
-	view, ok := <-n.incomingPacket
-	if !ok {
+	var view *buffer.View
+	select {
+	case view = <-n.incomingPacket:
+	case <-n.closed:
 		return 0, os.ErrClosed
 	}
 	count, err := view.Read(buf[0][offset:])
@@ -123,18 +129,19 @@ func (n *NetStack) WriteNotify() {
 	}
 	view := pkt.ToView()
 	pkt.DecRef()
-	n.incomingPacket <- view
+	select {
+	case n.incomingPacket <- view:
+	case <-n.closed:
+	}
 }
 
 func (n *NetStack) Close() error {
-	n.stack.RemoveNIC(nicID)
-	if n.events != nil {
+	n.closeOnce.Do(func() {
+		close(n.closed)
+		n.stack.RemoveNIC(nicID)
+		n.ep.Close()
 		close(n.events)
-	}
-	n.ep.Close()
-	if n.incomingPacket != nil {
-		close(n.incomingPacket)
-	}
+	})
 	return nil
 }
 
