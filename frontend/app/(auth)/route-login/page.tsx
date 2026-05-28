@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Center, Divider, Paper, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Button, Center, Divider, Group, Image, Paper, PasswordInput, PinInput, Stack, Text, TextInput, Title } from "@mantine/core";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -138,13 +138,15 @@ function RouteLoginContent() {
     }
   };
 
-  const handleVerifyEmailCode = async () => {
+  const handleVerifyEmailCode = async (codeOverride?: string) => {
     if (!service) return;
+    const verifyCode = (codeOverride ?? code).trim();
+    if (!verifyCode) return;
     setIsSubmitting(true);
     setError(null);
     try {
       const target = buildReturnTarget(service, returnTo);
-      const response = await verifyRouteEmailCode(service.id, email, code, target);
+      const response = await verifyRouteEmailCode(service.id, email, verifyCode, target);
       window.location.assign(response.bridge_url || target);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to verify email code.");
@@ -169,22 +171,24 @@ function RouteLoginContent() {
 
   return (
     <Center mih="100vh" p="md" style={authShellStyle(ui)}>
-      <Paper withBorder radius="md" p="xl" maw={760} w="100%" style={authCardStyle(ui)}>
+      <Paper withBorder radius="lg" p={36} maw={460} w="100%" style={authCardStyle(ui)}>
         <Stack gap="lg">
-          <div>
-            {ui.logo_url ? <img src={ui.logo_url} alt={ui.brand_name} style={{ maxHeight: 36, maxWidth: 180, objectFit: "contain", marginBottom: 12, borderRadius: 12 }} /> : null}
-            <Text fw={700} c={ui.text_color}>{ui.brand_name}</Text>
-            <Title order={2} c={ui.text_color}>{ui.route_login_title}</Title>
-            {ui.route_login_subtitle ? <Text mt="xs" size="sm" c={ui.muted_text_color}>{ui.route_login_subtitle}</Text> : null}
-          </div>
+          <Stack gap={6} align="center">
+            <Image src={ui.logo_url || "/logo.png"} alt={ui.brand_name} w={64} h={64} radius="lg" fit="contain" />
+            <Title order={3} c={ui.text_color} ta="center" fw={600}>
+              {service ? service.name : ui.route_login_title}
+            </Title>
+            {service ? (
+              <Text size="sm" c={ui.muted_text_color} ta="center">{service.domain_name}{service.path}</Text>
+            ) : null}
+          </Stack>
 
-          {isLoading || isBridging ? <Text c={ui.muted_text_color}>{isBridging ? "Continuing to protected route..." : "Loading route access details..."}</Text> : null}
-          {service ? (
-            <Stack gap="xs">
-              <Text fw={600} c={ui.text_color}>{service.name}</Text>
-              <Text size="sm" c={ui.muted_text_color}>{service.domain_name}{service.path}</Text>
-              {service.access_message ? <Alert color="gray" variant="light" styles={authInfoAlertStyle(ui)}>{service.access_message}</Alert> : null}
-            </Stack>
+          {service?.access_message ? (
+            <Alert color="gray" variant="light" styles={authInfoAlertStyle(ui)}>{service.access_message}</Alert>
+          ) : null}
+
+          {isLoading || isBridging ? (
+            <Text c={ui.muted_text_color} ta="center" size="sm">{isBridging ? "Continuing to protected route..." : "Loading route access details..."}</Text>
           ) : null}
 
           {!isLoading && service?.access_method === "oidc_only" ? (
@@ -241,8 +245,18 @@ function RouteLoginContent() {
                 </Button>
               ) : (
                 <>
-                  <TextInput label="Code" value={code} onChange={(event) => setCode(event.currentTarget.value)} styles={fields} />
-                  <Button loading={isSubmitting} onClick={handleVerifyEmailCode} disabled={!email || !code} style={buttonStyle(ui)}>
+                  <Text size="sm" c={ui.muted_text_color} ta="center">Enter the code from your email.</Text>
+                  <Group justify="center" my="xs">
+                    <PinInput
+                      length={8}
+                      type="alphanumeric"
+                      oneTimeCode
+                      value={code}
+                      onChange={(value) => setCode(value.toUpperCase())}
+                      onComplete={(value) => { setCode(value.toUpperCase()); void handleVerifyEmailCode(value.toUpperCase()); }}
+                    />
+                  </Group>
+                  <Button loading={isSubmitting} onClick={() => handleVerifyEmailCode()} disabled={!email || !code} style={buttonStyle(ui)}>
                     {ui.route_email_verify_label}
                   </Button>
                 </>
@@ -252,6 +266,10 @@ function RouteLoginContent() {
           ) : null}
 
           {error ? <Alert color="danger" variant="light">{error}</Alert> : null}
+
+          <Text size="xs" c={ui.muted_text_color} ta="center" mt="xs">
+            Secured by {ui.brand_name}
+          </Text>
         </Stack>
       </Paper>
     </Center>

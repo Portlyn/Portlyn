@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Center, Paper, Stack, Text, Title } from "@mantine/core";
+import { Button, Center, Image, Paper, Stack, Text, Title } from "@mantine/core";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
@@ -37,30 +37,27 @@ function RouteForbiddenContent() {
 
   return (
     <Center mih="100vh" p="md" style={authShellStyle(ui)}>
-      <Paper withBorder radius="md" p="xl" maw={760} w="100%" style={authCardStyle(ui)}>
+      <Paper withBorder radius="lg" p={36} maw={460} w="100%" style={authCardStyle(ui)}>
         <Stack gap="lg">
-          <div>
-            {ui.logo_url ? <img src={ui.logo_url} alt={ui.brand_name} style={{ maxHeight: 36, maxWidth: 180, objectFit: "contain", marginBottom: 12, borderRadius: 12 }} /> : null}
-            <Text fw={700} c={ui.text_color}>{ui.brand_name}</Text>
-            <Title order={2} c={ui.text_color}>{ui.forbidden_title}</Title>
-          </div>
+          <Stack gap={6} align="center">
+            <Image src={ui.logo_url || "/logo.png"} alt={ui.brand_name} w={64} h={64} radius="lg" fit="contain" />
+            <Title order={3} c={ui.text_color} ta="center" fw={600}>{ui.forbidden_title}</Title>
+            {service ? (
+              <Text size="sm" c={ui.muted_text_color} ta="center">{service.name} · {service.domain_name}{service.path}</Text>
+            ) : null}
+          </Stack>
 
-          {service ? (
-            <Stack gap="xs">
-              <Text fw={600} c={ui.text_color}>{service.name}</Text>
-              <Text size="sm" c={ui.muted_text_color}>{service.domain_name}{service.path}</Text>
-            </Stack>
-          ) : null}
+          {ui.forbidden_subtitle ? <Text c={ui.muted_text_color} ta="center" size="sm">{ui.forbidden_subtitle}</Text> : null}
 
-          {ui.forbidden_subtitle ? <Text c={ui.muted_text_color}>{ui.forbidden_subtitle}</Text> : null}
-
-          {error ? <Text c="danger">{error}</Text> : null}
+          {error ? <Text c="danger" ta="center" size="sm">{error}</Text> : null}
 
           {returnTo ? (
             <Button component="a" href={returnTo} style={buttonStyle(ui)}>
               {ui.forbidden_retry_label}
             </Button>
           ) : null}
+
+          <Text size="xs" c={ui.muted_text_color} ta="center">Secured by {ui.brand_name}</Text>
         </Stack>
       </Paper>
     </Center>

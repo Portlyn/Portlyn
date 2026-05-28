@@ -6,6 +6,7 @@ import {
   Center,
   Divider,
   Group,
+  Image,
   Loader,
   Paper,
   PasswordInput,
@@ -178,16 +179,13 @@ function LoginContent() {
 
   return (
     <div style={authShellStyle(ui)}>
-      <Paper withBorder radius="md" p="xl" w="100%" maw={520} style={authCardStyle(ui)}>
+      <Paper withBorder radius="lg" p={36} w="100%" maw={460} style={authCardStyle(ui)}>
         <Stack gap="lg">
-          <div>
-            {ui.logo_url ? <img src={ui.logo_url} alt={ui.brand_name} style={{ maxHeight: 36, maxWidth: 180, objectFit: "contain", marginBottom: 12, borderRadius: 12 }} /> : null}
-            <Text fw={700} c={ui.text_color}>
-              {ui.brand_name}
-            </Text>
-            <Title order={2} c={ui.text_color}>{ui.login_title}</Title>
-            {ui.login_subtitle ? <Text mt="xs" size="sm" c={ui.muted_text_color}>{ui.login_subtitle}</Text> : null}
-          </div>
+          <Stack gap={6} align="center">
+            <Image src={ui.logo_url || "/logo.png"} alt={ui.brand_name} w={64} h={64} radius="lg" fit="contain" />
+            <Title order={3} c={ui.text_color} ta="center" fw={600}>{ui.login_title}</Title>
+            {ui.login_subtitle ? <Text size="sm" c={ui.muted_text_color} ta="center">{ui.login_subtitle}</Text> : null}
+          </Stack>
 
           {mfaToken ? (
             <Stack gap="sm">

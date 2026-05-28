@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge } from "@mantine/core";
+import { Badge, Tooltip } from "@mantine/core";
 
 import { accessMethodLabel } from "@/lib/access-control";
 import type { AccessMethod, AccessMode, AuthPolicy } from "@/lib/types";
@@ -46,5 +46,9 @@ export function AccessMethodBadge({ value }: { value: AccessMethod | undefined }
 export function RiskBadge({ value }: { value: string | undefined }) {
   const normalized = (value || "low").toLowerCase();
   const color = normalized === "high" ? "danger" : normalized === "medium" ? "warning" : "success";
-  return <Badge color={color}>{normalized}</Badge>;
+  return (
+    <Tooltip label="Exposure risk based on access mode, method and network rules" withArrow>
+      <Badge color={color}>{normalized} risk</Badge>
+    </Tooltip>
+  );
 }
