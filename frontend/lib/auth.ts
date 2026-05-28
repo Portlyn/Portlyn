@@ -198,3 +198,34 @@ export async function createSessionBridgeToken(host: string) {
     }
   );
 }
+
+export async function beginPasskeyLogin(email: string) {
+  return apiFetch<{ options: unknown; session_id: string; expires_at: string }>(
+    "/api/v1/auth/passkey/begin-login",
+    {
+      method: "POST",
+      body: JSON.stringify({ email })
+    },
+    { auth: false }
+  );
+}
+
+export async function finishPasskeyLogin(sessionId: string, assertion: unknown) {
+  const response = await apiFetch<LoginResponse>(
+    `/api/v1/auth/passkey/finish-login?session_id=${encodeURIComponent(sessionId)}`,
+    {
+      method: "POST",
+      body: JSON.stringify(assertion)
+    },
+    { auth: false }
+  );
+  completeLogin(response);
+  return response;
+}
+
+export async function changeOwnPassword(currentPassword: string, newPassword: string) {
+  return apiFetch<{ ok: boolean }>("/api/v1/me/password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+  });
+}

@@ -2,9 +2,11 @@
 
 import { ActionIcon, Alert, Badge, Button, Card, Group, Loader, Stack, Table, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconKey, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconPlus, IconShieldLock, IconTrash } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 
+import { MfaCard } from "@/components/security/mfa-card";
+import { PasswordCard } from "@/components/security/password-card";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import type { UserCredential } from "@/lib/types";
@@ -80,18 +82,17 @@ export default function PasskeysPage() {
 
   return (
     <Stack gap="lg">
-      <Stack gap={4}>
-        <Title order={2}>
-          <Group gap="xs"><IconKey size={20} /> Passkeys</Group>
-        </Title>
-        <Text c="dimmed" size="sm">
-          Sign in with hardware keys, Touch ID, Windows Hello, or platform authenticators. Passkeys work alongside TOTP — you can keep both.
-        </Text>
-      </Stack>
+      <Title order={2}>
+        <Group gap="xs"><IconShieldLock size={20} /> Security</Group>
+      </Title>
+
+      <PasswordCard />
+
+      <MfaCard />
 
       <Card withBorder>
         <Stack gap="md">
-          <Text fw={600}>Add a new passkey</Text>
+          <Text fw={600}>Add a passkey</Text>
           <TextInput
             label="Label"
             description="Helps you identify this passkey later (e.g. 'YubiKey 5C', 'MacBook Touch ID')."

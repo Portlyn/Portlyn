@@ -4,6 +4,20 @@ import (
 	stdhttp "net/http"
 )
 
+func (s *Server) handleRedeployService(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	id, ok := s.parseIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	deployed, err := s.proxy.ApplyServiceChange(r.Context(), id)
+	if err != nil {
+		s.handleStoreError(w, err)
+		return
+	}
+	_ = s.audit.LogRequest(r.Context(), r, s.currentUserID(r), "redeploy", "service", &id, nil)
+	writeJSON(w, stdhttp.StatusOK, serviceResponse(*deployed, s.evaluateServiceHealth(r.Context(), *deployed)))
+}
+
 func (s *Server) handleListExposureReports(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	if s.exposureReports == nil {
 		writeJSON(w, stdhttp.StatusOK, []any{})

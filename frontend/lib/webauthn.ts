@@ -46,3 +46,32 @@ export function encodeAttestationResponse(credential: PublicKeyCredential): any 
     },
   };
 }
+
+export function decodeRequestOptions(options: any): PublicKeyCredentialRequestOptions {
+  const challenge = base64URLToBuffer(options.publicKey.challenge);
+  const allowCredentials = (options.publicKey.allowCredentials || []).map((cred: any) => ({
+    type: cred.type,
+    id: base64URLToBuffer(cred.id),
+    transports: cred.transports,
+  }));
+  return {
+    ...options.publicKey,
+    challenge,
+    allowCredentials,
+  };
+}
+
+export function encodeAssertionResponse(credential: PublicKeyCredential): any {
+  const assertion = credential.response as AuthenticatorAssertionResponse;
+  return {
+    id: credential.id,
+    rawId: bufferToBase64URL(credential.rawId),
+    type: credential.type,
+    response: {
+      authenticatorData: bufferToBase64URL(assertion.authenticatorData),
+      clientDataJSON: bufferToBase64URL(assertion.clientDataJSON),
+      signature: bufferToBase64URL(assertion.signature),
+      userHandle: assertion.userHandle ? bufferToBase64URL(assertion.userHandle) : null,
+    },
+  };
+}

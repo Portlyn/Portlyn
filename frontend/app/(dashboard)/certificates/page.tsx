@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Badge, Button, Card, Divider, Drawer, Group, Paper, Select, Skeleton, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Badge, Button, Card, Divider, Drawer, Group, Modal, Paper, Select, Skeleton, Stack, Text, Textarea, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useMemo, useState } from "react";
@@ -30,6 +30,10 @@ export default function CertificatesPage() {
   const [isOperating, setIsOperating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [opened, { open, close }] = useDisclosure(false);
+  const [importTarget, setImportTarget] = useState<Certificate | null>(null);
+  const [importCertPem, setImportCertPem] = useState("");
+  const [importKeyPem, setImportKeyPem] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
   const { user } = useAuth();
   const canManage = user?.role === "admin";
   const certificateSans: NonNullable<Certificate["sans"]> = inspectedCertificate?.sans || [];
@@ -110,6 +114,26 @@ export default function CertificatesPage() {
     }
   };
 
+  const submitImport = async () => {
+    if (!importTarget) return;
+    setIsImporting(true);
+    try {
+      await apiFetch<Certificate>(`/api/v1/certificates/${importTarget.id}/import-pem`, {
+        method: "POST",
+        body: JSON.stringify({ certificate_pem: importCertPem, private_key_pem: importKeyPem })
+      });
+      notifications.show({ color: "success", message: "Certificate imported" });
+      setImportTarget(null);
+      setImportCertPem("");
+      setImportKeyPem("");
+      await loadData();
+    } catch (err) {
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Import failed." });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const runOperation = async (certificate: Certificate, action: "retry" | "renew" | "sync-status") => {
     setIsOperating(true);
     try {
@@ -177,6 +201,7 @@ export default function CertificatesPage() {
             onRetry={(certificate) => void runOperation(certificate, "retry")}
             onRenew={(certificate) => void runOperation(certificate, "renew")}
             onSync={(certificate) => void runOperation(certificate, "sync-status")}
+            onImport={(certificate) => { setImportTarget(certificate); setImportCertPem(""); setImportKeyPem(""); }}
           />
         </Paper>
       )}
@@ -265,6 +290,22 @@ export default function CertificatesPage() {
       </Drawer>
 
       <ConfirmDialog isOpen={Boolean(certificateToDelete)} onClose={() => setCertificateToDelete(null)} onConfirm={handleDelete} title="Delete certificate?" description={`This removes the certificate record for ${certificateToDelete?.primary_domain || certificateToDelete?.domain?.name || "the selected domain"}.`} isLoading={isDeleting || isOperating} />
+
+      <Modal opened={Boolean(importTarget)} onClose={() => setImportTarget(null)} title={`Import PEM — ${importTarget?.primary_domain || ""}`} size="lg">
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Paste a full-chain certificate and its private key in PEM format. This replaces the stored certificate material for this record and skips ACME.
+          </Text>
+          <Textarea label="Certificate PEM (full chain)" autosize minRows={6} maxRows={12} value={importCertPem} onChange={(e) => setImportCertPem(e.currentTarget.value)} placeholder="-----BEGIN CERTIFICATE-----" />
+          <Textarea label="Private key PEM" autosize minRows={4} maxRows={10} value={importKeyPem} onChange={(e) => setImportKeyPem(e.currentTarget.value)} placeholder="-----BEGIN PRIVATE KEY-----" />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setImportTarget(null)}>Cancel</Button>
+            <Button onClick={() => void submitImport()} loading={isImporting} disabled={!importCertPem.trim() || !importKeyPem.trim()}>
+              Import
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

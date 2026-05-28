@@ -179,6 +179,29 @@ func (s *Server) handleCompleteAccountSetup(w stdhttp.ResponseWriter, r *stdhttp
 	writeJSON(w, stdhttp.StatusOK, updated)
 }
 
+func (s *Server) handleChangeOwnPassword(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, stdhttp.StatusUnauthorized, "unauthorized", "missing auth context")
+		return
+	}
+	var req changePasswordRequest
+	if !s.decodeAndValidate(w, r, &req) {
+		return
+	}
+	if err := s.auth.ChangeOwnPassword(r.Context(), user.ID, req.CurrentPassword, req.NewPassword); err != nil {
+		switch {
+		case errors.Is(err, auth.ErrInvalidCredentials):
+			writeError(w, stdhttp.StatusBadRequest, "invalid_current_password", "current password is incorrect")
+		default:
+			s.internalError(w, err)
+		}
+		return
+	}
+	_ = s.audit.LogRequest(r.Context(), r, &user.ID, "password_changed", "user", &user.ID, nil)
+	writeJSON(w, stdhttp.StatusOK, map[string]any{"ok": true})
+}
+
 func (s *Server) handleDeleteUser(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	user, ok := s.loadUser(w, r)
 	if !ok {

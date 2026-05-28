@@ -93,8 +93,8 @@ func (d *WebhookDispatcher) fire(hook domain.AuditWebhook, payload webhookPayloa
 	}
 	req.Header.Set("Content-Type", contentTypeFor(hook.Format))
 	req.Header.Set("User-Agent", "portlyn-webhook/1")
-	if strings.TrimSpace(hook.SecretHashed) != "" {
-		sig := signBody(hook.SecretHashed, body)
+	if strings.TrimSpace(hook.SecretEncrypted) != "" {
+		sig := signBody(hook.SecretEncrypted, body)
 		req.Header.Set("X-Portlyn-Signature", sig)
 	}
 	resp, err := d.client.Do(req)
@@ -108,6 +108,40 @@ func (d *WebhookDispatcher) fire(hook domain.AuditWebhook, payload webhookPayloa
 		return
 	}
 	d.recordResult(hook, resp.StatusCode, "")
+}
+
+func (d *WebhookDispatcher) DeliverTest(hook domain.AuditWebhook) (int, error) {
+	payload := webhookPayload{
+		Event:        "webhook_test",
+		Action:       "webhook_test",
+		ResourceType: "audit_webhook",
+		Timestamp:    time.Now().UTC(),
+		Details:      map[string]any{"message": "This is a Portlyn webhook test delivery."},
+	}
+	body, err := renderWebhookBody(hook.Format, payload)
+	if err != nil {
+		return 0, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, hook.URL, bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Content-Type", contentTypeFor(hook.Format))
+	req.Header.Set("User-Agent", "portlyn-webhook/1")
+	if strings.TrimSpace(hook.SecretEncrypted) != "" {
+		req.Header.Set("X-Portlyn-Signature", signBody(hook.SecretEncrypted, body))
+	}
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return resp.StatusCode, fmt.Errorf("upstream returned %d", resp.StatusCode)
+	}
+	return resp.StatusCode, nil
 }
 
 func (d *WebhookDispatcher) recordResult(hook domain.AuditWebhook, status int, errMessage string) {

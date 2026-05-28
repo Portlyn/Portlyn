@@ -51,6 +51,37 @@ type Service struct {
 	distributedRateLimiter  rate.RateLimiter
 	distributedAuthCache    AuthCache
 	metrics                 *observability.Metrics
+	passkeyChecker          func(ctx context.Context, userID uint) bool
+}
+
+func (s *Service) SetPasskeyChecker(fn func(ctx context.Context, userID uint) bool) {
+	s.passkeyChecker = fn
+}
+
+func (s *Service) userHasPasskey(ctx context.Context, userID uint) bool {
+	if s.passkeyChecker == nil {
+		return false
+	}
+	return s.passkeyChecker(ctx, userID)
+}
+
+func (s *Service) UserByEmail(ctx context.Context, email string) (*domain.User, error) {
+	return s.users.GetByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
+}
+
+func (s *Service) CompletePasskeyLogin(ctx context.Context, userID uint, meta RequestMetadata) (*LoginResult, error) {
+	user, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !user.Active {
+		return nil, ErrInactiveUser
+	}
+	result, err := s.completeSuccessfulLogin(ctx, user, meta)
+	if err == nil {
+		s.observeAuth("passkey", "success")
+	}
+	return result, err
 }
 
 type cachedAuthResult struct {
@@ -549,6 +580,30 @@ func (s *Service) CompleteAccountSetup(ctx context.Context, userID uint, email, 
 	}
 	s.InvalidateUser(user.ID)
 	return user, nil
+}
+
+func (s *Service) ChangeOwnPassword(ctx context.Context, userID uint, currentPassword, newPassword string) error {
+	user, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user.AuthProvider != "" && user.AuthProvider != domain.AuthProviderLocal && user.PasswordHash == "" {
+		return ErrInvalidCredentials
+	}
+	if err := CheckPassword(user.PasswordHash, currentPassword); err != nil {
+		return ErrInvalidCredentials
+	}
+	hash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	user.PasswordHash = hash
+	user.MustChangePassword = false
+	if err := s.users.Update(ctx, user); err != nil {
+		return err
+	}
+	s.InvalidateUser(user.ID)
+	return nil
 }
 
 func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity, authenticator *OIDCAuthenticator) (*domain.User, error) {

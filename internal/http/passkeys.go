@@ -92,3 +92,57 @@ func (s *Server) handleDeletePasskey(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	_ = s.audit.LogRequest(r.Context(), r, &user.ID, "passkey_deleted", "user_credential", &id, nil)
 	w.WriteHeader(stdhttp.StatusNoContent)
 }
+
+type beginPasskeyLoginRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+func (s *Server) handleBeginPasskeyLogin(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if s.webauthn == nil {
+		writeError(w, stdhttp.StatusServiceUnavailable, "webauthn_unavailable", "")
+		return
+	}
+	var req beginPasskeyLoginRequest
+	if !s.decodeAndValidate(w, r, &req) {
+		return
+	}
+	user, err := s.auth.UserByEmail(r.Context(), req.Email)
+	if err != nil {
+		writeError(w, stdhttp.StatusUnauthorized, "no_passkey", "no passkey is registered for this account")
+		return
+	}
+	result, err := s.webauthn.BeginLogin(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, stdhttp.StatusUnauthorized, "no_passkey", "no passkey is registered for this account")
+		return
+	}
+	writeJSON(w, stdhttp.StatusOK, result)
+}
+
+type finishPasskeyLoginRequest struct {
+	SessionID string `json:"session_id"`
+}
+
+func (s *Server) handleFinishPasskeyLogin(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if s.webauthn == nil {
+		writeError(w, stdhttp.StatusServiceUnavailable, "webauthn_unavailable", "")
+		return
+	}
+	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
+	if sessionID == "" {
+		writeError(w, stdhttp.StatusBadRequest, "missing_session", "session_id query parameter required")
+		return
+	}
+	userID, err := s.webauthn.FinishLogin(r.Context(), sessionID, r)
+	if err != nil {
+		writeError(w, stdhttp.StatusUnauthorized, "passkey_failed", err.Error())
+		return
+	}
+	result, err := s.auth.CompletePasskeyLogin(r.Context(), userID, s.requestMeta(r))
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	_ = s.audit.LogRequest(r.Context(), r, &userID, "login_succeeded", "auth", nil, map[string]any{"method": "passkey"})
+	s.writeLoginResult(w, r, result)
+}

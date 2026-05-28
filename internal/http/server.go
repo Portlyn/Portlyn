@@ -20,10 +20,12 @@ import (
 	"portlyn/internal/auth"
 	"portlyn/internal/config"
 	"portlyn/internal/domain"
+	"portlyn/internal/geoip"
 	"portlyn/internal/observability"
 	"portlyn/internal/proxy"
 	"portlyn/internal/rate"
 	"portlyn/internal/scanner"
+	"portlyn/internal/security"
 	"portlyn/internal/store"
 	"portlyn/internal/tunnel"
 )
@@ -57,9 +59,23 @@ type Server struct {
 	exposureScanner  *scanner.Scanner
 	tunnel           *tunnel.Manager
 	webauthn         *auth.WebAuthnService
+	geoip            *geoip.Lookup
+	crowdsec         *security.CrowdSec
+	crowdsecCtx      context.Context
+	webhookDispatch  *audit.WebhookDispatcher
 	nodeRateLimiter  rate.RateLimiter
 	bootWarnings     []StatusCondition
 	breakGlass       breakGlassState
+}
+
+func (s *Server) SetNetworkSecurity(ctx context.Context, lookup *geoip.Lookup, crowdsec *security.CrowdSec) {
+	s.crowdsecCtx = ctx
+	s.geoip = lookup
+	s.crowdsec = crowdsec
+}
+
+func (s *Server) SetWebhookDispatcher(dispatcher *audit.WebhookDispatcher) {
+	s.webhookDispatch = dispatcher
 }
 
 func NewServer(
@@ -194,6 +210,8 @@ func (s *Server) Router() stdhttp.Handler {
 		r.Post("/auth/request-otp", s.handleRequestOTP)
 		r.Post("/auth/verify-otp", s.handleVerifyOTP)
 		r.Post("/auth/verify-mfa", s.handleVerifyMFA)
+		r.Post("/auth/passkey/begin-login", s.handleBeginPasskeyLogin)
+		r.Post("/auth/passkey/finish-login", s.handleFinishPasskeyLogin)
 		r.Post("/auth/refresh", s.handleRefreshSession)
 		r.Post("/auth/logout", s.handleLogoutSession)
 		r.Get("/auth/oidc/start", s.handleOIDCStart)
@@ -210,6 +228,7 @@ func (s *Server) Router() stdhttp.Handler {
 			r.Use(s.auth.RequireAuth)
 			r.Get("/me", s.handleMe)
 			r.Post("/me/account-setup", s.handleCompleteAccountSetup)
+			r.Post("/me/password", s.handleChangeOwnPassword)
 			r.Get("/me/mfa", s.handleGetMyMFAStatus)
 			r.Post("/me/mfa/setup", s.handleBeginMyMFASetup)
 			r.Post("/me/mfa/enable", s.handleEnableMyMFA)
@@ -244,6 +263,8 @@ func (s *Server) Router() stdhttp.Handler {
 				r.Get("/settings/auth", s.handleGetAuthSettings)
 				r.Patch("/settings/auth", s.handleUpdateAuthSettings)
 				r.Post("/settings/auth/test-email", s.handleSendTestEmail)
+				r.Get("/settings/network", s.handleGetNetworkSettings)
+				r.Patch("/settings/network", s.handleUpdateNetworkSettings)
 				r.Get("/system/overview", s.handleSystemOverview)
 				r.Get("/system/security-alerts", s.handleSecurityAlerts)
 				r.Get("/security/rotation/status", s.handleRotationStatus)
@@ -309,10 +330,13 @@ func (s *Server) Router() stdhttp.Handler {
 				r.Post("/audit-webhooks", s.handleCreateAuditWebhook)
 				r.Patch("/audit-webhooks/{id}", s.handleUpdateAuditWebhook)
 				r.Delete("/audit-webhooks/{id}", s.handleDeleteAuditWebhook)
+				r.Post("/audit-webhooks/{id}/test", s.handleTestAuditWebhook)
+				r.Post("/audit-webhooks/{id}/rotate-secret", s.handleRotateAuditWebhookSecret)
 
 				r.Get("/exposure-reports", s.handleListExposureReports)
 				r.Get("/exposure-reports/{id}", s.handleGetExposureReport)
 				r.Post("/services/{id}/exposure-scan", s.handleRunExposureScan)
+				r.Post("/services/{id}/redeploy", s.handleRedeployService)
 			})
 		})
 	})

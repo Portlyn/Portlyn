@@ -257,6 +257,11 @@ type completeAccountSetupRequest struct {
 	Password string `json:"password" validate:"required,min=8"`
 }
 
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password" validate:"required,min=8"`
+	NewPassword     string `json:"new_password" validate:"required,min=8"`
+}
+
 type routePINRequest struct {
 	ServiceID uint   `json:"service_id" validate:"required,gt=0"`
 	PIN       string `json:"pin" validate:"required,min=3,max=64"`

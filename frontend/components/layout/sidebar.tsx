@@ -37,10 +37,11 @@ const items: Array<{
   { label: "Groups", href: "/groups", icon: IconUsers, roles: ["admin"] },
   { label: "Service Groups", href: "/service-groups", icon: IconGridDots, roles: ["admin"] },
   { label: "Users", href: "/users", icon: IconUsers, roles: ["admin"] },
+  { label: "Exposure", href: "/exposure", icon: IconShieldCheck, roles: ["admin"] },
   { label: "Audit Logs", href: "/audit-logs", icon: IconFileText, roles: ["admin"] },
   { label: "Audit Webhooks", href: "/audit-webhooks", icon: IconWebhook, roles: ["admin"] },
   { label: "Access Tester", href: "/access-tester", icon: IconShieldCheck, roles: ["admin"] },
-  { label: "Passkeys", href: "/passkeys", icon: IconKey, roles: ["admin", "viewer"] },
+  { label: "Security", href: "/security", icon: IconKey, roles: ["admin", "viewer"] },
   { label: "Settings", href: "/settings", icon: IconSettings, roles: ["admin"] }
 ];
 

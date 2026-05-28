@@ -19,8 +19,9 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/providers";
 import { ApiError } from "@/lib/api";
-import { getAuthConfig, requestOTP, startOIDCLogin, verifyMFA, verifyOTP } from "@/lib/auth";
+import { beginPasskeyLogin, finishPasskeyLogin, getAuthConfig, requestOTP, startOIDCLogin, verifyMFA, verifyOTP } from "@/lib/auth";
 import { authCardStyle, authInfoAlertStyle, authShellStyle, buttonStyle, inputStyles, mergeAuthUI } from "@/lib/auth-ui";
+import { decodeRequestOptions, encodeAssertionResponse } from "@/lib/webauthn";
 
 function LoginContent() {
   const { login, isAuthenticated } = useAuth();
@@ -42,7 +43,35 @@ function LoginContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOTPSubmitting, setIsOTPSubmitting] = useState(false);
   const [isOIDCSubmitting, setIsOIDCSubmitting] = useState(false);
+  const [isPasskeySubmitting, setIsPasskeySubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handlePasskeyLogin = async () => {
+    if (typeof window === "undefined" || !window.PublicKeyCredential) {
+      setError("This browser does not support passkeys.");
+      return;
+    }
+    if (!email.trim()) {
+      setError("Enter your email first, then sign in with your passkey.");
+      return;
+    }
+    setIsPasskeySubmitting(true);
+    setError(null);
+    try {
+      const begin = await beginPasskeyLogin(email.trim());
+      const publicKey = decodeRequestOptions(begin.options);
+      const assertion = (await navigator.credentials.get({ publicKey })) as PublicKeyCredential | null;
+      if (!assertion) {
+        throw new Error("Passkey prompt was cancelled.");
+      }
+      await finishPasskeyLogin(begin.session_id, encodeAssertionResponse(assertion));
+      window.location.assign(nextPath);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Passkey sign-in failed.");
+    } finally {
+      setIsPasskeySubmitting(false);
+    }
+  };
 
   const nextPath = useMemo(
     () => searchParams.get("next") || "/services",
@@ -166,6 +195,9 @@ function LoginContent() {
             <PasswordInput label="Password" value={password} onChange={(event) => setPassword(event.currentTarget.value)} styles={fields} />
             <Button loading={isSubmitting} onClick={handleSubmit} style={buttonStyle(ui)}>
               {ui.login_password_label}
+            </Button>
+            <Button variant="default" loading={isPasskeySubmitting} onClick={handlePasskeyLogin}>
+              Sign in with passkey
             </Button>
           </Stack>
           )}

@@ -263,7 +263,10 @@ func (s *Service) shouldRequireMFA(ctx context.Context, user *domain.User) bool 
 		return true
 	}
 	settings, _ := s.settings.Get(ctx)
-	return settings != nil && settings.RequireMFAForAdmins && user.Role == domain.RoleAdmin
+	if settings == nil || !settings.RequireMFAForAdmins || user.Role != domain.RoleAdmin {
+		return false
+	}
+	return !s.userHasPasskey(ctx, user.ID)
 }
 
 func (s *Service) enforceAdminMFARequirement(ctx context.Context, user *domain.User) error {
@@ -271,7 +274,7 @@ func (s *Service) enforceAdminMFARequirement(ctx context.Context, user *domain.U
 		return nil
 	}
 	settings, _ := s.settings.Get(ctx)
-	if settings != nil && settings.RequireMFAForAdmins {
+	if settings != nil && settings.RequireMFAForAdmins && !s.userHasPasskey(ctx, user.ID) {
 		return ErrMFASetupRequired
 	}
 	return nil

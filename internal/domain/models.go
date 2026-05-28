@@ -485,19 +485,19 @@ type ServiceExposureReport struct {
 }
 
 type AuditWebhook struct {
-	ID            uint            `gorm:"primaryKey" json:"id"`
-	Name          string          `gorm:"size:255;not null" json:"name"`
-	URL           string          `gorm:"size:1024;not null" json:"url"`
-	Format        string          `gorm:"size:32;not null;default:generic" json:"format"`
-	SecretHashed  string          `gorm:"size:128" json:"-"`
-	SecretPreview string          `gorm:"size:32" json:"secret_preview"`
-	EventTypes    JSONStringSlice `gorm:"type:text;not null;default:'[]'" json:"event_types"`
-	Active        bool            `gorm:"not null;default:true" json:"active"`
-	LastFiredAt   *time.Time      `json:"last_fired_at"`
-	LastStatus    int             `gorm:"not null;default:0" json:"last_status"`
-	LastError     string          `gorm:"type:text" json:"last_error"`
-	CreatedAt     time.Time       `json:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
+	ID              uint            `gorm:"primaryKey" json:"id"`
+	Name            string          `gorm:"size:255;not null" json:"name"`
+	URL             string          `gorm:"size:1024;not null" json:"url"`
+	Format          string          `gorm:"size:32;not null;default:generic" json:"format"`
+	SecretEncrypted string          `gorm:"column:secret_hashed;type:text" json:"-"`
+	SecretPreview   string          `gorm:"size:32" json:"secret_preview"`
+	EventTypes      JSONStringSlice `gorm:"type:text;not null;default:'[]'" json:"event_types"`
+	Active          bool            `gorm:"not null;default:true" json:"active"`
+	LastFiredAt     *time.Time      `json:"last_fired_at"`
+	LastStatus      int             `gorm:"not null;default:0" json:"last_status"`
+	LastError       string          `gorm:"type:text" json:"last_error"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 type AppSettings struct {

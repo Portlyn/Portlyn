@@ -173,13 +173,16 @@ func main() {
 	auditSink := audit.NewAsyncSink(auditStore, cfg.AuditBufferSize, cfg.AuditBatchSize, cfg.AuditFlushInterval, cfg.AuditDropPolicy, logger)
 	auditLogger := audit.NewLogger(auditSink)
 	auditWebhookStore := store.NewAuditWebhookStore(db)
-	auditLogger.SetWebhookDispatcher(audit.NewWebhookDispatcher(auditWebhookStore))
+	auditWebhookStore.SetDataEncryptionSecrets(cfg.DataEncryptionSecrets())
+	webhookDispatcher := audit.NewWebhookDispatcher(auditWebhookStore)
+	auditLogger.SetWebhookDispatcher(webhookDispatcher)
 	exposureReportStore := store.NewExposureReportStore(db)
 	exposureScanner := scanner.NewScanner(serviceStore, exposureReportStore, logger)
 
 	userCredentialStore := store.NewUserCredentialStore(db)
 	webAuthnService := auth.NewWebAuthnService(userCredentialStore, userStore)
 	webAuthnService.Configure("Portlyn", cfg.FrontendBaseURL)
+	authService.SetPasskeyChecker(webAuthnService.HasCredentials)
 	if redisClient != nil {
 		webAuthnService.SetSessionStore(auth.NewRedisWebAuthnSessionStore(redisClient, "portlyn:webauthn:session:"))
 	}
@@ -299,6 +302,8 @@ func main() {
 
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	server.SetNetworkSecurity(rootCtx, geoipLookup, crowdSecClient)
+	server.SetWebhookDispatcher(webhookDispatcher)
 	proxyManager.Start(rootCtx)
 	if crowdSecClient.Enabled() {
 		crowdSecClient.Start(rootCtx)

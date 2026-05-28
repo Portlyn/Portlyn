@@ -62,13 +62,13 @@ func (s *Server) handleCreateAuditWebhook(w stdhttp.ResponseWriter, r *stdhttp.R
 		active = *req.Active
 	}
 	item := &domain.AuditWebhook{
-		Name:          req.Name,
-		URL:           req.URL,
-		Format:        format,
-		SecretHashed:  secret,
-		SecretPreview: secret[:8],
-		EventTypes:    domain.JSONStringSlice(req.EventTypes),
-		Active:        active,
+		Name:            req.Name,
+		URL:             req.URL,
+		Format:          format,
+		SecretEncrypted: secret,
+		SecretPreview:   secret[:8],
+		EventTypes:      domain.JSONStringSlice(req.EventTypes),
+		Active:          active,
 	}
 	if err := s.auditWebhooks.Create(r.Context(), item); err != nil {
 		s.internalError(w, err)
@@ -115,7 +115,7 @@ func (s *Server) handleUpdateAuditWebhook(w stdhttp.ResponseWriter, r *stdhttp.R
 		item.Active = *req.Active
 	}
 	if req.Secret != nil {
-		item.SecretHashed = *req.Secret
+		item.SecretEncrypted = *req.Secret
 		if len(*req.Secret) >= 8 {
 			item.SecretPreview = (*req.Secret)[:8]
 		}
@@ -150,4 +150,55 @@ func randomWebhookSecret() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buf), nil
+}
+
+func (s *Server) handleTestAuditWebhook(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if s.auditWebhooks == nil || s.webhookDispatch == nil {
+		writeError(w, stdhttp.StatusServiceUnavailable, "webhooks_unavailable", "audit webhooks not initialized")
+		return
+	}
+	id, ok := s.parseIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	item, err := s.auditWebhooks.GetByID(r.Context(), id)
+	if err != nil {
+		s.handleStoreError(w, err)
+		return
+	}
+	status, deliverErr := s.webhookDispatch.DeliverTest(*item)
+	if deliverErr != nil {
+		writeJSON(w, stdhttp.StatusOK, map[string]any{"ok": false, "status": status, "error": deliverErr.Error()})
+		return
+	}
+	writeJSON(w, stdhttp.StatusOK, map[string]any{"ok": true, "status": status})
+}
+
+func (s *Server) handleRotateAuditWebhookSecret(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if s.auditWebhooks == nil {
+		writeError(w, stdhttp.StatusServiceUnavailable, "webhooks_unavailable", "audit webhooks not initialized")
+		return
+	}
+	id, ok := s.parseIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	item, err := s.auditWebhooks.GetByID(r.Context(), id)
+	if err != nil {
+		s.handleStoreError(w, err)
+		return
+	}
+	secret, err := randomWebhookSecret()
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	item.SecretEncrypted = secret
+	item.SecretPreview = secret[:8]
+	if err := s.auditWebhooks.Update(r.Context(), item); err != nil {
+		s.internalError(w, err)
+		return
+	}
+	_ = s.audit.LogRequest(r.Context(), r, s.currentUserID(r), "rotate_secret", "audit_webhook", &id, nil)
+	writeJSON(w, stdhttp.StatusOK, map[string]any{"secret": secret})
 }

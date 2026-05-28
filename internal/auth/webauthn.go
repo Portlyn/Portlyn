@@ -228,39 +228,50 @@ func (w *WebAuthnService) BeginLogin(ctx context.Context, userID uint) (*BeginLo
 	return &BeginLoginResult{Options: options, SessionID: id, ExpiresAt: time.Now().Add(5 * time.Minute)}, nil
 }
 
-func (w *WebAuthnService) FinishLogin(ctx context.Context, sessionID string, response *http.Request) error {
+func (w *WebAuthnService) FinishLogin(ctx context.Context, sessionID string, response *http.Request) (uint, error) {
 	entry, ok := w.popSession(sessionID, "login")
 	if !ok {
-		return errors.New("webauthn: unknown or expired session")
+		return 0, errors.New("webauthn: unknown or expired session")
 	}
 	instance, err := w.instance()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	user, err := w.users.GetByID(ctx, entry.UserID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	creds, err := w.credentials.ListByUser(ctx, entry.UserID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	wu := &webauthnUser{user: user, credentials: creds}
 	credential, err := instance.FinishLogin(wu, entry.Session, response)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	stored, err := w.credentials.GetByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credential.ID))
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return errors.New("credential not found")
+			return 0, errors.New("credential not found")
 		}
-		return err
+		return 0, err
 	}
 	now := time.Now().UTC()
 	stored.SignCount = credential.Authenticator.SignCount
 	stored.LastUsedAt = &now
-	return w.credentials.Update(ctx, stored)
+	if err := w.credentials.Update(ctx, stored); err != nil {
+		return 0, err
+	}
+	return entry.UserID, nil
+}
+
+func (w *WebAuthnService) HasCredentials(ctx context.Context, userID uint) bool {
+	creds, err := w.credentials.ListByUser(ctx, userID)
+	if err != nil {
+		return false
+	}
+	return len(creds) > 0
 }
 
 func (w *WebAuthnService) ListCredentials(ctx context.Context, userID uint) ([]domain.UserCredential, error) {

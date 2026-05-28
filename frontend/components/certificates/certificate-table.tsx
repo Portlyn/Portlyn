@@ -15,7 +15,8 @@ export function CertificateTable({
   onRetry,
   onRenew,
   onSync,
-  onInspect
+  onInspect,
+  onImport
 }: {
   certificates: Certificate[];
   canManage?: boolean;
@@ -25,6 +26,7 @@ export function CertificateTable({
   onRenew?: (certificate: Certificate) => void;
   onSync?: (certificate: Certificate) => void;
   onInspect?: (certificate: Certificate) => void;
+  onImport?: (certificate: Certificate) => void;
 }) {
   return (
     <Table.ScrollContainer minWidth={1560}>
@@ -97,6 +99,9 @@ export function CertificateTable({
                       </Button>
                       <Button size="xs" variant="light" color="brand" onClick={() => onRenew?.(certificate)}>
                         Renew
+                      </Button>
+                      <Button size="xs" variant="default" onClick={() => onImport?.(certificate)}>
+                        Import PEM
                       </Button>
                     </Group>
                   </Stack>
