@@ -218,8 +218,8 @@ function RouteLoginContent() {
           {!isLoading && service?.access_method === "pin" ? (
             <Stack gap="sm">
               <PasswordInput label="PIN" value={pin} onChange={(event) => setPIN(event.currentTarget.value)} styles={fields} />
-              {service.access_method_config.hint ? (
-                <Text size="sm" c={ui.muted_text_color}>{service.access_method_config.hint}</Text>
+              {service.access_method_config?.hint ? (
+                <Text size="sm" c={ui.muted_text_color}>{service.access_method_config?.hint}</Text>
               ) : null}
               <Button loading={isSubmitting} onClick={handlePIN} disabled={!pin} style={buttonStyle(ui)}>
                 {ui.route_pin_label}
@@ -230,14 +230,8 @@ function RouteLoginContent() {
           {!isLoading && service?.access_method === "email_code" ? (
             <Stack gap="sm">
               <TextInput label="Email" value={email} onChange={(event) => setEmail(event.currentTarget.value)} styles={fields} />
-              {service.access_method_config.allowed_email_domain ? (
-                <Text size="sm" c={ui.muted_text_color}>Allowed domain: {service.access_method_config.allowed_email_domain}</Text>
-              ) : null}
-              {service.access_method_config.allowed_emails && service.access_method_config.allowed_emails.length > 0 ? (
-                <Text size="sm" c={ui.muted_text_color}>Allowed emails: {service.access_method_config.allowed_emails.join(", ")}</Text>
-              ) : null}
-              {service.access_method_config.hint ? (
-                <Text size="sm" c={ui.muted_text_color}>{service.access_method_config.hint}</Text>
+              {service.access_method_config?.hint ? (
+                <Text size="sm" c={ui.muted_text_color}>{service.access_method_config?.hint}</Text>
               ) : null}
               {emailStep === "request" ? (
                 <Button loading={isSubmitting} onClick={handleRequestEmailCode} disabled={!email} style={buttonStyle(ui)}>

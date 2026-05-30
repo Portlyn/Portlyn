@@ -106,7 +106,10 @@ export async function dismissBootstrap() {
 export async function logoutRequest() {
   try {
     await apiFetch<{ ok: boolean }>("/api/v1/auth/logout", { method: "POST" });
-  } catch {
+  } catch (err) {
+    if (typeof console !== "undefined") {
+      console.warn("logout request failed; local session cleared but server session may persist", err);
+    }
   }
 }
 

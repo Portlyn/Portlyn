@@ -339,6 +339,7 @@ func main() {
 	defer stop()
 	server.SetNetworkSecurity(rootCtx, geoipLookup, crowdSecClient)
 	server.SetWebhookDispatcher(webhookDispatcher)
+	authService.StartCacheJanitor(rootCtx)
 	proxyManager.Start(rootCtx)
 	if crowdSecClient.Enabled() {
 		crowdSecClient.Start(rootCtx)

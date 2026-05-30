@@ -231,7 +231,7 @@ func buildRouteAuthServiceResponse(service domain.Service) routeAuthServiceRespo
 		Path:                  service.Path,
 		AccessMode:            policy.AccessMode,
 		AccessMethod:          method,
-		AccessMethodConfig:    sanitizeAccessMethodConfig(method, config),
+		AccessMethodConfig:    publicAccessMethodConfig(method, config),
 		AccessMessage:         strings.TrimSpace(service.AccessMessage),
 		ServiceOverridesGroup: strings.TrimSpace(service.AccessMethod) != "",
 	}

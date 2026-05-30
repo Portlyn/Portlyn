@@ -94,6 +94,31 @@ func sanitizeAccessMethodConfig(method string, value domain.JSONObject) domain.J
 	return out
 }
 
+func publicAccessMethodConfig(method string, value domain.JSONObject) domain.JSONObject {
+	method = proxyMethod(method)
+	out := domain.JSONObject{}
+	switch method {
+	case domain.AccessMethodPIN:
+		if pinHash := strings.TrimSpace(stringValueFromAny(value["pin_hash"])); pinHash != "" {
+			out["pin_configured"] = true
+		}
+		if hint := strings.TrimSpace(stringValueFromAny(value["hint"])); hint != "" {
+			out["hint"] = hint
+		}
+	case domain.AccessMethodEmailCode:
+		if hint := strings.TrimSpace(stringValueFromAny(value["hint"])); hint != "" {
+			out["hint"] = hint
+		}
+		if domainPresent := strings.TrimSpace(stringValueFromAny(value["allowed_email_domain"])); domainPresent != "" {
+			out["domain_restricted"] = true
+		}
+		if allowedEmails := stringSliceFromAny(value["allowed_emails"]); len(allowedEmails) > 0 {
+			out["email_restricted"] = true
+		}
+	}
+	return out
+}
+
 func serviceResponse(item domain.Service, health serviceHealthInfo) map[string]any {
 	policy, method, effectiveConfig, inheritedFrom := proxy.EffectiveAccessForService(item)
 	riskScore, riskReasons := serviceRiskAssessment(item, policy.AccessMode, method, effectiveConfig, nil)

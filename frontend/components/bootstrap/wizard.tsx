@@ -282,7 +282,7 @@ export function BootstrapWizard({ user, onComplete }: BootstrapWizardProps) {
                 disabled={passkeyBusy}
               />
               <Group justify="flex-end">
-                <Button onClick={() => void registerPasskey()} loading={passkeyBusy}>
+                <Button onClick={() => void registerPasskey()} loading={passkeyBusy} disabled={passkeyBusy}>
                   Register passkey
                 </Button>
               </Group>

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -932,6 +933,79 @@ func (s *Service) getCachedAuthResult(ctx context.Context, tokenString string) (
 	groupIDs := append([]uint(nil), cached.groupIDs...)
 	userCopy := *cached.user
 	return &userCopy, groupIDs, true
+}
+
+func (s *Service) StartCacheJanitor(ctx context.Context) {
+	if s.cacheTTL <= 0 {
+		return
+	}
+	interval := s.cacheTTL
+	if interval > 5*time.Minute {
+		interval = 5 * time.Minute
+	}
+	if interval < 30*time.Second {
+		interval = 30 * time.Second
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.sweepAuthCache()
+			}
+		}
+	}()
+}
+
+const authCacheMaxEntries = 10000
+
+func (s *Service) sweepAuthCache() {
+	now := time.Now().UTC()
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	for key, entry := range s.authCache {
+		if now.After(entry.expiresAt) {
+			delete(s.authCache, key)
+			if entry.user != nil {
+				if tokens, ok := s.userTokens[entry.user.ID]; ok {
+					delete(tokens, key)
+					if len(tokens) == 0 {
+						delete(s.userTokens, entry.user.ID)
+					}
+				}
+			}
+		}
+	}
+	if len(s.authCache) <= authCacheMaxEntries {
+		return
+	}
+	type ageEntry struct {
+		key       string
+		userID    uint
+		expiresAt time.Time
+	}
+	entries := make([]ageEntry, 0, len(s.authCache))
+	for key, entry := range s.authCache {
+		var uid uint
+		if entry.user != nil {
+			uid = entry.user.ID
+		}
+		entries = append(entries, ageEntry{key: key, userID: uid, expiresAt: entry.expiresAt})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].expiresAt.Before(entries[j].expiresAt) })
+	excess := len(entries) - authCacheMaxEntries
+	for i := 0; i < excess; i++ {
+		delete(s.authCache, entries[i].key)
+		if tokens, ok := s.userTokens[entries[i].userID]; ok {
+			delete(tokens, entries[i].key)
+			if len(tokens) == 0 {
+				delete(s.userTokens, entries[i].userID)
+			}
+		}
+	}
 }
 
 func (s *Service) storeCachedAuthResult(tokenString string, user *domain.User, groupIDs []uint, expiresAt *jwt.NumericDate) {

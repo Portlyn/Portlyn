@@ -20,13 +20,16 @@ func (s *Service) sendOTPEmail(ctx context.Context, email, code string, expiresA
 	}
 
 	subject := "Your Portlyn login code"
-	textBody := fmt.Sprintf("Your Portlyn login code is %s.\n\nThis code expires at %s UTC.\n\nIf you did not request this code, you can ignore this email.\n", code, expiresAt.UTC().Format("2006-01-02 15:04:05"))
-	htmlBody := otpEmailHTML("Your Portlyn login code", "Use this code to finish signing in.", code, expiresAt, "If you did not request this code, you can ignore this email.")
+	title := "Your Portlyn login code"
+	intro := "Use this code to finish signing in."
 	if routeAccess {
 		subject = "Your Portlyn route access code"
-		textBody = fmt.Sprintf("Your Portlyn route access code is %s.\n\nThis code expires at %s UTC.\n\nIf you did not request this code, you can ignore this email.\n", code, expiresAt.UTC().Format("2006-01-02 15:04:05"))
-		htmlBody = otpEmailHTML("Your Portlyn route access code", "Use this code to unlock the protected route.", code, expiresAt, "If you did not request this code, you can ignore this email.")
+		title = "Your Portlyn route access code"
+		intro = "Use this code to unlock the protected route."
 	}
+	outro := "If you did not request this code, you can ignore this email."
+	textBody := otpEmailText(title, intro, code, expiresAt, outro)
+	htmlBody := otpEmailHTML(title, intro, code, expiresAt, outro)
 
 	if err := mail.Send(cfg, []string{strings.ToLower(strings.TrimSpace(email))}, subject, textBody, htmlBody); err != nil {
 		return fmt.Errorf("%w: %v", ErrSMTPDeliveryFailed, err)
@@ -39,7 +42,7 @@ func (s *Service) SendTestEmail(ctx context.Context, email string) error {
 	if !cfg.Enabled {
 		return ErrSMTPNotConfigured
 	}
-	textBody := "This is a test email sent from Portlyn.\n\nSMTP delivery is working."
+	textBody := testEmailText()
 	htmlBody := testEmailHTML()
 	if err := mail.Send(cfg, []string{strings.ToLower(strings.TrimSpace(email))}, "Portlyn SMTP test", textBody, htmlBody); err != nil {
 		return fmt.Errorf("%w: %v", ErrSMTPDeliveryFailed, err)
@@ -47,21 +50,49 @@ func (s *Service) SendTestEmail(ctx context.Context, email string) error {
 	return nil
 }
 
+func otpEmailText(title, intro, code string, expiresAt time.Time, outro string) string {
+	return fmt.Sprintf(`%s
+
+%s
+
+  ┌──────────────────────────┐
+  │  Verification code       │
+  │  %s                    │
+  └──────────────────────────┘
+
+Valid until %s UTC.
+
+%s
+
+— Sent by Portlyn
+`, title, intro, code, expiresAt.UTC().Format("2006-01-02 15:04:05"), outro)
+}
+
+func testEmailText() string {
+	return `SMTP test
+
+This is a test email sent from Portlyn. SMTP delivery is working.
+
+— Sent by Portlyn
+`
+}
+
 func otpEmailHTML(title, intro, code string, expiresAt time.Time, outro string) string {
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
-  <body style="margin:0;padding:0;background:#0b1220;color:#e5e7eb;font-family:Arial,sans-serif;">
+  <body style="margin:0;padding:0;background:#0d0e11;color:#d5d9e2;font-family:Inter,Segoe UI,Arial,sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
-      <div style="background:linear-gradient(180deg,#111827 0%%,#0f172a 100%%);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:32px;">
-        <h1 style="margin:0 0 12px 0;font-size:26px;line-height:1.2;color:#f8fafc;">%s</h1>
-        <p style="margin:0 0 24px 0;font-size:15px;line-height:1.6;color:#cbd5e1;">%s</p>
-        <div style="margin:0 0 24px 0;padding:18px 20px;border-radius:14px;background:#020617;border:1px solid rgba(96,165,250,0.25);text-align:center;">
-          <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px;">Verification code</div>
-          <div style="font-size:34px;font-weight:700;letter-spacing:0.28em;color:#f8fafc;">%s</div>
+      <div style="background:linear-gradient(180deg,#1a1b1e 0%%,#121316 100%%);border:1px solid rgba(184,154,222,0.22);border-radius:18px;padding:32px;">
+        <h1 style="margin:0 0 12px 0;font-size:26px;line-height:1.2;color:#f4f7fb;">%s</h1>
+        <p style="margin:0 0 24px 0;font-size:15px;line-height:1.6;color:#b6bdcc;">%s</p>
+        <div style="margin:0 0 24px 0;padding:20px;border-radius:14px;background:linear-gradient(180deg,rgba(106,74,153,0.18) 0%%,rgba(85,58,126,0.10) 100%%);border:1px solid rgba(156,121,208,0.35);text-align:center;">
+          <div style="font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:#9c79d0;margin-bottom:8px;">Verification code</div>
+          <div style="font-size:34px;font-weight:700;letter-spacing:0.28em;color:#f4f7fb;">%s</div>
         </div>
-        <p style="margin:0 0 10px 0;font-size:14px;line-height:1.6;color:#cbd5e1;">Valid until <strong style="color:#f8fafc;">%s UTC</strong>.</p>
-        <p style="margin:0;font-size:13px;line-height:1.6;color:#94a3b8;">%s</p>
+        <p style="margin:0 0 10px 0;font-size:14px;line-height:1.6;color:#b6bdcc;">Valid until <strong style="color:#f4f7fb;">%s UTC</strong>.</p>
+        <p style="margin:0;font-size:13px;line-height:1.6;color:#8d96a8;">%s</p>
       </div>
+      <p style="margin:18px 0 0 0;font-size:12px;line-height:1.6;color:#6a7282;text-align:center;">Sent by Portlyn</p>
     </div>
   </body>
 </html>`, title, intro, code, expiresAt.UTC().Format("2006-01-02 15:04:05"), outro)
@@ -70,12 +101,13 @@ func otpEmailHTML(title, intro, code string, expiresAt time.Time, outro string) 
 func testEmailHTML() string {
 	return `<!DOCTYPE html>
 <html lang="en">
-  <body style="margin:0;padding:0;background:#0b1220;color:#e5e7eb;font-family:Arial,sans-serif;">
+  <body style="margin:0;padding:0;background:#0d0e11;color:#d5d9e2;font-family:Inter,Segoe UI,Arial,sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
-      <div style="background:linear-gradient(180deg,#111827 0%,#0f172a 100%);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:32px;">
-        <h1 style="margin:0 0 12px 0;font-size:26px;line-height:1.2;color:#f8fafc;">SMTP test</h1>
-        <p style="margin:0;font-size:15px;line-height:1.6;color:#cbd5e1;">This is a test email sent from Portlyn. SMTP delivery is working.</p>
+      <div style="background:linear-gradient(180deg,#1a1b1e 0%,#121316 100%);border:1px solid rgba(184,154,222,0.22);border-radius:18px;padding:32px;">
+        <h1 style="margin:0 0 12px 0;font-size:26px;line-height:1.2;color:#f4f7fb;">SMTP test</h1>
+        <p style="margin:0;font-size:15px;line-height:1.6;color:#b6bdcc;">This is a test email sent from Portlyn. SMTP delivery is working.</p>
       </div>
+      <p style="margin:18px 0 0 0;font-size:12px;line-height:1.6;color:#6a7282;text-align:center;">Sent by Portlyn</p>
     </div>
   </body>
 </html>`
