@@ -779,16 +779,18 @@ func (m *Manager) authorizeRequest(w http.ResponseWriter, r *http.Request, route
 	if !ok {
 		return nil, nil, false
 	}
+	method := normalizedAccessMethod(route.EffectiveMethod)
+	methodIsSelfSufficient := method == domain.AccessMethodPIN || method == domain.AccessMethodEmailCode
 	switch route.EffectivePolicy.AccessMode {
 	case "", domain.AccessModePublic:
 		return user, groupIDs, true
 	case domain.AccessModeAuthenticated, domain.AccessModeRestricted:
-		if user == nil {
+		if user == nil && !methodIsSelfSufficient {
 			var status int
 			var authOK bool
 			user, groupIDs, status, authOK = m.authenticateProxyRequest(r)
 			if !authOK {
-				if route.EffectiveMethod == domain.AccessMethodSession && expectsTokenAuth(r) {
+				if method == domain.AccessMethodSession && expectsTokenAuth(r) {
 					writeProxyError(w, status, statusCode(status), statusMessage(status))
 				} else {
 					m.redirectToRouteLogin(w, r, route)

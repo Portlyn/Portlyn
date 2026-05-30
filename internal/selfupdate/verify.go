@@ -55,6 +55,9 @@ func VerifyCosignBundle(payload []byte, bundleJSON string, identity CosignIdenti
 	if !json.Valid([]byte(bundleJSON)) {
 		return fmt.Errorf("bundle is not valid JSON")
 	}
+	if strings.Contains(bundleJSON, `"base64Signature"`) {
+		return fmt.Errorf("release is signed with the legacy Cosign bundle format (base64Signature); update the release workflow to use cosign sign-blob --new-bundle-format")
+	}
 	b := &bundle.Bundle{}
 	if err := b.UnmarshalJSON([]byte(bundleJSON)); err != nil {
 		return fmt.Errorf("parse sigstore bundle: %w", err)

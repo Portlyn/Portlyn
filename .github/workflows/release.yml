@@ -73,7 +73,9 @@ jobs:
           sha256sum -- * > checksums.txt
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3.6.0
+        uses: sigstore/cosign-installer@v3.7.0
+        with:
+          cosign-release: v2.5.0
 
       - name: Sign checksums (keyless)
         env:
@@ -82,6 +84,7 @@ jobs:
           cosign sign-blob --yes dist/checksums.txt \
             --output-signature dist/checksums.txt.sig \
             --output-certificate dist/checksums.txt.pem \
+            --new-bundle-format \
             --bundle dist/checksums.txt.bundle.json
 
       - name: Publish release assets
