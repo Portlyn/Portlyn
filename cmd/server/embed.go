@@ -36,6 +36,12 @@ func embeddedFrontendHandler() http.Handler {
 			fileServer.ServeHTTP(w, r2)
 			return
 		}
+		if _, err := fs.Stat(sub, trimmed+"/index.html"); err == nil {
+			r2 := r.Clone(r.Context())
+			r2.URL.Path = "/" + trimmed + "/index.html"
+			fileServer.ServeHTTP(w, r2)
+			return
+		}
 		index, err := embeddedFrontend.ReadFile("frontend_dist/index.html")
 		if err != nil {
 			http.NotFound(w, r)

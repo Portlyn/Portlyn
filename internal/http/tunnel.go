@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"net"
 	stdhttp "net/http"
@@ -119,7 +120,7 @@ func (s *Server) handleUpdateTunnelSettings(w stdhttp.ResponseWriter, r *stdhttp
 		if server := s.tunnel.Server(); server != nil && !server.Started() {
 			refreshed, err := s.appSettings.Get(r.Context())
 			if err == nil {
-				if startErr := server.Start(r.Context(), refreshed); startErr != nil {
+				if startErr := server.Start(context.Background(), refreshed); startErr != nil {
 					s.logger.Warn("failed to start tunnel server", "error", startErr)
 				} else {
 					_ = s.tunnel.ApplyPeers(r.Context())
