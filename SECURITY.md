@@ -26,7 +26,7 @@ Please allow time for investigation and remediation before public disclosure.
 
 ## Threat model
 
-What Portlyn protects and what it does not, so you can decide whether it fits your deployment.
+What Portlyn protects against and what it does not, so you can decide whether it fits your deployment.
 
 ### In scope
 
@@ -46,7 +46,7 @@ What Portlyn protects and what it does not, so you can decide whether it fits yo
 - **Multi tenant isolation.** Portlyn is single tenant. All admins see all services. Do not deploy a single hub to host workloads for parties that do not trust each other.
 - **Compromise of an enrolled node.** If a node is compromised the attacker can reach whatever that node is configured to forward to. Limit per node scope.
 - **DNS account takeover.** If your DNS registrar account is compromised, DNS-01 validation can be hijacked. This is outside Portlyn's control.
-- **Volumetric L3 or L4 DDoS.** Portlyn rate limits at L7. For volumetric attacks use a CDN or a beefier upstream.
+- **Volumetric L3 or L4 DDoS.** Portlyn rate limits at L7. For volumetric attacks, use a CDN or a larger upstream.
 - **Local malware on an admin's machine.** Session theft from a compromised admin browser cannot be prevented by the server.
 - **Compromise of GitHub itself or your local build toolchain.** Reproducible builds and Cosign signatures detect tampering of released artifacts; they do not defend against an attacker with commit rights or a compromised laptop.
 
@@ -82,15 +82,15 @@ Each arrow is a separate trust boundary:
 
 - **Self update.** `portlyn update` performs the same verification automatically using the embedded TUF trust root, then verifies the per binary SHA-256 against the signed checksum file before atomic swap.
 
-## Defaults you should not weaken
+## Defaults that should not be weakened
 
-- `ALLOW_INSECURE_DEV_MODE=false` (rejected outright in production)
-- `REQUIRE_MFA_FOR_ADMINS=true`
-- `NODE_REQUIRE_HTTPS=true`
-- `REDIRECT_HTTP_TO_HTTPS=true` once TLS is active
-- `OTP_RESPONSE_INCLUDES_CODE=false`
-- `TRUSTED_PROXY_CIDRS` set to loopback only unless you actually sit behind another L7 proxy
+- `ALLOW_INSECURE_DEV_MODE=false`. Rejected at startup in production builds.
+- `REQUIRE_MFA_FOR_ADMINS=true`.
+- `NODE_REQUIRE_HTTPS=true`.
+- `REDIRECT_HTTP_TO_HTTPS=true` once TLS is active.
+- `OTP_RESPONSE_INCLUDES_CODE=false`.
+- `TRUSTED_PROXY_CIDRS` left at loopback unless Portlyn actually sits behind another L7 proxy.
 
 ## Telemetry
 
-Portlyn collects no telemetry. No analytics SDK, no phone home, no automatic update check. The only outbound traffic comes from features you explicitly configure (ACME, webhooks, OIDC, DNS provider APIs, CrowdSec LAPI).
+Portlyn collects no telemetry. No analytics SDK. No automatic update checks. The only outbound traffic comes from features you explicitly configure (ACME, webhooks, OIDC, DNS provider APIs, CrowdSec LAPI).
