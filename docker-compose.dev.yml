@@ -1,0 +1,15 @@
+services:
+  portlyn:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+
+  frontend:
+    pull_policy: build
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-}"
+        INTERNAL_API_BASE_URL: "http://portlyn:8080"

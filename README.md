@@ -5,313 +5,242 @@
 <h1 align="center">Portlyn</h1>
 
 <p align="center">
-  A self-hosted reverse proxy and zero trust control plane for homelabs and small teams.
-  One binary covers routing, identity, certificates, audit, and a built-in WireGuard tunnel.
+  An identity aware reverse proxy with a built in WireGuard tunnel.
+  One Go binary that fronts your services with TLS, per route auth, and a tunnel to machines behind NAT or CGNAT.
 </p>
 
 <p align="center">
   <a href="https://github.com/invaliduser231/Portlyn/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/invaliduser231/Portlyn/ci.yml?branch=main&label=ci"></a>
   <a href="https://github.com/invaliduser231/Portlyn/releases"><img alt="Release" src="https://img.shields.io/github/v/release/invaliduser231/Portlyn?include_prereleases&sort=semver"></a>
   <img alt="Go version" src="https://img.shields.io/badge/go-1.26-00ADD8">
-  <img alt="Node version" src="https://img.shields.io/badge/node-24-339933">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue"></a>
-  <img alt="Self hosted" src="https://img.shields.io/badge/self--hosted-yes-success">
 </p>
 
 <p align="center">
-  <a href="#installation">Installation</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="#configuration">Configuration</a> ·
-  <a href="#security">Security</a> ·
-  <a href="#development">Development</a> ·
+  <a href="#what-portlyn-does">What it does</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#security-model">Security model</a> ·
+  <a href="#develop">Develop</a> ·
   <a href="docs/">Docs</a>
 </p>
 
-## Overview
+<p align="center">
+  <img src="assets/screenshots/dashboard.png" alt="Portlyn admin dashboard" width="420" />
+  <img src="assets/screenshots/route-login.png" alt="What your users see at a protected route" width="420" />
+  <br />
+  <em>Admin dashboard (left) and what end users see at a protected route (right).</em>
+</p>
 
-Portlyn fronts your self hosted services with a single admin plane.
-It terminates TLS, applies access policy, performs identity checks, optionally tunnels traffic to a remote node over WireGuard, then proxies to the upstream.
-The backend is a Go binary; the admin UI is a Next.js single page app.
-Both ship as one binary in static export mode, or as a Docker stack with PostgreSQL, Loki, and Grafana.
+<p align="center">
+  <img src="assets/gif/hero.gif" alt="Add a service in Portlyn and reach it on your own domain" width="820" />
+  <br />
+  <em>Add a service in the admin UI and reach it on your own domain.</em>
+</p>
 
-Portlyn is built to replace a Traefik plus Authentik plus Crowdsec plus WireGuard stack with one process and one admin surface.
+## What Portlyn does
 
-## Table of Contents
+Three things, well.
 
-1. [Highlights](#highlights)
-2. [Comparison](#comparison)
-3. [Features](#features)
-4. [Architecture](#architecture)
-5. [Installation](#installation)
-6. [Configuration](#configuration)
-7. [Certificates](#certificates)
-8. [Security](#security)
-9. [Observability](#observability)
-10. [Development](#development)
-11. [Testing](#testing)
-12. [Roadmap](#roadmap)
-13. [Documentation](#documentation)
-14. [Repository layout](#repository-layout)
-15. [Privacy](#privacy)
-16. [License](#license)
+**1. Expose a service from a machine behind NAT or CGNAT** over HTTPS on your own domain. The node dials out to the hub over WireGuard, so no inbound port at the home end.
 
-## Highlights
+**2. Put auth in front of any route**. Full SSO session, OIDC, a shared PIN, a one off email code, or none. Per route, set in the UI, no config file edits.
 
-* Userspace WireGuard tunnel in the same process. No kernel module, no root, no `wg-quick` glue. Backed by `wireguard-go` and gVisor netstack.
-* Passkeys (WebAuthn) and TOTP in parallel. Touch ID, Windows Hello, hardware keys.
-* Magic link sharing for single use, time bound access without an account.
-* Exposure scanner that grades each service from 0 to 100 across DNS, TLS, HSTS, CSP, X-Frame-Options, redirect, and auth enforcement.
-* GeoIP allow and block lists per service. CrowdSec LAPI client built in.
-* Audit log with a SHA-256 hash chain. Webhooks for Slack, Discord, ntfy, or any HTTP endpoint, signed with HMAC-SHA256.
-* ACME with `http-01` and `dns-01`. Wildcards and multi SAN. Cloudflare, Hetzner DNS, Route 53, and DigitalOcean.
-* Single binary deploy with embedded frontend via `go:embed`, or full Docker Compose stack with observability included.
+<p align="center">
+  <img src="assets/gif/auth-pin.gif" alt="Per route PIN auth in front of a service" width="820" />
+</p>
 
-## Comparison
+**3. Manage TLS certificates** without touching Let's Encrypt directly. ACME with HTTP-01 and DNS-01 (Cloudflare, Hetzner, Route 53, DigitalOcean), wildcards, multi SAN, auto renew.
 
-A pragmatic, honest comparison against the closest projects in this space.
-Pangolin is the closest single-binary alternative; Traefik plus Authelia or Authentik is the canonical "compose-it-yourself" stack.
+Also in the box: TOTP and passkey MFA, OIDC SSO with role claim mapping, hash chained audit log, rate limits, GeoIP allow and block, CrowdSec integration, signed audit webhooks, Prometheus metrics, Grafana dashboards.
 
-| Capability                                | Portlyn        | Pangolin       | Traefik + Authelia/Authentik |
-| ----------------------------------------- | -------------- | -------------- | ---------------------------- |
-| Single binary deploy                      | Yes            | Yes            | No (3+ services)             |
-| Built-in userspace WireGuard tunnel       | Yes            | Yes (Newt)     | No                           |
-| Passkeys / WebAuthn (registration)        | Yes            | Yes            | Via Authelia/Authentik       |
-| Magic link / one-time access              | Yes            | Limited        | No                           |
-| Per-service exposure scanner / posture    | Yes            | No             | No                           |
-| Hash-chained audit log                    | Yes            | No             | Partial (per-component logs) |
-| GeoIP + CrowdSec built in                 | Yes            | Partial        | Via plugins                  |
-| ACME with wildcard DNS-01, multi-provider | Yes            | Yes            | Yes                          |
-| Admin UI for routing and identity         | Yes (built in) | Yes (built in) | No (config files / Authelia portal) |
-| License                                   | MIT            | AGPL-3.0       | MIT / Apache-2.0 per component |
-| Ecosystem maturity                        | Young          | Growing        | Mature, large community      |
+## What it is not
 
-Portlyn's trade-off: one process, one admin surface, one config story. The cost is a younger ecosystem and fewer integrations than the Traefik world.
+So you know before you install:
 
-## Features
+* **Not horizontally scaled.** Single hub for now. HA is on the roadmap; it is a homelab and small team tool first.
+* **Not a node mesh.** Hub and spoke only. Nodes do not talk to each other directly.
+* **Not a Cloudflare Tunnel drop in.** The node dials out to your hub, not to Cloudflare. You still need a public IP or a VPS for the hub.
+* **Not at kernel WireGuard throughput.** Userspace tunnel reaches roughly 80 percent of kernel WG. Use kernel WG yourself if you saturate links above 1 Gbps.
+* **No native WAF rules bundled.** CrowdSec integration is pull based against LAPI. Geo and IP rules are first class; deep request inspection is not.
+* **Young ecosystem.** Fewer third party plugins than the Traefik or Caddy world.
 
-### Routing and access control
+## Install
 
-* Per service routes by domain and path
-* Access modes: `public`, `authenticated`, `restricted`
-* Access methods: session, OIDC only, PIN, email code
-* User groups and service groups for reusable policy
-* Access windows with timezone aware weekday and time ranges
-* IP allow and block lists per service
-* GeoIP allow and block lists per service
-* Risk assessment before save with confirm by type for high risk changes
-
-### Identity
-
-* Local password login with bcrypt
-* OIDC single sign on with role claim mapping
-* TOTP MFA with recovery codes
-* WebAuthn (passkeys) parallel to TOTP
-* Magic link for temporary access
-* Email code based one time passwords for routes that do not need accounts
-
-### Certificates
-
-* ACME `http-01` and `dns-01`
-* Wildcard certificates through `dns-01`
-* Multi SAN
-* Let's Encrypt production and staging
-* Auto renew, manual renew, retry, sync status, PEM import
-* DNS provider credentials encrypted at rest
-
-### Tunnel and mesh
-
-* Userspace WireGuard server inside the same process, backed by gVisor netstack. No kernel module, no root, no `wg-quick`.
-* Node agent runs WireGuard in process and forwards tunnel connections to local services. It generates its own keypair, enrolls, and never writes a config to disk.
-* One line installer: `curl -fsSL https://<your-host>/install.sh | sudo sh -s -- --token <TOKEN>` downloads a checksum verified binary and installs a systemd service.
-* Per service routing: map a hostname to a service that lives behind a node, the proxy dials it over the tunnel.
-* Whole subnet routing: a node can advertise LAN subnets so the mesh reaches every host on its network.
-* Site to site: nodes reach each other through the hub router (IP forwarding on the netstack).
-* Roaming clients: issue a WireGuard config plus QR code for the official WireGuard app, scoped to the subnets you allow.
-* Heartbeat reports handshake age and byte counters; dynamic peer add and revoke.
-
-### Audit and operations
-
-* Hash chained audit log, tamper evident
-* Webhook fan out to Slack, Discord, ntfy, generic JSON, signed with HMAC
-* Exposure scanner with score and findings per service
-* Diagnostics endpoint that explains a simulated request step by step
-* Access tester page for what if analysis
-* Health endpoints, Prometheus metrics, Grafana dashboards
-
-<details>
-<summary><strong>Supported DNS providers</strong></summary>
-
-* Cloudflare
-* Hetzner DNS
-* AWS Route 53
-* DigitalOcean DNS
-
-</details>
-
-<details>
-<summary><strong>Admin UI sections</strong></summary>
-
-* Services
-* Domains
-* Nodes
-* Clients
-* Certificates
-* DNS providers
-* Groups
-* Service groups
-* Users
-* Audit logs
-* Audit webhooks
-* Access tester
-* Passkeys
-* System overview
-* Settings
-
-</details>
-
-## Architecture
-
-```mermaid
-flowchart LR
-    U[User browser]:::ext
-    C[Remote node behind CGNAT]:::ext
-
-    subgraph Portlyn [Portlyn single binary]
-        direction TB
-        P[Reverse proxy and policy engine]
-        A[Auth: OIDC, TOTP, passkeys, magic link]
-        G[GeoIP and CrowdSec]
-        W[Userspace WireGuard via gVisor]
-        S[Exposure scanner]
-        L[Hash chained audit log]
-        AC[ACME and cert magic]
-    end
-
-    subgraph Backends [Upstream services]
-        B1[Gitea]
-        B2[Home Assistant]
-        B3[Jellyfin]
-    end
-
-    H[(Slack, Discord, ntfy, generic webhook)]:::ext
-
-    U -->|HTTPS| P
-    P --> A
-    P --> G
-    P -->|local| B1
-    P -->|WG tunnel| W
-    W -->|encrypted UDP| C
-    C --> B2
-    C --> B3
-    P --> L
-    L --> H
-    AC --> P
-    S -.->|periodic| P
-
-    classDef ext fill:#1f2329,stroke:#3b424d,color:#d9dde3
-```
-
-The default Docker Compose stack adds PostgreSQL, Loki, Alloy, and Grafana.
-SQLite works for single node deployments and is the default for the standalone binary built by `portlyn init`.
-
-## Installation
+Prebuilt, signed binaries are published on every tagged release. Verify before you run anything.
 
 ### Single binary
 
 ```bash
+# Download
 curl -L https://github.com/invaliduser231/Portlyn/releases/latest/download/portlyn-linux-amd64 -o portlyn
+curl -L https://github.com/invaliduser231/Portlyn/releases/latest/download/checksums.txt     -o checksums.txt
+curl -L https://github.com/invaliduser231/Portlyn/releases/latest/download/checksums.txt.sig -o checksums.txt.sig
+curl -L https://github.com/invaliduser231/Portlyn/releases/latest/download/checksums.txt.pem -o checksums.txt.pem
+
+# Verify checksum
+sha256sum -c checksums.txt --ignore-missing
+
+# Verify the release was built by this repository's GitHub Actions workflow
+cosign verify-blob \
+  --certificate checksums.txt.pem \
+  --signature   checksums.txt.sig \
+  --certificate-identity-regexp 'https://github.com/invaliduser231/Portlyn' \
+  --certificate-oidc-issuer     https://token.actions.githubusercontent.com \
+  checksums.txt
+
+# Run the interactive setup wizard
 chmod +x portlyn
-
-# Interactive setup wizard. Generates secrets, creates an admin account,
-# writes a .env file, and prepares the data directory.
 ./portlyn init
-
-# Start the server
 ./portlyn
 ```
 
-The admin UI is served from the root of the configured `FRONTEND_BASE_URL`.
+The wizard generates secrets, writes a `.env` file, prepares the data directory, and creates the admin account. Re run it any time; existing `.env` files are preserved unless `--force` is set.
 
-### Docker Compose
+### Docker (published image)
 
 ```bash
 git clone https://github.com/invaliduser231/Portlyn.git
 cd Portlyn
 cp .env.docker.example .env.docker
-# fill in secrets and admin credentials
-docker compose --env-file .env.docker up -d --build
+# edit secrets and admin credentials
+docker compose --env-file .env.docker up -d
 ```
 
-<details>
-<summary><strong>Published images (no local build)</strong></summary>
+The default `docker-compose.yml` pulls the published image from `ghcr.io/invaliduser231/portlyn`. No local build needed. Pin a specific tag with `PORTLYN_IMAGE_TAG=v1.2.3`.
+
+### Update
 
 ```bash
-docker compose --env-file .env.docker \
-  -f docker-compose.yml \
-  -f docker-compose.public.yml \
-  pull
-
-docker compose --env-file .env.docker \
-  -f docker-compose.yml \
-  -f docker-compose.public.yml \
-  up -d
-```
-
-Pin a tag:
-
-```bash
-PORTLYN_IMAGE_TAG=v1.2.3 docker compose \
-  --env-file .env.docker \
-  -f docker-compose.yml \
-  -f docker-compose.public.yml \
-  up -d
-```
-
-After the first push to GHCR, set package visibility to `Public` for:
-
-* `ghcr.io/invaliduser231/portlyn`
-* `ghcr.io/invaliduser231/portlyn-frontend`
-
-</details>
-
-### Updating
-
-Once Portlyn is installed (either the single binary or the node agent), upgrades are a single command:
-
-```bash
-sudo portlyn update              # download latest release, verify SHA-256 + cosign, atomic swap, restart
+sudo portlyn update              # download latest, verify SHA-256 and cosign, atomic swap, restart
 sudo portlyn update --check      # only check whether a newer release exists
 sudo portlyn update --version v1.2.3
-sudo portlyn update --no-restart # swap binary but leave the service alone
+sudo portlyn update --no-restart # swap the binary but leave the service alone
 ```
 
-The same command exists for the node agent: `sudo portlyn-nodeagent update`. Backups land next to the binary as `<path>.bak`. No automatic update checks happen anywhere; the CLI only reaches GitHub when you invoke it.
+Same command exists for the node agent: `sudo portlyn-nodeagent update`. Backups land next to the binary as `<path>.bak`. No automatic update checks happen anywhere; the CLI only reaches GitHub when you invoke it.
 
-### Source build
+## How it works
 
-```bash
-# Backend
-go build -trimpath -ldflags="-s -w" -o portlyn ./cmd/server
+```mermaid
+flowchart LR
+    U[User browser]:::ext
+    N[Remote node behind CGNAT]:::ext
 
-# Frontend embedded build
-cd frontend
-npm ci
-PORTLYN_STATIC_EXPORT=1 npm run build
-rm -rf ../cmd/server/frontend_dist
-mv out ../cmd/server/frontend_dist
-cd ..
-go build -trimpath -ldflags="-s -w" -o portlyn ./cmd/server
+    subgraph Hub [Portlyn hub. single Go binary]
+        direction TB
+        P[Reverse proxy and policy engine]
+        A[Auth: session, OIDC, PIN, email code, MFA]
+        G[GeoIP and CrowdSec]
+        W[Userspace WireGuard via gVisor]
+        L[Hash chained audit log]
+        AC[ACME and certmagic]
+    end
+
+    subgraph Local [Local upstreams]
+        B1[Gitea]
+    end
+    subgraph Remote [Upstreams on the node]
+        B2[Home Assistant]
+        B3[Jellyfin]
+    end
+
+    H[(Webhooks: Slack, Discord, ntfy, JSON)]:::ext
+
+    U -->|HTTPS| P
+    P --> A
+    P --> G
+    P -->|loopback| B1
+    P -->|tunnel| W
+    W <-->|WireGuard UDP| N
+    N --> B2
+    N --> B3
+    P --> L
+    L --> H
+    AC --> P
+
+    classDef ext fill:#1f2329,stroke:#3b424d,color:#d9dde3
 ```
 
-The resulting binary serves the admin UI from `go:embed`d static files.
+* The hub is a single Go binary. SQLite by default, PostgreSQL optional.
+* The node agent is a second small Go binary. It dials the hub over WireGuard, never listens for inbound. Userspace WG via `wireguard-go` plus gVisor netstack means no kernel module and no root on the node.
+* The admin UI is a Next.js app embedded into the same binary via `go:embed`. One process to deploy.
+* Per service routes match by domain and path, run policy checks (auth, GeoIP, CrowdSec, IP lists, access windows), then proxy to a local upstream or to the node over the tunnel.
+
+<p align="center">
+  <img src="assets/screenshots/service-detail.png" alt="Service detail page for a local service with PIN auth" width="420" />
+  <img src="assets/screenshots/node-detail.png" alt="Node detail page with WireGuard handshake age" width="420" />
+  <br />
+  <em>Service detail (left): a local service routed without a tunnel, gated by PIN. Node detail (right): tunnel state with live WireGuard handshake age.</em>
+</p>
+
+## Security model
+
+What Portlyn protects and what it does not, stated plainly.
+
+### What it protects
+
+* **Origin services from direct internet exposure.** Inbound traffic terminates at the hub. The node never opens a listener.
+* **Unauthenticated access to a route.** Each route has an access mode (`public`, `authenticated`, `restricted`) and an access method (session, OIDC, PIN, email code). Mode `restricted` requires both authentication and policy (groups, IP, GeoIP, access windows).
+* **Credential theft via weak factors.** Passkeys, TOTP, OIDC SSO, account lockout, rate limited login and OTP endpoints, optional admin MFA enforcement.
+* **Audit trail tampering.** Hash chained audit log with previous hash verification.
+
+<p align="center">
+  <img src="assets/screenshots/audit-log.png" alt="Hash chained audit log with granted and denied events" width="720" />
+</p>
+
+* **Supply chain.** Releases are reproducible from GitHub Actions, signed with Cosign keyless, and verified by the binary on self update via sigstore-go with the embedded TUF trust root.
+
+### What it does not protect
+
+* **The application behind it.** A vulnerable upstream is still vulnerable. Portlyn is not a WAF and does not inspect request bodies.
+* **Multi tenant isolation.** Single tenant model. All admins see all services.
+* **Side channels at the node.** A node compromise lets the attacker reach what that node is authorized to forward to. Use per node scoping.
+* **DDoS at L3 or L4.** The hub absorbs L7 abuse with rate limits and CrowdSec lists, but you still want a CDN or a beefier upstream for volumetric attacks.
+
+### Threat model boundary
+
+| Asset                | In scope                                            | Out of scope                                        |
+| -------------------- | --------------------------------------------------- | --------------------------------------------------- |
+| Admin session        | CSRF, replay, MFA bypass, session fixation          | Local malware on the admin's machine                |
+| Route auth (PIN etc) | Brute force, replay, cross host cookie smuggling    | Phishing the PIN out of a legitimate user           |
+| Tunnel               | Tunnel auth, peer key collision, replay, key reuse  | A compromised node's outbound destinations          |
+| Certificates         | ACME validation hijack via the proxy, key at rest   | DNS account takeover at your registrar              |
+| Supply chain         | Release artifact integrity                          | Compromise of GitHub itself or your local toolchain |
+
+### Defaults you should know
+
+* `ALLOW_INSECURE_DEV_MODE=false` (rejected outright in production)
+* `REQUIRE_MFA_FOR_ADMINS=true` recommended; once set, admins cannot dismiss the bootstrap wizard
+* `NODE_REQUIRE_HTTPS=true`, `NODE_TRUST_FORWARDED_PROTO=true`
+* `TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128` (extend it if you sit behind another L7 proxy)
+* HttpOnly cookies, `Secure` outside dev mode, `SameSite=Lax` for sessions, `SameSite=Strict` for refresh tokens
+* AES-256-GCM at rest for DNS provider creds and MFA secrets, Argon2id key derivation
+* Self update verifies SHA-256 plus full Sigstore certificate chain via sigstore-go, not just the signature
+
+Report a vulnerability via [SECURITY.md](SECURITY.md).
+
+## Comparison
+
+Closest projects, honest pros and cons.
+
+|                              | Portlyn                      | Pangolin              | Traefik + Authelia       |
+| ---------------------------- | ---------------------------- | --------------------- | ------------------------ |
+| Deploy surface               | 1 hub binary + 1 node agent  | 1 hub binary + Newt   | 3 or more services       |
+| Built in tunnel              | Userspace WireGuard          | Userspace WireGuard   | None (use Tailscale etc) |
+| Auth model                   | Per route, in process        | Per route, in process | Sidecar (Authelia)       |
+| Passkeys                     | Yes                          | Yes                   | Via Authelia             |
+| ACME wildcard DNS-01         | Yes                          | Yes                   | Yes                      |
+| Hash chained audit log       | Yes                          | No                    | No                       |
+| Released, signed binaries    | Yes (Cosign keyless)         | Yes                   | Yes                      |
+| Ecosystem maturity           | Young                        | Growing               | Mature, big community    |
+| License                      | MIT                          | AGPL-3.0              | MIT / Apache 2 mix       |
+
+Portlyn's bet: one binary, one admin UI, one config story. The cost is a smaller ecosystem and fewer plugins than the Traefik world.
 
 ## Configuration
 
-All runtime settings are environment driven.
-`portlyn init` writes a complete `.env` file with strong random secrets.
-
-Minimum production set:
+All runtime settings are environment driven. `portlyn init` writes a complete `.env` with strong random secrets. Minimum production set:
 
 ```env
 FRONTEND_BASE_URL=https://portlyn.example.com
@@ -355,133 +284,48 @@ DATABASE_URL=
 <details>
 <summary><strong>Production checklist</strong></summary>
 
-* Keep `ALLOW_INSECURE_DEV_MODE=false`
-* Keep `OTP_RESPONSE_INCLUDES_CODE=false`
-* Set `REDIRECT_HTTP_TO_HTTPS=true` once TLS is active
-* Set `REQUIRE_MFA_FOR_ADMINS=true` and enroll every admin
-* Use distinct random secrets for each secret variable
-* Point `FRONTEND_BASE_URL` and `CORS_ALLOWED_ORIGINS` at the real public hostname
-* Configure trusted proxy CIDRs if you sit behind another L7 proxy
-* If you use external PostgreSQL, confirm the connection works from inside the Portlyn container
+* `ALLOW_INSECURE_DEV_MODE=false`
+* `OTP_RESPONSE_INCLUDES_CODE=false`
+* `REDIRECT_HTTP_TO_HTTPS=true` once TLS is active
+* `REQUIRE_MFA_FOR_ADMINS=true` and enroll every admin
+* Distinct random secrets for each secret variable
+* `FRONTEND_BASE_URL` and `CORS_ALLOWED_ORIGINS` point at the real public hostname
+* `TRUSTED_PROXY_CIDRS` configured if you sit behind another L7 proxy
+* External PostgreSQL connection verified from inside the Portlyn container
 
 </details>
 
-## Certificates
+## Develop
 
-Certificate workflows are first class admin features.
-
-* ACME `http-01` and `dns-01`
-* Wildcards through `dns-01`
-* Multi SAN issuance
-* Let's Encrypt production and staging
-* Automatic renewals with configurable windows
-* Actions: create, update, delete, retry, renew, sync status, PEM import
-
-DNS provider credentials are encrypted at rest using Argon2id derived keys with AES-256-GCM and never returned in clear text by the API.
-
-<details>
-<summary><strong>Operational rules</strong></summary>
-
-* Wildcard names require `dns-01`
-* `http-01` is rejected for wildcard certificates
-* Duplicate or invalid SANs are rejected
-* `dns-01` requires an active DNS provider resource
-* Let's Encrypt staging is available for safe dry runs
-* DNS provider tests validate stored configuration, not a full ACME dry run
-
-</details>
-
-## Security
-
-Portlyn ships with conservative defaults and visible enforcement.
-
-* Hash chained audit log with prev hash verification
-* CSRF double submit with HMAC, strict JSON parsing, request size limits
-* HSTS, CSP, X-Frame-Options, X-Content-Type-Options on the admin and proxy planes
-* HttpOnly cookies, `Secure` outside dev mode, `SameSite=Lax` for sessions, `SameSite=Strict` for refresh tokens
-* AES-256-GCM secret storage with Argon2id key derivation. v1 (SHA-256) values remain decryptable for migration
-* JWT with explicit `alg` allow list
-* Node enrollment with single use tokens, optional mTLS client cert pinning
-* Rate limits on login, OTP, and node heartbeats
-
-<details>
-<summary><strong>Identity factors</strong></summary>
-
-* Local bcrypt password
-* OIDC with role claim mapping
-* TOTP with recovery codes, in clear separation from passkeys
-* WebAuthn passkeys, parallel to TOTP, with optional `user_verified` requirement
-* Magic link, single use, scoped to a service, with TTL and label for audit attribution
-* PIN and email code methods for low friction service access without accounts
-
-</details>
-
-<details>
-<summary><strong>Known boundaries</strong></summary>
-
-* The userspace tunnel reaches roughly 80 percent of kernel WireGuard throughput. Use kernel WG if you saturate links above 1 Gbps.
-* The exposure scanner is best effort. A high score is not a substitute for a pentest.
-* CrowdSec integration is pull based against LAPI. Web Application Firewall rules are not bundled.
-
-</details>
-
-## Observability
-
-Structured logs and audit records cover:
-
-* API requests with request id, method, path, host, latency, status code, user context
-* Proxy requests with the same fields plus the matched service, access mode, access method, and outcome
-* Identity events (login, MFA, OIDC) and admin actions
-
-Metrics at `GET /metrics` (admin authenticated unless `METRICS_PUBLIC=true`):
-
-* API and proxy latency histograms
-* Request totals by outcome
-* Auth attempts and rate limit hits
-* Cache hits and config propagation timings
-* ACME results and certificate expiry gauges
-* DB ping latency
-* Tunnel peer counts and handshake ages
-* Typed health state gauges
-
-Health surfaces:
-
-* `GET /livez` for process liveness
-* `GET /readyz` for required dependency readiness
-* `GET /healthz` for combined operational health
-* `GET /api/v1/system/overview` for the admin UI summary
-
-Bundled Grafana assets:
-
-* [`deploy/grafana/dashboards/portlyn-overview.json`](deploy/grafana/dashboards/portlyn-overview.json)
-* [`deploy/grafana/provisioning/dashboards/portlyn.yml`](deploy/grafana/provisioning/dashboards/portlyn.yml)
-* [`deploy/grafana/provisioning/datasources/loki.yml`](deploy/grafana/provisioning/datasources/loki.yml)
-
-## Development
-
-Backend hot reload friendly run:
+The default `docker-compose.yml` pulls published images so a fresh clone runs without a build step. To hack on the code:
 
 ```bash
-go mod tidy
+# Backend
 go run ./cmd/server
-```
 
-Frontend dev server (proxies `/api` to the Go server on `8080`):
-
-```bash
+# Frontend dev server (proxies /api to the Go server on :8080)
 cd frontend
 npm install
 npm run dev
 ```
 
-Useful files:
+To build images locally from source (instead of pulling):
 
-* [`docker-compose.yml`](docker-compose.yml)
-* [`Dockerfile`](Dockerfile)
-* [`Dockerfile.single`](Dockerfile.single)
-* [`.env.docker.example`](.env.docker.example)
-* [`frontend/next.config.mjs`](frontend/next.config.mjs)
-* [`deploy.sh`](deploy.sh)
+```bash
+docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+Source build of the single binary with the frontend embedded:
+
+```bash
+cd frontend
+npm ci
+PORTLYN_STATIC_EXPORT=1 npm run build
+rm -rf ../cmd/server/frontend_dist
+mv out ../cmd/server/frontend_dist
+cd ..
+go build -trimpath -ldflags="-s -w" -o portlyn ./cmd/server
+```
 
 ## Testing
 
@@ -491,7 +335,7 @@ Backend:
 go vet ./...
 go test -race ./...
 gofmt -l $(find . -type f -name '*.go' -not -path './.gomodcache/*' -not -path './cmd/server/frontend_dist/*')
-go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
+govulncheck ./...
 ```
 
 Frontend:
@@ -501,56 +345,47 @@ cd frontend
 npm ci
 npx tsc --noEmit
 npm test
-npm run build
 PORTLYN_STATIC_EXPORT=1 npm run build
 ```
 
-End to end (Playwright, scaffold only):
+End to end (Playwright, scaffold):
 
 ```bash
 cd frontend
-npm install
 npx playwright install --with-deps chromium
 PLAYWRIGHT_BASE_URL=http://localhost:3000 npm run e2e
-# Live mode against a running backend
-PORTLYN_E2E_LIVE=1 \
-PORTLYN_TEST_ADMIN_EMAIL=admin@example.test \
-PORTLYN_TEST_ADMIN_PASSWORD='your password' \
-npm run e2e
 ```
 
-Existing automated coverage includes:
+## Observability
 
-* Auth flows: OTP, OIDC helpers, MFA verification, WebAuthn registration smoke
-* Routing and proxy behavior, including upstream degradation
-* TLS certificate loading and metadata sync
-* Node enrollment, heartbeat tokens, mTLS pinning
-* Access policy checks for roles, groups, and restricted policies
-* Tunnel keypair generation, IP pool allocation, peer spec building, end to end userspace WireGuard round trip including subnet proxy
-* Exposure scanner against a real TLS test server
-* CrowdSec stream decoder and IP and CIDR blocking
-* GeoIP country allow and block resolution
-* Audit webhook delivery with HMAC signature
-* Secret encryption v1 to v2 round trip and auto detection
+Structured logs cover API and proxy requests with request id, method, path, host, latency, status, user context, matched service, access mode, access method, and outcome.
+
+Metrics at `GET /metrics` (admin authenticated unless `METRICS_PUBLIC=true`): API and proxy latency histograms, request totals by outcome, auth attempts and rate limit hits, ACME results, cert expiry gauges, tunnel peer counts and handshake ages, DB ping latency.
+
+Health: `GET /livez`, `GET /readyz`, `GET /healthz`. Admin overview at `GET /api/v1/system/overview`.
+
+Bundled Grafana assets:
+
+* [`deploy/grafana/dashboards/portlyn-overview.json`](deploy/grafana/dashboards/portlyn-overview.json)
+* [`deploy/grafana/provisioning/dashboards/portlyn.yml`](deploy/grafana/provisioning/dashboards/portlyn.yml)
+* [`deploy/grafana/provisioning/datasources/loki.yml`](deploy/grafana/provisioning/datasources/loki.yml)
 
 ## Roadmap
 
-The next milestones, in order:
+Honest list of what's not in 1.0 yet, in rough priority order. No dates promised.
 
-1. Live integration E2E tests in CI with a real backend
-2. WebAuthn login flow (registration ships first; login flow is next)
-3. Country picker UI fed by the actual GeoLite2 database catalog
-4. CrowdSec settings UI
-5. Pluggable secret stores (Vault, AWS KMS)
-6. Wireguard kernel mode option for high throughput deployments
-7. Multi node ACME with shared cert storage in Postgres
-8. Public release of single binary builds for Linux, macOS, Windows on amd64 and arm64
+1. Country picker UI fed by the actual GeoLite2 catalog (today the country code is a free text field)
+2. Pluggable secret stores so JWT and data encryption keys can live in Vault or AWS KMS instead of `.env`
+3. Kernel WireGuard mode for hubs that need to saturate 1 Gbps+ links
+4. HA hub deployment (shared cert storage in PostgreSQL exists; leader election and session storage are missing)
+
+If you want to influence what's next, open a Discussion on the repo. Track the work on the [issues page](https://github.com/invaliduser231/Portlyn/issues).
 
 ## Documentation
 
+* [Security Policy](SECURITY.md)
 * [Licensing](LICENSING.md)
 * [Contributing](CONTRIBUTING.md)
-* [Security Policy](SECURITY.md)
 * [Code of Conduct](CODE_OF_CONDUCT.md)
 * [Production Hardening](docs/PRODUCTION-HARDENING.md)
 * [Release Process](docs/RELEASE.md)
@@ -561,41 +396,10 @@ The next milestones, in order:
 * [OpenAPI specification](openapi.yaml)
 * [Changelog](CHANGELOG.md)
 
-## Repository layout
-
-```text
-.
-├── cmd/                  entrypoints (server, nodeagent, configcheck)
-├── deploy/               Loki, Alloy, and Grafana provisioning
-├── docs/                 long form documentation
-├── frontend/             Next.js admin UI
-├── internal/             backend packages
-│   ├── acme/             certificate issuance
-│   ├── audit/            hash chained audit log and webhook dispatch
-│   ├── auth/             local auth, OIDC, TOTP, WebAuthn, magic link
-│   ├── geoip/            MaxMind GeoLite2 lookup
-│   ├── http/             admin HTTP handlers
-│   ├── proxy/            reverse proxy and policy engine
-│   ├── scanner/          exposure scanner
-│   ├── security/         CrowdSec LAPI client
-│   ├── store/            GORM stores
-│   └── tunnel/           userspace WireGuard server, client, netstack, mesh peers and IP pool
-├── scripts/              helper scripts
-├── .env.docker.example   environment template
-├── deploy.sh             interactive deployment helper
-├── docker-compose.yml    default stack
-├── Dockerfile            backend image
-├── Dockerfile.single     single binary image with embedded frontend
-└── openapi.yaml          API specification
-```
-
 ## Privacy
 
-Portlyn collects no telemetry. No analytics SDK, no phone-home, no automatic update check.
-The only outbound traffic comes from features you explicitly configure
-(ACME, webhooks, OIDC, DNS provider APIs, CrowdSec LAPI).
+No telemetry. No analytics SDK, no phone home, no automatic update check. The only outbound traffic comes from features you explicitly configure (ACME, webhooks, OIDC, DNS provider APIs, CrowdSec LAPI).
 
 ## License
 
-Portlyn is released under the [MIT License](LICENSE).
-See [LICENSING.md](LICENSING.md) for a short summary and sponsorship options.
+Portlyn is released under the [MIT License](LICENSE). See [LICENSING.md](LICENSING.md) for a short summary.

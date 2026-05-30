@@ -17,9 +17,8 @@ services:
       start_period: 20s
 
   portlyn:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/invaliduser231/portlyn:${PORTLYN_IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     init: true
     ports:
@@ -117,12 +116,8 @@ services:
       service: "portlyn"
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-}"
-        INTERNAL_API_BASE_URL: "http://portlyn:8080"
+    image: ghcr.io/invaliduser231/portlyn-frontend:${PORTLYN_IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     init: true
     environment:
