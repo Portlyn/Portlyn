@@ -25,9 +25,28 @@ func embeddedFrontendHandler() http.Handler {
 			fileServer.ServeHTTP(w, r)
 			return
 		}
-		if _, err := fs.Stat(sub, clean); err == nil {
-			fileServer.ServeHTTP(w, r)
-			return
+		if strings.HasSuffix(clean, "/") {
+			candidate := clean + "index.html"
+			if _, err := fs.Stat(sub, candidate); err == nil {
+				r2 := r.Clone(r.Context())
+				r2.URL.Path = "/" + candidate
+				fileServer.ServeHTTP(w, r2)
+				return
+			}
+		}
+		if info, err := fs.Stat(sub, clean); err == nil {
+			if info.IsDir() {
+				candidate := clean + "/index.html"
+				if _, err := fs.Stat(sub, candidate); err == nil {
+					r2 := r.Clone(r.Context())
+					r2.URL.Path = "/" + candidate
+					fileServer.ServeHTTP(w, r2)
+					return
+				}
+			} else {
+				fileServer.ServeHTTP(w, r)
+				return
+			}
 		}
 		trimmed := strings.TrimSuffix(clean, "/")
 		if _, err := fs.Stat(sub, trimmed+".html"); err == nil {
