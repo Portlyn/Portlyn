@@ -102,3 +102,14 @@ func (s *SessionStore) RevokeByUser(ctx context.Context, userID uint, revokedAt 
 		"updated_at": revokedAt,
 	}).Error
 }
+
+func (s *SessionStore) RevokeByUserExcept(ctx context.Context, userID uint, exceptSessionID uint, revokedAt time.Time) error {
+	q := s.db.WithContext(ctx).Model(&domain.Session{}).Where("user_id = ? AND revoked_at IS NULL", userID)
+	if exceptSessionID != 0 {
+		q = q.Where("id <> ?", exceptSessionID)
+	}
+	return q.Updates(map[string]any{
+		"revoked_at": revokedAt,
+		"updated_at": revokedAt,
+	}).Error
+}

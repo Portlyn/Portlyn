@@ -596,7 +596,11 @@ func (s *Service) CompleteAccountSetup(ctx context.Context, userID uint, email, 
 		return nil, err
 	}
 	s.InvalidateUser(user.ID)
-	_ = s.RevokeAllUserSessions(ctx, user.ID)
+	if current, ok := SessionFromContext(ctx); ok && current != nil {
+		_ = s.RevokeOtherUserSessions(ctx, user.ID, current.ID)
+	} else {
+		_ = s.RevokeAllUserSessions(ctx, user.ID)
+	}
 	return user, nil
 }
 
@@ -621,7 +625,11 @@ func (s *Service) ChangeOwnPassword(ctx context.Context, userID uint, currentPas
 		return err
 	}
 	s.InvalidateUser(user.ID)
-	_ = s.RevokeAllUserSessions(ctx, user.ID)
+	if current, ok := SessionFromContext(ctx); ok && current != nil {
+		_ = s.RevokeOtherUserSessions(ctx, user.ID, current.ID)
+	} else {
+		_ = s.RevokeAllUserSessions(ctx, user.ID)
+	}
 	return nil
 }
 
@@ -836,6 +844,17 @@ func (s *Service) RevokeAllUserSessions(ctx context.Context, userID uint) error 
 		return nil
 	}
 	if err := s.sessions.RevokeByUser(ctx, userID, time.Now().UTC()); err != nil {
+		return err
+	}
+	s.InvalidateUser(userID)
+	return nil
+}
+
+func (s *Service) RevokeOtherUserSessions(ctx context.Context, userID uint, keepSessionID uint) error {
+	if s.sessions == nil {
+		return nil
+	}
+	if err := s.sessions.RevokeByUserExcept(ctx, userID, keepSessionID, time.Now().UTC()); err != nil {
 		return err
 	}
 	s.InvalidateUser(userID)

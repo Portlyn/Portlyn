@@ -103,7 +103,11 @@ func (s *Service) EnableTOTP(ctx context.Context, userID uint, code string) (*MF
 		return nil, err
 	}
 	s.InvalidateUser(user.ID)
-	_ = s.RevokeAllUserSessions(ctx, user.ID)
+	if current, ok := SessionFromContext(ctx); ok && current != nil {
+		_ = s.RevokeOtherUserSessions(ctx, user.ID, current.ID)
+	} else {
+		_ = s.RevokeAllUserSessions(ctx, user.ID)
+	}
 	return s.MFAStatusForUser(ctx, userID)
 }
 
