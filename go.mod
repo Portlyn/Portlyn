@@ -16,7 +16,7 @@ require (
 	github.com/libdns/libdns v1.1.1
 	github.com/libdns/route53 v1.6.2
 	github.com/oschwald/geoip2-golang v1.13.0
-	github.com/redis/go-redis/v9 v9.19.0
+	github.com/redis/go-redis/v9 v9.20.0
 	github.com/sigstore/sigstore-go v1.1.4
 	golang.org/x/crypto v0.52.0
 	golang.org/x/oauth2 v0.36.0
