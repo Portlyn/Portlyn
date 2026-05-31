@@ -125,7 +125,7 @@ jobs:
           mv out ../cmd/server/frontend_dist
       - name: Build portlyn binary
         run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o portlyn ./cmd/server
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: portlyn-linux-amd64
           path: portlyn
