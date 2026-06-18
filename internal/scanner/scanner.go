@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,25 @@ import (
 
 	"portlyn/internal/domain"
 )
+
+func verifyTLSChain(host string, state *tls.ConnectionState) bool {
+	if state == nil || len(state.PeerCertificates) == 0 {
+		return false
+	}
+	serverName := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		serverName = h
+	}
+	intermediates := x509.NewCertPool()
+	for _, cert := range state.PeerCertificates[1:] {
+		intermediates.AddCert(cert)
+	}
+	_, err := state.PeerCertificates[0].Verify(x509.VerifyOptions{
+		DNSName:       serverName,
+		Intermediates: intermediates,
+	})
+	return err == nil
+}
 
 type ServiceProvider interface {
 	List(ctx context.Context) ([]domain.Service, error)
@@ -156,7 +176,7 @@ func (s *Scanner) ScanService(ctx context.Context, service domain.Service) *doma
 	}
 
 	if resp, err := s.do(ctx, http.MethodGet, httpsURL); err == nil {
-		report.HTTPSValid = resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0
+		report.HTTPSValid = verifyTLSChain(host, resp.TLS)
 		if report.HTTPSValid {
 			cert := resp.TLS.PeerCertificates[0]
 			daysLeft := int(time.Until(cert.NotAfter).Hours() / 24)

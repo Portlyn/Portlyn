@@ -2,6 +2,9 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -67,7 +70,23 @@ func (a *OIDCAuthenticator) StartURL(next string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return a.oauthConfig.AuthCodeURL(state, oidc.Nonce(nonce)), nil
+	verifier := a.pkceVerifier(nonce)
+	return a.oauthConfig.AuthCodeURL(state,
+		oidc.Nonce(nonce),
+		oauth2.SetAuthURLParam("code_challenge", pkceChallenge(verifier)),
+		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+	), nil
+}
+
+func (a *OIDCAuthenticator) pkceVerifier(nonce string) string {
+	mac := hmac.New(sha256.New, a.stateSecret)
+	_, _ = mac.Write([]byte("pkce:" + nonce))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func pkceChallenge(verifier string) string {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
 func (a *OIDCAuthenticator) Exchange(ctx context.Context, code, state string) (*OIDCIdentity, string, error) {
@@ -76,7 +95,7 @@ func (a *OIDCAuthenticator) Exchange(ctx context.Context, code, state string) (*
 		return nil, "", err
 	}
 
-	token, err := a.oauthConfig.Exchange(ctx, code)
+	token, err := a.oauthConfig.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", a.pkceVerifier(stateClaims.Nonce)))
 	if err != nil {
 		return nil, "", fmt.Errorf("exchange oidc code: %w", err)
 	}

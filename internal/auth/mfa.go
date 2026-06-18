@@ -21,6 +21,8 @@ import (
 
 const mfaLoginScope = "mfa_login"
 
+const maxMFAAttempts = 5
+
 type MFAStatus struct {
 	Enabled            bool   `json:"enabled"`
 	PendingSetup       bool   `json:"pending_setup"`
@@ -91,9 +93,11 @@ func (s *Service) EnableTOTP(ctx context.Context, userID uint, code string) (*MF
 	if err != nil || secret == "" {
 		return nil, ErrInvalidToken
 	}
-	if !validateTOTP(secret, code, time.Now().UTC()) {
+	counter, ok := validateTOTP(secret, code, time.Now().UTC())
+	if !ok {
 		return nil, ErrMFACodeInvalid
 	}
+	user.MFALastTOTPCounter = counter
 	user.MFAEnabled = true
 	user.MFASecret = user.MFAPendingSecret
 	user.MFAPendingSecret = ""
@@ -207,6 +211,11 @@ func (s *Service) beginMFAChallenge(ctx context.Context, user *domain.User, meta
 }
 
 func (s *Service) CompleteMFA(ctx context.Context, mfaToken, code string, meta RequestMetadata) (*LoginResult, error) {
+	now := time.Now().UTC()
+	if s.isRateLimited(ctx, "mfa-ip:"+rateLimitRemoteAddr(meta.RemoteAddr), now) {
+		s.observeAuth("mfa", "rate_limited")
+		return nil, ErrRateLimited
+	}
 	item, err := s.loginTokens.GetValidTokenByScope(ctx, "", mfaToken, mfaLoginScope, nil)
 	if err != nil {
 		return nil, ErrInvalidToken
@@ -214,8 +223,13 @@ func (s *Service) CompleteMFA(ctx context.Context, mfaToken, code string, meta R
 	if item.UsedAt != nil {
 		return nil, ErrInvalidToken
 	}
-	if item.ExpiresAt.Before(time.Now().UTC()) || item.UserID == nil {
+	if item.ExpiresAt.Before(now) || item.UserID == nil {
 		return nil, ErrInvalidToken
+	}
+	if item.AttemptCount >= maxMFAAttempts {
+		_ = s.loginTokens.MarkUsed(ctx, item.ID, now)
+		s.observeAuth("mfa", "rate_limited")
+		return nil, ErrRateLimited
 	}
 	user, err := s.users.GetByID(ctx, *item.UserID)
 	if err != nil {
@@ -224,22 +238,28 @@ func (s *Service) CompleteMFA(ctx context.Context, mfaToken, code string, meta R
 	if !user.Active {
 		return nil, ErrInactiveUser
 	}
+	prevCounter := user.MFALastTOTPCounter
 	ok, remaining, err := s.verifyMFAFactor(user, code)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
+		if attempts, incErr := s.loginTokens.IncrementAttempts(ctx, item.ID); incErr == nil && attempts >= maxMFAAttempts {
+			_ = s.loginTokens.MarkUsed(ctx, item.ID, now)
+		}
+		s.observeAuth("mfa", "invalid_code")
 		return nil, ErrMFACodeInvalid
 	}
-	if err := s.loginTokens.MarkUsed(ctx, item.ID, time.Now().UTC()); err != nil {
+	if err := s.loginTokens.MarkUsed(ctx, item.ID, now); err != nil {
 		return nil, err
 	}
-	if len(remaining) != len(user.MFARecoveryCodes) {
+	if len(remaining) != len(user.MFARecoveryCodes) || user.MFALastTOTPCounter != prevCounter {
 		user.MFARecoveryCodes = remaining
 		if err := s.users.Update(ctx, user); err != nil {
 			return nil, err
 		}
 	}
+	s.observeAuth("mfa", "success")
 	return s.completeSuccessfulLogin(ctx, user, meta)
 }
 
@@ -248,8 +268,14 @@ func (s *Service) verifyMFAFactor(user *domain.User, code string) (bool, domain.
 	if code == "" {
 		return false, user.MFARecoveryCodes, nil
 	}
-	if secret, err := s.decryptSecret(user.MFASecret); err == nil && secret != "" && validateTOTP(secret, code, time.Now().UTC()) {
-		return true, user.MFARecoveryCodes, nil
+	if secret, err := s.decryptSecret(user.MFASecret); err == nil && secret != "" {
+		if counter, ok := validateTOTP(secret, code, time.Now().UTC()); ok {
+			if counter <= user.MFALastTOTPCounter {
+				return false, user.MFARecoveryCodes, nil
+			}
+			user.MFALastTOTPCounter = counter
+			return true, user.MFARecoveryCodes, nil
+		}
 	}
 	remaining := make(domain.JSONStringSlice, 0, len(user.MFARecoveryCodes))
 	matched := false
@@ -338,13 +364,14 @@ func buildOTPAuthURL(issuer, email, secret string) string {
 	return "otpauth://totp/" + label + "?" + values.Encode()
 }
 
-func validateTOTP(secret, code string, now time.Time) bool {
+func validateTOTP(secret, code string, now time.Time) (uint64, bool) {
 	for _, offset := range []int64{0, -30} {
-		if generateTOTP(secret, now.Add(time.Duration(offset)*time.Second)) == code {
-			return true
+		t := now.Add(time.Duration(offset) * time.Second)
+		if generateTOTP(secret, t) == code {
+			return uint64(t.Unix() / 30), true
 		}
 	}
-	return false
+	return 0, false
 }
 
 func generateTOTP(secret string, now time.Time) string {

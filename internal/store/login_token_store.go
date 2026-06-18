@@ -54,7 +54,7 @@ func (s *LoginTokenStore) GetValidTokenByScope(ctx context.Context, email, token
 	var item domain.LoginToken
 	hashedToken := hashLoginToken(strings.TrimSpace(token))
 	query := s.db.WithContext(ctx).
-		Where("scope = ? AND (token = ? OR token = ?)", strings.TrimSpace(scope), hashedToken, strings.TrimSpace(token))
+		Where("scope = ? AND token = ?", strings.TrimSpace(scope), hashedToken)
 	if strings.TrimSpace(email) != "" {
 		query = query.Where("lower(email) = ?", strings.ToLower(strings.TrimSpace(email)))
 	}
@@ -82,6 +82,19 @@ func (s *LoginTokenStore) MarkUsed(ctx context.Context, id uint, usedAt time.Tim
 		return ErrAlreadyUsed
 	}
 	return nil
+}
+
+func (s *LoginTokenStore) IncrementAttempts(ctx context.Context, id uint) (int, error) {
+	if err := s.db.WithContext(ctx).Model(&domain.LoginToken{}).
+		Where("id = ?", id).
+		UpdateColumn("attempt_count", gorm.Expr("attempt_count + 1")).Error; err != nil {
+		return 0, err
+	}
+	var item domain.LoginToken
+	if err := s.db.WithContext(ctx).Select("attempt_count").First(&item, id).Error; err != nil {
+		return 0, err
+	}
+	return item.AttemptCount, nil
 }
 
 func (s *LoginTokenStore) GetMagicLink(ctx context.Context, serviceID uint, token string) (*domain.LoginToken, error) {

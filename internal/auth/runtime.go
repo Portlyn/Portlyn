@@ -84,6 +84,7 @@ func (s *Service) currentOIDCConfig(ctx context.Context) config.OIDCConfig {
 		DefaultProviderLabel: firstNonEmpty(strings.TrimSpace(settings.OIDCProviderLabel), "SSO"),
 		AllowEmailLinking:    settings.OIDCAllowEmailLinking,
 		RequireVerifiedEmail: settings.OIDCRequireVerifiedEmail,
+		ManageRoles:          s.fallbackOIDC.ManageRoles,
 	}
 }
 

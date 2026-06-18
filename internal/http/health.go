@@ -176,6 +176,13 @@ func ServiceTargetsFromDomain(services []domain.Service) []HTTPHealthTarget {
 	return targets
 }
 
+func (s *Server) healthVersion() string {
+	if s.cfg.HealthExposeVersion {
+		return s.cfg.AppVersion
+	}
+	return ""
+}
+
 func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	condition := StatusCondition{
 		Name:      "process",
@@ -191,7 +198,7 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, HealthEnvelope{
 		Status:    HealthLevelOK,
 		Kind:      "liveness",
-		Version:   s.cfg.AppVersion,
+		Version:   s.healthVersion(),
 		CheckedAt: condition.CheckedAt,
 		ProxyTLS:  boolStatus(s.acme != nil && s.acme.HasHTTPS()),
 		Livez:     condition,
@@ -234,7 +241,7 @@ func (s *Server) writeHealth(w http.ResponseWriter, r *http.Request, kind string
 	writeJSON(w, statusCode, HealthEnvelope{
 		Status:    status,
 		Kind:      kind,
-		Version:   s.cfg.AppVersion,
+		Version:   s.healthVersion(),
 		CheckedAt: time.Now().UTC(),
 		HTTPAddr:  s.cfg.ProxyHTTPAddr,
 		HTTPSAddr: s.cfg.ProxyHTTPSAddr,

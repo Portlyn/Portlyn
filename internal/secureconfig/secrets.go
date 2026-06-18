@@ -157,14 +157,10 @@ func DecryptBytesV1WithSecrets(secrets [][]byte, value []byte) ([]byte, error) {
 func MaskConfig(config map[string]string) map[string]any {
 	out := make(map[string]any, len(config))
 	for key, value := range config {
-		trimmed := strings.TrimSpace(value)
-		switch {
-		case trimmed == "":
+		if strings.TrimSpace(value) == "" {
 			out[key] = ""
-		case len(trimmed) <= 6:
+		} else {
 			out[key] = "***"
-		default:
-			out[key] = trimmed[:2] + strings.Repeat("*", len(trimmed)-4) + trimmed[len(trimmed)-2:]
 		}
 	}
 	return out

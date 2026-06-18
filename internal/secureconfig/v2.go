@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"strings"
@@ -23,13 +24,18 @@ const (
 
 var argon2KeyCache sync.Map
 
-type argon2CacheKey struct {
-	secret string
-	salt   string
+func argon2CacheKey(secret, salt []byte) [sha256.Size]byte {
+	h := sha256.New()
+	_, _ = h.Write(secret)
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write(salt)
+	var key [sha256.Size]byte
+	copy(key[:], h.Sum(nil))
+	return key
 }
 
 func deriveArgon2Key(secret, salt []byte) []byte {
-	cacheKey := argon2CacheKey{secret: string(secret), salt: string(salt)}
+	cacheKey := argon2CacheKey(secret, salt)
 	if value, ok := argon2KeyCache.Load(cacheKey); ok {
 		return value.([]byte)
 	}

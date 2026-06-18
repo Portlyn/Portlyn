@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
@@ -23,8 +24,24 @@ import (
 	"portlyn/internal/audit"
 	"portlyn/internal/auth"
 	"portlyn/internal/domain"
+	"portlyn/internal/netguard"
 	"portlyn/internal/observability"
 )
+
+func ssrfSafeDialControl(network, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("invalid dial address %q: %w", address, err)
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return fmt.Errorf("unresolved dial address %q", host)
+	}
+	if netguard.IsBlockedAddr(addr) {
+		return fmt.Errorf("connection to blocked address %s denied", host)
+	}
+	return nil
+}
 
 type Manager struct {
 	routes                RoutingStore
@@ -50,6 +67,7 @@ type Manager struct {
 	tunnelDialer          TunnelDialer
 	countryLookup         CountryLookup
 	reputation            ReputationBlocklist
+	geoIPFailOpen         bool
 }
 
 type RuntimeRoute struct {
@@ -118,6 +136,7 @@ type ManagerOptions struct {
 	CountryLookup          CountryLookup
 	Reputation             ReputationBlocklist
 	ServiceDeploymentStore ServiceDeploymentStore
+	GeoIPFailOpen          bool
 }
 
 type TunnelDialer interface {
@@ -138,7 +157,12 @@ type ServiceDeploymentStore interface {
 
 func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, authService *auth.Service, auditLogger *audit.Logger, logger *slog.Logger, metrics *observability.Metrics, options ManagerOptions) *Manager {
 	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			Control:   ssrfSafeDialControl,
+		}).DialContext,
 		MaxIdleConns:          512,
 		MaxIdleConnsPerHost:   128,
 		MaxConnsPerHost:       0,
@@ -206,6 +230,7 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 		tunnelDialer:          options.TunnelDialer,
 		countryLookup:         options.CountryLookup,
 		reputation:            options.Reputation,
+		geoIPFailOpen:         options.GeoIPFailOpen,
 	}
 }
 
@@ -880,9 +905,18 @@ func (m *Manager) enforceNetworkRules(w http.ResponseWriter, r *http.Request, ro
 	if len(route.AllowedCountries) > 0 || len(route.BlockedCountries) > 0 {
 		switch {
 		case m.countryLookup == nil || !m.countryLookup.Available():
-			if m.logger != nil {
-				m.logger.Warn("geoip rules configured but database not loaded; country rules not enforced",
-					"service_id", route.ServiceID, "host", route.Host)
+			if m.geoIPFailOpen {
+				if m.logger != nil {
+					m.logger.Warn("geoip rules configured but database not loaded; failing open per config",
+						"service_id", route.ServiceID, "host", route.Host)
+				}
+			} else {
+				if m.logger != nil {
+					m.logger.Warn("geoip rules configured but database not loaded; denying request (fail-closed)",
+						"service_id", route.ServiceID, "host", route.Host)
+				}
+				writeProxyError(w, http.StatusServiceUnavailable, "geoip_unavailable", "geo restriction cannot be evaluated")
+				return false
 			}
 		default:
 			country := m.countryLookup.CountryISO(net.IP(clientIP.AsSlice()))
@@ -1029,7 +1063,7 @@ func isAllowedByRestrictedPolicy(user *domain.User, groupIDs []uint, policy doma
 			return true
 		}
 	}
-	return len(policy.AllowedRoles) == 0 && len(policy.AllowedGroups) == 0
+	return false
 }
 
 func accessWindowMatches(window compiledAccessWindow, now time.Time) bool {

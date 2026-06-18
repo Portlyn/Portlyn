@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"sort"
 	"strings"
@@ -488,6 +489,9 @@ func (s *Service) GetUserGroupIDs(ctx context.Context, id uint) ([]uint, error) 
 func (s *Service) AuthenticateAccessToken(ctx context.Context, tokenString string) (*domain.User, []uint, *domain.Session, error) {
 	claims, parseErr := s.ParseToken(tokenString)
 	if user, groupIDs, ok := s.getCachedAuthResult(ctx, tokenString); ok {
+		if user == nil || !user.Active {
+			return nil, nil, nil, ErrInactiveUser
+		}
 		var session *domain.Session
 		if parseErr == nil && claims.SessionID != 0 && s.sessions != nil {
 			s2, err := s.sessions.GetByTokenID(ctx, claims.TokenID)
@@ -648,16 +652,20 @@ func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity
 			user.Username = claims.PreferredUsername
 			user.DisplayName = claims.Name
 			user.AuthIssuer = authenticator.Issuer()
-			user.Role = role
-			if err := s.users.UpdateColumns(ctx, user.ID, map[string]any{
+			columns := map[string]any{
 				"email":             email,
 				"username":          claims.PreferredUsername,
 				"display_name":      claims.Name,
-				"role":              role,
 				"auth_provider":     domain.AuthProviderOIDC,
 				"auth_provider_ref": ref,
 				"auth_issuer":       authenticator.Issuer(),
-			}); err != nil {
+			}
+			if authenticator.cfg.ManageRoles {
+				s.logOIDCRoleChange(user, role)
+				user.Role = role
+				columns["role"] = role
+			}
+			if err := s.users.UpdateColumns(ctx, user.ID, columns); err != nil {
 				return nil, err
 			}
 			user.AuthProvider = domain.AuthProviderOIDC
@@ -685,7 +693,10 @@ func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity
 				user.AuthProviderRef = ref
 			}
 			user.AuthIssuer = authenticator.Issuer()
-			user.Role = role
+			if authenticator.cfg.ManageRoles {
+				s.logOIDCRoleChange(user, role)
+				user.Role = role
+			}
 			if err := s.users.Update(ctx, user); err != nil {
 				return nil, err
 			}
@@ -710,6 +721,20 @@ func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity
 		return nil, err
 	}
 	return user, nil
+}
+
+func (s *Service) logOIDCRoleChange(user *domain.User, newRole string) {
+	if user == nil || user.Role == newRole {
+		return
+	}
+	slog.Warn("oidc role change applied on login",
+		"user_id", user.ID,
+		"email", user.Email,
+		"old_role", user.Role,
+		"new_role", newRole,
+		"admin_demotion", user.Role == domain.RoleAdmin && newRole != domain.RoleAdmin,
+		"admin_promotion", user.Role != domain.RoleAdmin && newRole == domain.RoleAdmin,
+	)
 }
 
 func (s *Service) issueToken(user *domain.User, session *domain.Session) (string, error) {

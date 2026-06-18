@@ -96,7 +96,11 @@ func main() {
 	serviceStore := store.NewServiceStore(db)
 	routingStore := store.NewRoutingStore(db)
 	loginTokenStore := store.NewLoginTokenStore(db)
-	auditStore := store.NewAuditStore(db)
+	auditHMACKey := []byte(cfg.AuditHMACSecret)
+	if len(auditHMACKey) == 0 {
+		auditHMACKey = []byte(cfg.DataEncryptionSecret)
+	}
+	auditStore := store.NewAuditStore(db, auditHMACKey)
 	appSettingsStore := store.NewAppSettingsStore(db)
 	appSettingsStore.SetDataEncryptionSecrets(cfg.DataEncryptionSecrets())
 	sessionStore := store.NewSessionStore(db)
@@ -280,6 +284,7 @@ func main() {
 			CountryLookup:          geoipLookup,
 			Reputation:             crowdSecClient,
 			ServiceDeploymentStore: serviceStore,
+			GeoIPFailOpen:          cfg.GeoIPFailOpen,
 		},
 	)
 

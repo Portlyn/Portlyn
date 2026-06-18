@@ -75,13 +75,15 @@ func sendPlainOrStartTLS(cfg SMTPConfig, address string, to []string, subject, t
 	defer client.Quit()
 
 	if startTLS {
-		if ok, _ := client.Extension("STARTTLS"); ok {
-			if err := client.StartTLS(&tls.Config{
-				ServerName:         cfg.Host,
-				InsecureSkipVerify: cfg.InsecureSkipVerify,
-			}); err != nil {
-				return err
-			}
+		ok, _ := client.Extension("STARTTLS")
+		if !ok {
+			return fmt.Errorf("smtp server does not advertise STARTTLS; refusing to send over plaintext")
+		}
+		if err := client.StartTLS(&tls.Config{
+			ServerName:         cfg.Host,
+			InsecureSkipVerify: cfg.InsecureSkipVerify,
+		}); err != nil {
+			return err
 		}
 	}
 	return writeMessage(client, cfg, to, subject, textBody, htmlBody)

@@ -181,7 +181,7 @@ func newIntegrationServer(t *testing.T, mutate ...func(*config.Config)) (*Server
 		t.Fatalf("new auth service: %v", err)
 	}
 
-	auditStore := store.NewAuditStore(db)
+	auditStore := store.NewAuditStore(db, []byte("test-audit-hmac-secret"))
 	auditLogger := audit.NewLogger(noopAuditSink{})
 	server := NewServer(
 		cfg,

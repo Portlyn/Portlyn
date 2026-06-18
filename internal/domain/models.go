@@ -213,6 +213,7 @@ type User struct {
 	MFAPendingSecret        string          `gorm:"size:1024" json:"-"`
 	MFARecoveryCodes        JSONStringSlice `gorm:"type:text;not null;default:'[]'" json:"-"`
 	MFAPendingRecoveryCodes JSONStringSlice `gorm:"type:text;not null;default:'[]'" json:"-"`
+	MFALastTOTPCounter      uint64          `gorm:"not null;default:0" json:"-"`
 	AuthProvider            string          `gorm:"size:32;not null;default:local" json:"auth_provider"`
 	AuthProviderRef         string          `gorm:"size:255;index" json:"auth_provider_ref"`
 	AuthIssuer              string          `gorm:"size:512" json:"auth_issuer"`
@@ -416,18 +417,19 @@ type Service struct {
 }
 
 type LoginToken struct {
-	ID         uint       `gorm:"primaryKey" json:"id"`
-	UserID     *uint      `gorm:"index" json:"user_id"`
-	User       User       `json:"user,omitempty"`
-	ServiceID  *uint      `gorm:"index" json:"service_id"`
-	Email      string     `gorm:"index;size:255;not null" json:"email"`
-	Token      string     `gorm:"index;size:128;not null" json:"-"`
-	Scope      string     `gorm:"size:64;not null;default:account_login;index" json:"scope"`
-	ExpiresAt  time.Time  `gorm:"index;not null" json:"expires_at"`
-	UsedAt     *time.Time `json:"used_at"`
-	RemoteAddr string     `gorm:"size:255" json:"remote_addr"`
-	UserAgent  string     `gorm:"size:512" json:"user_agent"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID           uint       `gorm:"primaryKey" json:"id"`
+	UserID       *uint      `gorm:"index" json:"user_id"`
+	User         User       `json:"user,omitempty"`
+	ServiceID    *uint      `gorm:"index" json:"service_id"`
+	Email        string     `gorm:"index;size:255;not null" json:"email"`
+	Token        string     `gorm:"index;size:128;not null" json:"-"`
+	Scope        string     `gorm:"size:64;not null;default:account_login;index" json:"scope"`
+	ExpiresAt    time.Time  `gorm:"index;not null" json:"expires_at"`
+	UsedAt       *time.Time `json:"used_at"`
+	AttemptCount int        `gorm:"not null;default:0" json:"-"`
+	RemoteAddr   string     `gorm:"size:255" json:"remote_addr"`
+	UserAgent    string     `gorm:"size:512" json:"user_agent"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 type Session struct {

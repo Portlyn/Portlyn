@@ -89,6 +89,9 @@ type Config struct {
 	RequireMFAForAdmins             bool
 	CSRFTokenTTL                    time.Duration
 	RequestBodyLimitBytes           int64
+	GeoIPFailOpen                   bool
+	HealthExposeVersion             bool
+	AuditHMACSecret                 string
 }
 
 type OIDCConfig struct {
@@ -103,6 +106,7 @@ type OIDCConfig struct {
 	DefaultProviderLabel string
 	AllowEmailLinking    bool
 	RequireVerifiedEmail bool
+	ManageRoles          bool
 }
 
 type OTPConfig struct {
@@ -200,6 +204,7 @@ func Load() (Config, error) {
 			DefaultProviderLabel: getEnv("OIDC_PROVIDER_LABEL", "SSO"),
 			AllowEmailLinking:    getEnvBool("OIDC_ALLOW_EMAIL_LINKING", false),
 			RequireVerifiedEmail: getEnvBool("OIDC_REQUIRE_VERIFIED_EMAIL", true),
+			ManageRoles:          getEnvBool("OIDC_MANAGE_ROLES", true),
 		},
 		OTP: OTPConfig{
 			Enabled:              getEnvBool("OTP_ENABLED", true),
@@ -225,6 +230,9 @@ func Load() (Config, error) {
 		RequireMFAForAdmins:   getEnvBool("REQUIRE_MFA_FOR_ADMINS", true),
 		CSRFTokenTTL:          getEnvDuration("CSRF_TOKEN_TTL", 12*time.Hour),
 		RequestBodyLimitBytes: getEnvInt64("REQUEST_BODY_LIMIT_BYTES", 1<<20),
+		GeoIPFailOpen:         getEnvBool("GEOIP_FAIL_OPEN", false),
+		HealthExposeVersion:   getEnvBool("HEALTH_EXPOSE_VERSION", false),
+		AuditHMACSecret:       os.Getenv("AUDIT_HMAC_SECRET"),
 	}
 
 	return cfg, cfg.Validate()

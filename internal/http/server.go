@@ -497,7 +497,7 @@ func (s *Server) handleAuthConfig(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 
 func (s *Server) requestMeta(r *stdhttp.Request) auth.RequestMetadata {
 	return auth.RequestMetadata{
-		RemoteAddr: r.RemoteAddr,
+		RemoteAddr: s.clientIPForRequest(r),
 		UserAgent:  r.UserAgent(),
 	}
 }

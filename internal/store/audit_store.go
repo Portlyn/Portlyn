@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -29,11 +30,12 @@ type AuditListParams struct {
 }
 
 type AuditStore struct {
-	db *gorm.DB
+	db      *gorm.DB
+	hmacKey []byte
 }
 
-func NewAuditStore(db *gorm.DB) *AuditStore {
-	return &AuditStore{db: db}
+func NewAuditStore(db *gorm.DB, hmacKey []byte) *AuditStore {
+	return &AuditStore{db: db, hmacKey: append([]byte(nil), hmacKey...)}
 }
 
 func (s *AuditStore) Create(ctx context.Context, item *domain.AuditLog) error {
@@ -43,7 +45,7 @@ func (s *AuditStore) Create(ctx context.Context, item *domain.AuditLog) error {
 			return err
 		}
 		item.PrevHash = prevHash
-		item.Hash = computeAuditHash(prevHash, item)
+		item.Hash = computeAuditHash(s.hmacKey, prevHash, item)
 		return tx.WithContext(ctx).Create(item).Error
 	})
 }
@@ -59,7 +61,7 @@ func (s *AuditStore) CreateBatch(ctx context.Context, items []domain.AuditLog) e
 		}
 		for i := range items {
 			items[i].PrevHash = prevHash
-			items[i].Hash = computeAuditHash(prevHash, &items[i])
+			items[i].Hash = computeAuditHash(s.hmacKey, prevHash, &items[i])
 			prevHash = items[i].Hash
 		}
 		return tx.WithContext(ctx).Create(&items).Error
@@ -132,7 +134,7 @@ func latestAuditHash(db *gorm.DB) (string, error) {
 	return latest.Hash, nil
 }
 
-func computeAuditHash(prevHash string, item *domain.AuditLog) string {
+func computeAuditHash(key []byte, prevHash string, item *domain.AuditLog) string {
 	payload := map[string]any{
 		"prev_hash":     prevHash,
 		"timestamp":     item.Timestamp.UTC().Format(time.RFC3339Nano),
@@ -151,18 +153,19 @@ func computeAuditHash(prevHash string, item *domain.AuditLog) string {
 		"details":       item.Details,
 	}
 	encoded, _ := json.Marshal(payload)
-	sum := sha256.Sum256(encoded)
-	return hex.EncodeToString(sum[:])
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write(encoded)
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func VerifyAuditHashChain(items []domain.AuditLog) error {
+func VerifyAuditHashChain(key []byte, items []domain.AuditLog) error {
 	prevHash := ""
 	for i := range items {
 		item := &items[i]
 		if item.PrevHash != prevHash {
 			return fmt.Errorf("audit chain mismatch at id %d", item.ID)
 		}
-		expected := computeAuditHash(prevHash, item)
+		expected := computeAuditHash(key, prevHash, item)
 		if item.Hash != expected {
 			return fmt.Errorf("audit hash mismatch at id %d", item.ID)
 		}

@@ -75,8 +75,18 @@ func TestScannerScanServiceCollectsFindings(t *testing.T) {
 	if report == nil {
 		t.Fatal("expected report")
 	}
-	if !report.HTTPSValid {
-		t.Fatalf("expected https valid, got %+v", report)
+	if report.HTTPSValid {
+		t.Fatalf("expected self-signed cert to be reported invalid, got %+v", report)
+	}
+	foundInvalid := false
+	for _, f := range report.Findings {
+		if f == "https_invalid" {
+			foundInvalid = true
+			break
+		}
+	}
+	if !foundInvalid {
+		t.Fatalf("expected https_invalid finding, got %+v", report.Findings)
 	}
 	if !report.AuthEnforced {
 		t.Fatal("expected auth enforced")

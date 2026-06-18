@@ -164,6 +164,10 @@ func (s *Server) handleVerifyMFA(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 			writeError(w, stdhttp.StatusUnauthorized, "invalid_mfa_token", "mfa challenge is invalid or expired")
 		case errors.Is(err, auth.ErrMFACodeInvalid):
 			writeError(w, stdhttp.StatusUnauthorized, "invalid_mfa_code", "invalid authenticator or recovery code")
+		case errors.Is(err, auth.ErrRateLimited):
+			writeError(w, stdhttp.StatusTooManyRequests, "rate_limited", "too many attempts, please start a new login")
+		case errors.Is(err, auth.ErrInactiveUser):
+			writeError(w, stdhttp.StatusUnauthorized, "invalid_mfa_token", "mfa challenge is invalid or expired")
 		default:
 			s.internalError(w, err)
 		}
