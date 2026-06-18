@@ -31,12 +31,17 @@ type routeAuthGroupBrief struct {
 }
 
 func (s *Server) handleGetRouteAuthService(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if !s.enforceNodeRateLimit(w, r, "route_auth_service_lookup", routeAuthServiceLookupRateLimit, s.cfg.AuthRateLimit.Window) {
+		return
+	}
 	service, ok := s.loadService(w, r)
 	if !ok {
 		return
 	}
 	writeJSON(w, stdhttp.StatusOK, buildRouteAuthServiceResponse(*service))
 }
+
+const routeAuthServiceLookupRateLimit = 60
 
 func (s *Server) handleCreateSessionBridgeToken(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	var req sessionBridgeTokenRequest

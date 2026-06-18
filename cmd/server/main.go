@@ -96,11 +96,7 @@ func main() {
 	serviceStore := store.NewServiceStore(db)
 	routingStore := store.NewRoutingStore(db)
 	loginTokenStore := store.NewLoginTokenStore(db)
-	auditHMACKey := []byte(cfg.AuditHMACSecret)
-	if len(auditHMACKey) == 0 {
-		auditHMACKey = []byte(cfg.DataEncryptionSecret)
-	}
-	auditStore := store.NewAuditStore(db, auditHMACKey)
+	auditStore := store.NewAuditStore(db, []byte(cfg.AuditHMACSecret))
 	appSettingsStore := store.NewAppSettingsStore(db)
 	appSettingsStore.SetDataEncryptionSecrets(cfg.DataEncryptionSecrets())
 	sessionStore := store.NewSessionStore(db)
@@ -242,6 +238,7 @@ func main() {
 
 	geoipLookup := geoip.NewLookup()
 	crowdSecClient := security.NewCrowdSec()
+	crowdSecClient.SetLogger(logger)
 	if currentSettings, err := appSettingsStore.Get(context.Background()); err == nil {
 		if path := strings.TrimSpace(currentSettings.GeoIPDBPath); path != "" {
 			if err := geoipLookup.Load(path); err != nil {
@@ -291,6 +288,7 @@ func main() {
 			Reputation:             crowdSecClient,
 			ServiceDeploymentStore: serviceStore,
 			GeoIPFailOpen:          cfg.GeoIPFailOpen,
+			CrowdSecFailOpen:       cfg.CrowdSecFailOpen,
 		},
 	)
 
@@ -340,6 +338,13 @@ func main() {
 		bootWarnings,
 		healthChecks...,
 	)
+
+	if migrated, err := server.MigrateDNSProviderSecrets(context.Background()); err != nil {
+		logger.Error("failed to migrate dns provider secrets", "error", err)
+		os.Exit(1)
+	} else if migrated > 0 {
+		logger.Info("migrated dns provider secrets to latest encryption", "updated", migrated)
+	}
 
 	if err := server.SyncProxyState(context.Background()); err != nil {
 		logger.Error("failed to sync proxy state", "error", err)

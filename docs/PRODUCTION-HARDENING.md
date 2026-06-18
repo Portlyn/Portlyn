@@ -6,7 +6,7 @@ production security posture by itself.
 ## Required before internet exposure
 
 - Set `ALLOW_INSECURE_DEV_MODE=false`.
-- Set strong, distinct values for `JWT_SECRET`, `JWT_SIGNING_SECRET`, `SESSION_BRIDGE_SECRET`, `OIDC_STATE_SECRET`, `MFA_ENCRYPTION_SECRET`, `CSRF_SECRET`, `DATA_ENCRYPTION_SECRET`, `POSTGRES_PASSWORD`, and `GRAFANA_ADMIN_PASSWORD`.
+- Set strong, distinct values for `JWT_SECRET`, `JWT_SIGNING_SECRET`, `SESSION_BRIDGE_SECRET`, `OIDC_STATE_SECRET`, `MFA_ENCRYPTION_SECRET`, `CSRF_SECRET`, `DATA_ENCRYPTION_SECRET`, `AUDIT_HMAC_SECRET`, `POSTGRES_PASSWORD`, and `GRAFANA_ADMIN_PASSWORD`.
 - Keep bootstrap login disabled by default (`BOOTSTRAP_ADMIN_ENABLED=false`) and only enable it briefly for controlled first-time setup.
 - Keep admin MFA enforcement enabled (`REQUIRE_MFA_FOR_ADMINS=true`) and enroll TOTP for every admin.
 - Set `FRONTEND_BASE_URL`, `CORS_ALLOWED_ORIGINS`, and OIDC redirect settings to the final public URL.

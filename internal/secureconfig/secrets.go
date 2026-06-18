@@ -54,6 +54,40 @@ func DecryptJSONWithSecrets(secrets [][]byte, value string) (map[string]string, 
 	return nil, fmt.Errorf("no secrets available for decryption")
 }
 
+func EncryptJSONV2(secret []byte, value map[string]string) (string, error) {
+	bytes, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return EncryptStringV2(secret, string(bytes))
+}
+
+func DecryptJSONAuto(secrets [][]byte, value string) (map[string]string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return map[string]string{}, nil
+	}
+	var plaintext string
+	var err error
+	if IsEncryptedValueV2(trimmed) {
+		plaintext, err = decryptStringV2WithSecrets(secrets, trimmed)
+	} else {
+		plaintext, err = DecryptStringWithSecrets(secrets, trimmed)
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]string
+	if err := json.Unmarshal([]byte(plaintext), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func IsEncryptedJSONLatest(value string) bool {
+	return IsEncryptedValueV2(value)
+}
+
 func EncryptString(secret []byte, value string) (string, error) {
 	block, err := aes.NewCipher(deriveSecretKey(secret))
 	if err != nil {

@@ -66,7 +66,10 @@ func (s *Server) ensureCSRFCookie(w http.ResponseWriter, r *http.Request) string
 			return token
 		}
 	}
-	token := s.newCSRFCookieValue(time.Now().UTC().Add(s.cfg.CSRFTokenTTL))
+	token, err := s.newCSRFCookieValue(time.Now().UTC().Add(s.cfg.CSRFTokenTTL))
+	if err != nil {
+		return ""
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     auth.CSRFCookieName,
 		Value:    token,
@@ -79,14 +82,16 @@ func (s *Server) ensureCSRFCookie(w http.ResponseWriter, r *http.Request) string
 	return token
 }
 
-func (s *Server) newCSRFCookieValue(expiresAt time.Time) string {
+func (s *Server) newCSRFCookieValue(expiresAt time.Time) (string, error) {
 	random := make([]byte, 18)
-	_, _ = rand.Read(random)
+	if _, err := rand.Read(random); err != nil {
+		return "", err
+	}
 	payload := hex.EncodeToString(random) + "." + strconv.FormatInt(expiresAt.Unix(), 10)
 	mac := hmac.New(sha256.New, []byte(s.cfg.CSRFSecret))
 	_, _ = mac.Write([]byte(payload))
 	signature := hex.EncodeToString(mac.Sum(nil))
-	return base64.RawURLEncoding.EncodeToString([]byte(payload + "." + signature))
+	return base64.RawURLEncoding.EncodeToString([]byte(payload + "." + signature)), nil
 }
 
 func (s *Server) validCSRFCookie(value string) bool {

@@ -160,6 +160,11 @@ func (s *Server) handleDeleteNode(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 	w.WriteHeader(stdhttp.StatusNoContent)
 }
 
+const (
+	nodeHeartbeatRateLimit  = 60
+	nodeHeartbeatRateWindow = time.Minute
+)
+
 func (s *Server) handleHeartbeatNode(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	if !s.requireNodeSecureTransport(w, r) {
 		return
@@ -190,6 +195,10 @@ func (s *Server) handleHeartbeatNode(w stdhttp.ResponseWriter, r *stdhttp.Reques
 			return
 		}
 		writeError(w, stdhttp.StatusUnauthorized, "unauthorized", "missing or invalid node token")
+		return
+	}
+
+	if !s.enforceNodeRateLimit(w, r, fmt.Sprintf("node_heartbeat:%d", node.ID), nodeHeartbeatRateLimit, nodeHeartbeatRateWindow) {
 		return
 	}
 
@@ -960,6 +969,65 @@ func resolveTargetHost(host string) ([]netip.Addr, error) {
 	return addrs, nil
 }
 
+func parseLegacyIPv4(host string) (netip.Addr, bool) {
+	if host == "" {
+		return netip.Addr{}, false
+	}
+	parts := strings.Split(host, ".")
+	if len(parts) == 0 || len(parts) > 4 {
+		return netip.Addr{}, false
+	}
+	values := make([]uint64, len(parts))
+	for i, part := range parts {
+		if part == "" {
+			return netip.Addr{}, false
+		}
+		base := 10
+		switch {
+		case len(part) > 2 && (part[0:2] == "0x" || part[0:2] == "0X"):
+			base = 16
+			part = part[2:]
+		case len(part) > 1 && part[0] == '0':
+			base = 8
+			part = part[1:]
+		}
+		if part == "" {
+			part = "0"
+		}
+		v, err := strconv.ParseUint(part, base, 64)
+		if err != nil {
+			return netip.Addr{}, false
+		}
+		values[i] = v
+	}
+	var n uint64
+	switch len(values) {
+	case 1:
+		n = values[0]
+	case 2:
+		if values[0] > 0xff || values[1] > 0xffffff {
+			return netip.Addr{}, false
+		}
+		n = values[0]<<24 | values[1]
+	case 3:
+		if values[0] > 0xff || values[1] > 0xff || values[2] > 0xffff {
+			return netip.Addr{}, false
+		}
+		n = values[0]<<24 | values[1]<<16 | values[2]
+	case 4:
+		for _, v := range values {
+			if v > 0xff {
+				return netip.Addr{}, false
+			}
+		}
+		n = values[0]<<24 | values[1]<<16 | values[2]<<8 | values[3]
+	}
+	if n > 0xffffffff {
+		return netip.Addr{}, false
+	}
+	return netip.AddrFrom4([4]byte{byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}), true
+}
+
 func validateServiceTargetURL(raw string) error {
 	return validateTargetURL(raw, false)
 }
@@ -990,6 +1058,13 @@ func validateTargetURL(raw string, strict bool) error {
 	}
 
 	if addr, err := netip.ParseAddr(host); err == nil {
+		if blocked(addr) {
+			return fmt.Errorf("target_url host is blocked for security reasons")
+		}
+		return nil
+	}
+
+	if addr, ok := parseLegacyIPv4(host); ok {
 		if blocked(addr) {
 			return fmt.Errorf("target_url host is blocked for security reasons")
 		}

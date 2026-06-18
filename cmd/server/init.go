@@ -124,6 +124,7 @@ func buildEnvFile(a initAnswers) (string, error) {
 		"MFA_ENCRYPTION_SECRET",
 		"CSRF_SECRET",
 		"DATA_ENCRYPTION_SECRET",
+		"AUDIT_HMAC_SECRET",
 	} {
 		s, err := randomURLSafe(48)
 		if err != nil {

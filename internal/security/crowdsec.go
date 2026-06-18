@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -20,6 +21,11 @@ type CrowdSec struct {
 	httpClient *http.Client
 	interval   time.Duration
 	startup    bool
+	logger     *slog.Logger
+
+	syncMu      sync.RWMutex
+	lastSuccess time.Time
+	synced      bool
 
 	decisionsMu     sync.RWMutex
 	ipDecisions     map[string]string
@@ -55,6 +61,12 @@ func NewCrowdSec() *CrowdSec {
 		ipDecisions: make(map[string]string),
 		interval:    60 * time.Second,
 	}
+}
+
+func (c *CrowdSec) SetLogger(logger *slog.Logger) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.logger = logger
 }
 
 func (c *CrowdSec) Configure(apiURL, apiKey string, interval time.Duration) {
@@ -108,7 +120,11 @@ func (c *CrowdSec) loop(ctx context.Context) {
 	if err := c.fetchOnce(ctx, true); err != nil {
 		c.mu.Lock()
 		c.startup = false
+		logger := c.logger
 		c.mu.Unlock()
+		if logger != nil {
+			logger.Warn("crowdsec initial decision sync failed; reputation blocking is inactive until a sync succeeds", "error", err)
+		}
 	}
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
@@ -117,7 +133,14 @@ func (c *CrowdSec) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_ = c.fetchOnce(ctx, false)
+			if err := c.fetchOnce(ctx, false); err != nil {
+				c.mu.RLock()
+				logger := c.logger
+				c.mu.RUnlock()
+				if logger != nil {
+					logger.Warn("crowdsec decision sync failed; reputation decisions may be stale", "error", err)
+				}
+			}
 		}
 	}
 }
@@ -153,7 +176,27 @@ func (c *CrowdSec) fetchOnce(ctx context.Context, startup bool) error {
 		return err
 	}
 	c.apply(stream)
+	c.syncMu.Lock()
+	c.lastSuccess = time.Now().UTC()
+	c.synced = true
+	c.syncMu.Unlock()
 	return nil
+}
+
+func (c *CrowdSec) Healthy() bool {
+	c.mu.RLock()
+	interval := c.interval
+	c.mu.RUnlock()
+	staleAfter := 3 * interval
+	if staleAfter < time.Minute {
+		staleAfter = time.Minute
+	}
+	c.syncMu.RLock()
+	defer c.syncMu.RUnlock()
+	if !c.synced {
+		return false
+	}
+	return time.Since(c.lastSuccess) <= staleAfter
 }
 
 func (c *CrowdSec) apply(stream decisionsStream) {
@@ -168,9 +211,6 @@ func (c *CrowdSec) apply(stream decisionsStream) {
 }
 
 func (c *CrowdSec) addLocked(dec Decision) {
-	if !strings.EqualFold(dec.Type, "ban") {
-		return
-	}
 	value := strings.TrimSpace(dec.Value)
 	if value == "" {
 		return

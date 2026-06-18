@@ -137,7 +137,10 @@ func TestDataKeyReencryptFromLegacySecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload provider: %v", err)
 	}
-	if _, err := secureconfig.DecryptJSON([]byte(server.cfg.DataEncryptionSecret), updated.ConfigEncrypted); err != nil {
+	if !secureconfig.IsEncryptedJSONLatest(updated.ConfigEncrypted) {
+		t.Fatalf("expected reencrypted config to use the latest encryption format")
+	}
+	if _, err := secureconfig.DecryptJSONAuto([][]byte{[]byte(server.cfg.DataEncryptionSecret)}, updated.ConfigEncrypted); err != nil {
 		t.Fatalf("expected config to be decryptable with active key: %v", err)
 	}
 }

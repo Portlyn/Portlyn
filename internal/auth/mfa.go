@@ -191,12 +191,16 @@ func (s *Service) beginMFAChallenge(ctx context.Context, user *domain.User, meta
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now().UTC()
+	if err := s.loginTokens.InvalidateOutstandingByUserScope(ctx, user.ID, mfaLoginScope, now); err != nil {
+		return nil, err
+	}
 	item := &domain.LoginToken{
 		UserID:     &user.ID,
 		Email:      user.Email,
 		Token:      hashToken(challengeToken),
 		Scope:      mfaLoginScope,
-		ExpiresAt:  time.Now().UTC().Add(10 * time.Minute),
+		ExpiresAt:  now.Add(10 * time.Minute),
 		RemoteAddr: meta.RemoteAddr,
 		UserAgent:  meta.UserAgent,
 	}

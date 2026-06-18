@@ -1,10 +1,44 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
+
+	"portlyn/internal/secureconfig"
 )
+
+func (s *Server) MigrateDNSProviderSecrets(ctx context.Context) (int, error) {
+	items, err := s.dnsProviders.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	updated := 0
+	for i := range items {
+		item := &items[i]
+		if strings.TrimSpace(item.ConfigEncrypted) == "" {
+			continue
+		}
+		if secureconfig.IsEncryptedJSONLatest(item.ConfigEncrypted) {
+			continue
+		}
+		config, err := s.dataDecryptJSON(item.ConfigEncrypted)
+		if err != nil {
+			continue
+		}
+		encrypted, err := s.dataEncryptJSON(config)
+		if err != nil {
+			return updated, err
+		}
+		item.ConfigEncrypted = encrypted
+		if err := s.dnsProviders.Update(ctx, item); err != nil {
+			return updated, err
+		}
+		updated++
+	}
+	return updated, nil
+}
 
 type rotationStatusResponse struct {
 	DataEncryption map[string]any `json:"data_encryption"`
@@ -26,8 +60,10 @@ func (s *Server) handleRotationStatus(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(item.ConfigEncrypted) == "" {
 			continue
 		}
-		if _, err := s.dataDecryptJSONWithActiveKey(item.ConfigEncrypted); err == nil {
-			continue
+		if secureconfig.IsEncryptedJSONLatest(item.ConfigEncrypted) {
+			if _, err := s.dataDecryptJSONWithActiveKey(item.ConfigEncrypted); err == nil {
+				continue
+			}
 		}
 		if _, err := s.dataDecryptJSON(item.ConfigEncrypted); err == nil {
 			reEncryptCandidates++
@@ -77,9 +113,11 @@ func (s *Server) handleReencryptDataKey(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 		processed++
-		if _, err := s.dataDecryptJSONWithActiveKey(item.ConfigEncrypted); err == nil {
-			skipped++
-			continue
+		if secureconfig.IsEncryptedJSONLatest(item.ConfigEncrypted) {
+			if _, err := s.dataDecryptJSONWithActiveKey(item.ConfigEncrypted); err == nil {
+				skipped++
+				continue
+			}
 		}
 		config, err := s.dataDecryptJSON(item.ConfigEncrypted)
 		if err != nil {

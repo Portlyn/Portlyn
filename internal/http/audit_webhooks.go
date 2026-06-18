@@ -132,6 +132,7 @@ func (s *Server) handleUpdateAuditWebhook(w stdhttp.ResponseWriter, r *stdhttp.R
 		s.internalError(w, err)
 		return
 	}
+	_ = s.audit.LogRequest(r.Context(), r, s.currentUserID(r), "update", "audit_webhook", &item.ID, map[string]any{"name": item.Name, "url": item.URL, "active": item.Active})
 	writeJSON(w, stdhttp.StatusOK, item)
 }
 

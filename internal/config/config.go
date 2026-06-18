@@ -90,6 +90,7 @@ type Config struct {
 	CSRFTokenTTL                    time.Duration
 	RequestBodyLimitBytes           int64
 	GeoIPFailOpen                   bool
+	CrowdSecFailOpen                bool
 	HealthExposeVersion             bool
 	AuditHMACSecret                 string
 }
@@ -231,8 +232,9 @@ func Load() (Config, error) {
 		CSRFTokenTTL:          getEnvDuration("CSRF_TOKEN_TTL", 12*time.Hour),
 		RequestBodyLimitBytes: getEnvInt64("REQUEST_BODY_LIMIT_BYTES", 1<<20),
 		GeoIPFailOpen:         getEnvBool("GEOIP_FAIL_OPEN", false),
+		CrowdSecFailOpen:      getEnvBool("CROWDSEC_FAIL_OPEN", true),
 		HealthExposeVersion:   getEnvBool("HEALTH_EXPOSE_VERSION", false),
-		AuditHMACSecret:       os.Getenv("AUDIT_HMAC_SECRET"),
+		AuditHMACSecret:       getSecretEnv("AUDIT_HMAC_SECRET", secrets, allowInsecureDevMode),
 	}
 
 	return cfg, cfg.Validate()
@@ -264,6 +266,7 @@ func (cfg *Config) ValidationIssues() []ValidationIssue {
 		{Field: "MFA_ENCRYPTION_SECRET", Value: cfg.MFAEncryptionSecret},
 		{Field: "CSRF_SECRET", Value: cfg.CSRFSecret},
 		{Field: "DATA_ENCRYPTION_SECRET", Value: cfg.DataEncryptionSecret},
+		{Field: "AUDIT_HMAC_SECRET", Value: cfg.AuditHMACSecret},
 	}
 	for _, secret := range secretFields {
 		if strings.TrimSpace(secret.Value) == "" {

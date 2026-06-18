@@ -31,3 +31,25 @@ func TestIsBlockedAddrAllowsPrivateForProxyUpstreams(t *testing.T) {
 		t.Errorf("expected private address to be allowed for non-strict proxy upstreams")
 	}
 }
+
+func TestIsBlockedAddrBlocksEmbeddedMetadata(t *testing.T) {
+	blocked := []string{
+		"64:ff9b::a9fe:a9fe",
+		"2002:a9fe:a9fe::1",
+		"100.64.0.1",
+		"::ffff:169.254.169.254",
+	}
+	for _, raw := range blocked {
+		addr := netip.MustParseAddr(raw)
+		if !IsBlockedAddr(addr) {
+			t.Errorf("expected %s to be blocked (embeds/maps to a blocked address)", raw)
+		}
+	}
+}
+
+func TestIsBlockedAddrAllowsNAT64ToPublic(t *testing.T) {
+	addr := netip.MustParseAddr("64:ff9b::1010:1010")
+	if IsBlockedAddr(addr) {
+		t.Errorf("expected NAT64 mapping to a public IPv4 to be allowed in non-strict mode")
+	}
+}

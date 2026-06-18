@@ -5,16 +5,15 @@ import (
 )
 
 func (s *Server) dataEncryptJSON(value map[string]string) (string, error) {
-	return secureconfig.EncryptJSON([]byte(s.cfg.DataEncryptionSecret), value)
+	return secureconfig.EncryptJSONV2([]byte(s.cfg.DataEncryptionSecret), value)
 }
 
 func (s *Server) dataDecryptJSON(value string) (map[string]string, error) {
-	secrets := s.dataSecrets()
-	return secureconfig.DecryptJSONWithSecrets(secrets, value)
+	return secureconfig.DecryptJSONAuto(s.dataSecrets(), value)
 }
 
 func (s *Server) dataDecryptJSONWithActiveKey(value string) (map[string]string, error) {
-	return secureconfig.DecryptJSON([]byte(s.cfg.DataEncryptionSecret), value)
+	return secureconfig.DecryptJSONAuto([][]byte{[]byte(s.cfg.DataEncryptionSecret)}, value)
 }
 
 func (s *Server) dataSecrets() [][]byte {
