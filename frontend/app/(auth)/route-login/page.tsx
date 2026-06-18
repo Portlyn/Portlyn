@@ -17,11 +17,13 @@ import {
   verifyRouteEmailCode,
   verifyRoutePIN
 } from "@/lib/auth";
+import { sanitizeReturnTo } from "@/lib/safe-redirect";
 import type { AuthConfigResponse, RouteAuthService } from "@/lib/types";
 
 function buildReturnTarget(service: RouteAuthService | null, returnTo: string | null) {
-  if (returnTo) {
-    return returnTo;
+  const safeReturnTo = sanitizeReturnTo(returnTo, service?.domain_name);
+  if (safeReturnTo) {
+    return safeReturnTo;
   }
   if (!service || typeof window === "undefined") {
     return "/";

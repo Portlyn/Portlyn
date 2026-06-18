@@ -132,8 +132,9 @@ func (s *Server) Stop() {
 }
 
 type PeerSpec struct {
-	PublicKey  string
-	AllowedIPs []string
+	PublicKey    string
+	PresharedKey string
+	AllowedIPs   []string
 }
 
 func (s *Server) ApplyPeers(peers []domain.Node) error {
@@ -166,6 +167,13 @@ func (s *Server) ApplyPeerSpecs(specs []PeerSpec) error {
 			return err
 		}
 		fmt.Fprintf(&b, "public_key=%s\n", hexKey)
+		if psk := strings.TrimSpace(spec.PresharedKey); psk != "" {
+			pskHex, err := keyToHex(psk)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(&b, "preshared_key=%s\n", pskHex)
+		}
 		fmt.Fprintf(&b, "replace_allowed_ips=true\n")
 		for _, cidr := range spec.AllowedIPs {
 			cidr = strings.TrimSpace(cidr)

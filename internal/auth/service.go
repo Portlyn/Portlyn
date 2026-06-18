@@ -51,6 +51,7 @@ type Service struct {
 	authCache               map[string]cachedAuthResult
 	userTokens              map[uint]map[string]struct{}
 	distributedRateLimiter  rate.RateLimiter
+	fallbackRateLimiter     *rate.LocalLimiter
 	distributedAuthCache    AuthCache
 	metrics                 *observability.Metrics
 	passkeyChecker          func(ctx context.Context, userID uint) bool
@@ -163,6 +164,7 @@ func NewService(
 		fallbackOTP:             otpCfg,
 		allowInsecureDevMode:    allowInsecureDevMode,
 		distributedRateLimiter:  rate.NewLocalLimiter(),
+		fallbackRateLimiter:     rate.NewLocalLimiter(),
 		cacheTTL:                cacheTTL,
 		authCache:               make(map[string]cachedAuthResult),
 		userTokens:              make(map[uint]map[string]struct{}),
@@ -383,7 +385,7 @@ func (s *Service) RequestOTP(ctx context.Context, email string, meta RequestMeta
 		return nil, ErrRateLimited
 	}
 
-	token, err := randomCode(4)
+	token, err := randomCode(8)
 	if err != nil {
 		return nil, err
 	}
@@ -488,12 +490,15 @@ func (s *Service) GetUserGroupIDs(ctx context.Context, id uint) ([]uint, error) 
 
 func (s *Service) AuthenticateAccessToken(ctx context.Context, tokenString string) (*domain.User, []uint, *domain.Session, error) {
 	claims, parseErr := s.ParseToken(tokenString)
+	if parseErr != nil {
+		return nil, nil, nil, parseErr
+	}
 	if user, groupIDs, ok := s.getCachedAuthResult(ctx, tokenString); ok {
 		if user == nil || !user.Active {
 			return nil, nil, nil, ErrInactiveUser
 		}
 		var session *domain.Session
-		if parseErr == nil && claims.SessionID != 0 && s.sessions != nil {
+		if claims.SessionID != 0 && s.sessions != nil {
 			s2, err := s.sessions.GetByTokenID(ctx, claims.TokenID)
 			if err != nil {
 				return nil, nil, nil, ErrInvalidToken
@@ -508,9 +513,6 @@ func (s *Service) AuthenticateAccessToken(ctx context.Context, tokenString strin
 			session = s2
 		}
 		return user, groupIDs, session, nil
-	}
-	if parseErr != nil {
-		return nil, nil, nil, parseErr
 	}
 	user, err := s.GetUser(ctx, claims.UserID)
 	if err != nil {
@@ -639,6 +641,9 @@ func (s *Service) ChangeOwnPassword(ctx context.Context, userID uint, currentPas
 
 func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity, authenticator *OIDCAuthenticator) (*domain.User, error) {
 	ref := strings.TrimSpace(claims.Subject)
+	if ref == "" {
+		return nil, ErrOIDCLinkDenied
+	}
 	email := strings.ToLower(strings.TrimSpace(claims.Email))
 	role := domain.RoleViewer
 	if authenticator.IsAdmin(claims.Claims) {
@@ -680,6 +685,9 @@ func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity
 	if email != "" {
 		user, err := s.users.GetByEmail(ctx, email)
 		if err == nil {
+			if !claims.EmailVerified {
+				return nil, ErrOIDCLinkDenied
+			}
 			if user.AuthProvider == domain.AuthProviderLocal && !authenticator.cfg.AllowEmailLinking {
 				return nil, ErrOIDCLinkDenied
 			}
@@ -1102,7 +1110,10 @@ func (s *Service) isRateLimited(ctx context.Context, key string, now time.Time) 
 	if s.distributedRateLimiter != nil {
 		allowed, _, _, err := s.distributedRateLimiter.Allow(ctx, key, s.rateLimit.LoginAttempts, s.rateLimit.Window)
 		if err != nil {
-			return false
+			if s.fallbackRateLimiter == nil {
+				return true
+			}
+			allowed, _, _, _ = s.fallbackRateLimiter.Allow(ctx, key, s.rateLimit.LoginAttempts, s.rateLimit.Window)
 		}
 		if !allowed && s.metrics != nil {
 			namespace := strings.SplitN(key, ":", 2)[0]

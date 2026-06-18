@@ -8,11 +8,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
 	"strings"
+	"syscall"
 	"time"
 
 	"portlyn/internal/domain"
+	"portlyn/internal/netguard"
 )
 
 type WebhookStore interface {
@@ -29,9 +33,32 @@ type WebhookDispatcher struct {
 func NewWebhookDispatcher(store WebhookStore) *WebhookDispatcher {
 	return &WebhookDispatcher{
 		store:   store,
-		client:  &http.Client{Timeout: 5 * time.Second},
+		client:  &http.Client{Timeout: 5 * time.Second, Transport: ssrfGuardedTransport()},
 		timeout: 5 * time.Second,
 	}
+}
+
+func ssrfGuardedTransport() *http.Transport {
+	dialer := &net.Dialer{
+		Timeout: 5 * time.Second,
+		Control: func(_, address string, _ syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return err
+			}
+			addr, err := netip.ParseAddr(host)
+			if err != nil {
+				return fmt.Errorf("webhook target resolved to an unparseable address")
+			}
+			if netguard.IsBlockedAddrStrict(addr) {
+				return fmt.Errorf("webhook target resolves to a blocked address")
+			}
+			return nil
+		},
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = dialer.DialContext
+	return transport
 }
 
 type webhookPayload struct {

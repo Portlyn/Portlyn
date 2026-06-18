@@ -6,14 +6,30 @@ import (
 	"time"
 )
 
+const (
+	localSweepInterval = 5 * time.Minute
+	localStaleAfter    = time.Hour
+)
+
 type LocalLimiter struct {
-	mu      sync.Mutex
-	buckets map[string][]time.Time
+	mu        sync.Mutex
+	buckets   map[string][]time.Time
+	lastSweep time.Time
 }
 
 func NewLocalLimiter() *LocalLimiter {
 	return &LocalLimiter{
-		buckets: make(map[string][]time.Time),
+		buckets:   make(map[string][]time.Time),
+		lastSweep: time.Now().UTC(),
+	}
+}
+
+func (l *LocalLimiter) sweepLocked(now time.Time) {
+	staleCutoff := now.Add(-localStaleAfter)
+	for key, items := range l.buckets {
+		if len(items) == 0 || !items[len(items)-1].After(staleCutoff) {
+			delete(l.buckets, key)
+		}
 	}
 }
 
@@ -36,6 +52,11 @@ func (l *LocalLimiter) Allow(_ context.Context, key string, limit int, window ti
 	}
 	items = append(items, now)
 	l.buckets[key] = items
+
+	if now.Sub(l.lastSweep) >= localSweepInterval {
+		l.sweepLocked(now)
+		l.lastSweep = now
+	}
 
 	remaining := limit - len(items)
 	if remaining < 0 {

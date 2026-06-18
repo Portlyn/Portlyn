@@ -73,6 +73,12 @@ func (s *LoginTokenStore) GetValidTokenByScope(ctx context.Context, email, token
 	return &item, nil
 }
 
+func (s *LoginTokenStore) InvalidateOutstandingByUserScope(ctx context.Context, userID uint, scope string, usedAt time.Time) error {
+	return s.db.WithContext(ctx).Model(&domain.LoginToken{}).
+		Where("user_id = ? AND scope = ? AND used_at IS NULL", userID, strings.TrimSpace(scope)).
+		Update("used_at", usedAt).Error
+}
+
 func (s *LoginTokenStore) MarkUsed(ctx context.Context, id uint, usedAt time.Time) error {
 	result := s.db.WithContext(ctx).Model(&domain.LoginToken{}).Where("id = ? AND used_at IS NULL", id).Update("used_at", usedAt)
 	if result.Error != nil {

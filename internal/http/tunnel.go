@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	stdhttp "net/http"
 	"net/url"
@@ -171,7 +172,13 @@ func (s *Server) handleNodeSelfBootstrap(w stdhttp.ResponseWriter, r *stdhttp.Re
 		return
 	}
 	if !s.authorizeNodeHeartbeat(r, node) {
+		if !s.enforceNodeRateLimit(w, r, "node_heartbeat_auth_fail", s.cfg.NodeHeartbeatAuthFailRateLimit, s.cfg.NodeHeartbeatAuthFailRateWindow) {
+			return
+		}
 		writeError(w, stdhttp.StatusUnauthorized, "unauthorized", "missing or invalid node token")
+		return
+	}
+	if !s.enforceNodeRateLimit(w, r, fmt.Sprintf("node_bootstrap:%d", node.ID), nodeHeartbeatRateLimit, nodeHeartbeatRateWindow) {
 		return
 	}
 	var req bootstrapNodeRequest
@@ -198,6 +205,10 @@ func (s *Server) handleNodeSelfBootstrap(w stdhttp.ResponseWriter, r *stdhttp.Re
 			writeError(w, stdhttp.StatusPreconditionFailed, "tunnel_not_configured", "tunnel server settings are incomplete")
 			return
 		}
+		if errors.Is(err, tunnel.ErrAllowedIPsNotPermitted) {
+			writeError(w, stdhttp.StatusBadRequest, "invalid_allowed_ips", "requested allowed_ips are not permitted for this node")
+			return
+		}
 		s.internalError(w, err)
 		return
 	}
@@ -209,6 +220,7 @@ func (s *Server) handleNodeSelfBootstrap(w stdhttp.ResponseWriter, r *stdhttp.Re
 		"tunnel_ip":          result.Node.WGTunnelIP,
 		"server_public_key":  result.ClientBundle.ServerPublicKey,
 		"server_endpoint":    result.ClientBundle.ServerEndpoint,
+		"preshared_key":      result.ClientBundle.PresharedKey,
 		"allowed_ips":        result.ClientBundle.AllowedIPs,
 		"keepalive":          result.ClientBundle.Keepalive,
 		"advertised_subnets": result.AdvertisedSubnets,
@@ -224,7 +236,13 @@ func (s *Server) handleNodeTunnelTargets(w stdhttp.ResponseWriter, r *stdhttp.Re
 		return
 	}
 	if !s.authorizeNodeHeartbeat(r, node) {
+		if !s.enforceNodeRateLimit(w, r, "node_heartbeat_auth_fail", s.cfg.NodeHeartbeatAuthFailRateLimit, s.cfg.NodeHeartbeatAuthFailRateWindow) {
+			return
+		}
 		writeError(w, stdhttp.StatusUnauthorized, "unauthorized", "missing or invalid node token")
+		return
+	}
+	if !s.enforceNodeRateLimit(w, r, fmt.Sprintf("node_tunnel_targets:%d", node.ID), nodeHeartbeatRateLimit, nodeHeartbeatRateWindow) {
 		return
 	}
 	services, err := s.services.List(r.Context())

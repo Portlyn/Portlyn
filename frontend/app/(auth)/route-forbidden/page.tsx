@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { getAuthConfig, getRouteAuthService } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { authCardStyle, authShellStyle, buttonStyle, mergeAuthUI } from "@/lib/auth-ui";
+import { sanitizeReturnTo } from "@/lib/safe-redirect";
 import type { AuthConfigResponse, RouteAuthService } from "@/lib/types";
 
 function RouteForbiddenContent() {
@@ -34,6 +35,7 @@ function RouteForbiddenContent() {
   }, [serviceId]);
 
   const ui = mergeAuthUI(authConfig?.ui);
+  const safeReturnTo = sanitizeReturnTo(returnTo, service?.domain_name);
 
   return (
     <Center mih="100vh" p="md" style={authShellStyle(ui)}>
@@ -51,8 +53,8 @@ function RouteForbiddenContent() {
 
           {error ? <Text c="danger" ta="center" size="sm">{error}</Text> : null}
 
-          {returnTo ? (
-            <Button component="a" href={returnTo} style={buttonStyle(ui)}>
+          {safeReturnTo ? (
+            <Button component="a" href={safeReturnTo} style={buttonStyle(ui)}>
               {ui.forbidden_retry_label}
             </Button>
           ) : null}

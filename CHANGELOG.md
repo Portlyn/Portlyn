@@ -10,7 +10,7 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
 
 - README rewritten with an honest scope statement, threat model summary, and explicit Cosign verify instructions. The phrase "zero trust" was replaced with "identity aware reverse proxy".
 - `SECURITY.md` expanded with a detailed threat model (in scope, out of scope, trust boundaries) and supply chain section.
-- `docker-compose.yml` defaults to the published image at `ghcr.io/invaliduser231/portlyn`. A fresh clone now runs without a build step.
+- `docker-compose.yml` defaults to the published image at `ghcr.io/portlyn/portlyn`. A fresh clone now runs without a build step.
 
 ### Added
 

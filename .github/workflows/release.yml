@@ -73,7 +73,7 @@ jobs:
           sha256sum -- * > checksums.txt
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3.7.0
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
         with:
           cosign-release: v2.5.0
 
@@ -88,7 +88,7 @@ jobs:
             --bundle dist/checksums.txt.bundle.json
 
       - name: Publish release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: |
             dist/portlyn-linux-amd64
@@ -129,18 +129,18 @@ jobs:
           name: linux-binaries
           path: dist
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
         with:
-          images: ghcr.io/invaliduser231/portlyn
+          images: ghcr.io/portlyn/portlyn
           tags: |
             type=semver,pattern={{raw}}
             type=semver,pattern={{version}}
@@ -149,7 +149,7 @@ jobs:
             type=sha
           flavor: latest=true
 
-      - uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           context: .
           file: ./Dockerfile
@@ -157,7 +157,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          provenance: false
+          provenance: mode=max
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -176,18 +176,18 @@ jobs:
           name: linux-binaries
           path: dist
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
         with:
-          images: ghcr.io/invaliduser231/portlyn-nodeagent
+          images: ghcr.io/portlyn/portlyn-nodeagent
           tags: |
             type=semver,pattern={{raw}}
             type=semver,pattern={{version}}
@@ -196,7 +196,7 @@ jobs:
             type=sha
           flavor: latest=true
 
-      - uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           context: .
           file: ./Dockerfile.nodeagent
@@ -204,7 +204,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          provenance: false
+          provenance: mode=max
           cache-from: type=gha,scope=nodeagent
           cache-to: type=gha,mode=max,scope=nodeagent
 
@@ -218,18 +218,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
         with:
-          images: ghcr.io/invaliduser231/portlyn-frontend
+          images: ghcr.io/portlyn/portlyn-frontend
           tags: |
             type=semver,pattern={{raw}}
             type=semver,pattern={{version}}
@@ -238,7 +238,7 @@ jobs:
             type=sha
           flavor: latest=true
 
-      - uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
@@ -246,6 +246,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          provenance: false
+          provenance: mode=max
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend

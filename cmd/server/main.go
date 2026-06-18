@@ -96,11 +96,12 @@ func main() {
 	serviceStore := store.NewServiceStore(db)
 	routingStore := store.NewRoutingStore(db)
 	loginTokenStore := store.NewLoginTokenStore(db)
-	auditHMACKey := []byte(cfg.AuditHMACSecret)
-	if len(auditHMACKey) == 0 {
-		auditHMACKey = []byte(cfg.DataEncryptionSecret)
+	auditStore := store.NewAuditStore(db, []byte(cfg.AuditHMACSecret))
+	if result, err := auditStore.VerifyChain(context.Background()); err != nil {
+		logger.Error("audit log integrity verification failed", "error", err)
+	} else {
+		logger.Info("audit log integrity verified", "entries", result.Verified, "latest_id", result.LatestID)
 	}
-	auditStore := store.NewAuditStore(db, auditHMACKey)
 	appSettingsStore := store.NewAppSettingsStore(db)
 	appSettingsStore.SetDataEncryptionSecrets(cfg.DataEncryptionSecrets())
 	sessionStore := store.NewSessionStore(db)
@@ -153,6 +154,12 @@ func main() {
 		for _, d := range drifts {
 			logger.Warn("env value differs from stored setting (DB wins; run 'portlyn settings sync' to apply env)",
 				"field", d.Field, "env", d.EnvValue, "db", d.DBValue)
+		}
+		if cfg.RequireMFAForAdmins {
+			if settings, sErr := appSettingsStore.Get(context.Background()); sErr == nil && !settings.RequireMFAForAdmins {
+				logger.Error("REQUIRE_MFA_FOR_ADMINS=true but the stored setting has it disabled; refusing to start with silently weakened admin MFA. Run 'portlyn settings sync' to apply env or align the setting in the UI.")
+				os.Exit(1)
+			}
 		}
 	}
 	authService, err := auth.NewService(
@@ -236,6 +243,7 @@ func main() {
 
 	geoipLookup := geoip.NewLookup()
 	crowdSecClient := security.NewCrowdSec()
+	crowdSecClient.SetLogger(logger)
 	if currentSettings, err := appSettingsStore.Get(context.Background()); err == nil {
 		if path := strings.TrimSpace(currentSettings.GeoIPDBPath); path != "" {
 			if err := geoipLookup.Load(path); err != nil {
@@ -285,6 +293,8 @@ func main() {
 			Reputation:             crowdSecClient,
 			ServiceDeploymentStore: serviceStore,
 			GeoIPFailOpen:          cfg.GeoIPFailOpen,
+			CrowdSecFailOpen:       cfg.CrowdSecFailOpen,
+			BlockPrivateUpstreams:  !cfg.AllowPrivateUpstreams,
 		},
 	)
 
@@ -335,6 +345,13 @@ func main() {
 		healthChecks...,
 	)
 
+	if migrated, err := server.MigrateDNSProviderSecrets(context.Background()); err != nil {
+		logger.Error("failed to migrate dns provider secrets", "error", err)
+		os.Exit(1)
+	} else if migrated > 0 {
+		logger.Info("migrated dns provider secrets to latest encryption", "updated", migrated)
+	}
+
 	if err := server.SyncProxyState(context.Background()); err != nil {
 		logger.Error("failed to sync proxy state", "error", err)
 		os.Exit(1)
@@ -344,6 +361,9 @@ func main() {
 	defer stop()
 	server.SetNetworkSecurity(rootCtx, geoipLookup, crowdSecClient)
 	server.SetWebhookDispatcher(webhookDispatcher)
+	if redisClient != nil {
+		server.SetNodeRateLimiter(rate.NewRedisLimiter(redisClient, "portlyn:node:ratelimit"))
+	}
 	authService.StartCacheJanitor(rootCtx)
 	proxyManager.Start(rootCtx)
 	if crowdSecClient.Enabled() {
@@ -355,6 +375,9 @@ func main() {
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.Router(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	proxyHTTPHandler := acmeManager.HTTPChallengeHandler(server.ProxyHandler())
@@ -377,6 +400,7 @@ func main() {
 		Addr:              cfg.ProxyHTTPAddr,
 		Handler:           proxyHTTPHandler,
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	var proxyHTTPSServer *http.Server
@@ -410,6 +434,7 @@ func main() {
 			Addr:              cfg.ProxyHTTPSAddr,
 			Handler:           server.ProxyHandler(),
 			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       120 * time.Second,
 		}
 
 		go func() {
@@ -475,7 +500,7 @@ Usage:
   portlyn version       print version and exit
   portlyn help          show this help
 
-Documentation: https://github.com/invaliduser231/Portlyn`)
+Documentation: https://github.com/portlyn/Portlyn`)
 }
 
 func hostnameFromURL(raw string) string {

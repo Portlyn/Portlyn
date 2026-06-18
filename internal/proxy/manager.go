@@ -28,19 +28,25 @@ import (
 	"portlyn/internal/observability"
 )
 
-func ssrfSafeDialControl(network, address string, _ syscall.RawConn) error {
-	host, _, err := net.SplitHostPort(address)
-	if err != nil {
-		return fmt.Errorf("invalid dial address %q: %w", address, err)
+func makeDialControl(blockPrivate bool) func(network, address string, _ syscall.RawConn) error {
+	return func(network, address string, _ syscall.RawConn) error {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return fmt.Errorf("invalid dial address %q: %w", address, err)
+		}
+		addr, err := netip.ParseAddr(host)
+		if err != nil {
+			return fmt.Errorf("unresolved dial address %q", host)
+		}
+		blocked := netguard.IsBlockedAddr(addr)
+		if blockPrivate {
+			blocked = netguard.IsBlockedAddrStrict(addr)
+		}
+		if blocked {
+			return fmt.Errorf("connection to blocked address %s denied", host)
+		}
+		return nil
 	}
-	addr, err := netip.ParseAddr(host)
-	if err != nil {
-		return fmt.Errorf("unresolved dial address %q", host)
-	}
-	if netguard.IsBlockedAddr(addr) {
-		return fmt.Errorf("connection to blocked address %s denied", host)
-	}
-	return nil
 }
 
 type Manager struct {
@@ -68,6 +74,7 @@ type Manager struct {
 	countryLookup         CountryLookup
 	reputation            ReputationBlocklist
 	geoIPFailOpen         bool
+	crowdSecFailOpen      bool
 }
 
 type RuntimeRoute struct {
@@ -113,6 +120,8 @@ type CountryLookup interface {
 
 type ReputationBlocklist interface {
 	IsBlocked(ip net.IP) (bool, string)
+	Healthy() bool
+	Enabled() bool
 }
 
 type compiledAccessWindow struct {
@@ -137,6 +146,8 @@ type ManagerOptions struct {
 	Reputation             ReputationBlocklist
 	ServiceDeploymentStore ServiceDeploymentStore
 	GeoIPFailOpen          bool
+	CrowdSecFailOpen       bool
+	BlockPrivateUpstreams  bool
 }
 
 type TunnelDialer interface {
@@ -161,7 +172,7 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
-			Control:   ssrfSafeDialControl,
+			Control:   makeDialControl(options.BlockPrivateUpstreams),
 		}).DialContext,
 		MaxIdleConns:          512,
 		MaxIdleConnsPerHost:   128,
@@ -181,17 +192,17 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 
 	var adminUIHandler http.Handler
 	if options.EmbeddedAdminUI != nil {
-		adminUIHandler = options.EmbeddedAdminUI
+		adminUIHandler = withStaticSecurityHeaders(options.EmbeddedAdminUI)
 	} else if strings.TrimSpace(options.AdminUITargetURL) != "" {
 		if target, err := url.Parse(strings.TrimSpace(options.AdminUITargetURL)); err == nil {
-			adminUIHandler = reverseProxyForTarget(target, transport, "/", directProto)
+			adminUIHandler = reverseProxyForTarget(target, transport, "/", directProto, nil)
 		}
 	}
 
 	var adminAPIHandler http.Handler
 	if strings.TrimSpace(options.AdminAPITargetURL) != "" {
 		if target, err := url.Parse(strings.TrimSpace(options.AdminAPITargetURL)); err == nil {
-			adminAPIHandler = reverseProxyForTarget(target, transport, "/", directProto)
+			adminAPIHandler = reverseProxyForTarget(target, transport, "/", directProto, nil)
 		}
 	}
 
@@ -231,6 +242,7 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 		countryLookup:         options.CountryLookup,
 		reputation:            options.Reputation,
 		geoIPFailOpen:         options.GeoIPFailOpen,
+		crowdSecFailOpen:      options.CrowdSecFailOpen,
 	}
 }
 
@@ -595,7 +607,12 @@ func (m *Manager) handleSessionBridge(w http.ResponseWriter, r *http.Request) bo
 		writeProxyError(w, http.StatusForbidden, "forbidden", "session bridge host mismatch")
 		return true
 	}
+	if !m.auth.ConsumeBridgeToken(r.Context(), claims.ID) {
+		writeProxyError(w, http.StatusUnauthorized, "invalid_token", "session bridge token already used")
+		return true
+	}
 	m.auth.SetSessionCookieForHost(w, claims.AccessToken, normalizeHost(r.Host), m.forwardedProto(r) == "https")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	http.Redirect(w, r, "/", http.StatusFound)
 	return true
 }
@@ -631,7 +648,7 @@ func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
 	if viaNode && m.tunnelTransport != nil && m.tunnelDialer != nil && m.tunnelDialer.Started() {
 		chosenTransport = m.tunnelTransport
 	}
-	proxy := reverseProxyForTarget(target, chosenTransport, routePath, m.forwardedProto)
+	proxy := reverseProxyForTarget(target, chosenTransport, routePath, m.forwardedProto, m.authoritativeClientIP)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		m.recordTargetFailure(config.TargetURL, err)
 		writeProxyError(w, http.StatusBadGateway, "upstream_unavailable", "upstream target request failed")
@@ -667,7 +684,7 @@ func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
 	}, nil
 }
 
-func reverseProxyForTarget(target *url.URL, transport *http.Transport, routePath string, protoForRequest func(*http.Request) string) *httputil.ReverseProxy {
+func reverseProxyForTarget(target *url.URL, transport *http.Transport, routePath string, protoForRequest func(*http.Request) string, clientIPForRequest func(*http.Request) string) *httputil.ReverseProxy {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Transport = &retryTransport{base: transport, retries: 1, backoff: 100 * time.Millisecond}
 	originalDirector := proxy.Director
@@ -679,13 +696,27 @@ func reverseProxyForTarget(target *url.URL, transport *http.Transport, routePath
 		if protoForRequest != nil {
 			incomingProto = protoForRequest(req)
 		}
+		var authoritativeClientIP string
+		if clientIPForRequest != nil {
+			authoritativeClientIP = clientIPForRequest(req)
+		}
 		originalURI := req.URL.RequestURI()
 		req.URL.Path = stripRoutePrefix(normalizedRoutePath, req.URL.Path)
 		if req.URL.RawPath != "" {
 			req.URL.RawPath = stripRoutePrefix(normalizedRoutePath, req.URL.RawPath)
 		}
+		if authoritativeClientIP != "" {
+			req.Header.Set("X-Forwarded-For", authoritativeClientIP)
+		} else {
+			req.Header.Del("X-Forwarded-For")
+		}
 		originalDirector(req)
 		req.Host = target.Host
+		if authoritativeClientIP != "" {
+			req.Header.Set("X-Real-Ip", authoritativeClientIP)
+		} else {
+			req.Header.Del("X-Real-Ip")
+		}
 		req.Header.Set("X-Forwarded-Host", normalizeHost(incomingHost))
 		req.Header.Set("X-Forwarded-Proto", incomingProto)
 		req.Header.Set("X-Forwarded-Uri", originalURI)
@@ -851,6 +882,10 @@ func (m *Manager) enforceAccessMethod(w http.ResponseWriter, r *http.Request, ro
 			m.redirectToRouteLogin(w, r, route)
 			return nil, nil, false
 		}
+		if normalizedAccessMethod(route.EffectiveMethod) == domain.AccessMethodEmailCode && !routeEmailAllowed(claims.Email, route.EffectiveMethodConfig) {
+			m.redirectToRouteLogin(w, r, route)
+			return nil, nil, false
+		}
 		return nil, nil, true
 	default:
 		writeProxyError(w, http.StatusForbidden, "forbidden", "unsupported access method")
@@ -858,10 +893,61 @@ func (m *Manager) enforceAccessMethod(w http.ResponseWriter, r *http.Request, ro
 	}
 }
 
+func withStaticSecurityHeaders(next http.Handler) http.Handler {
+	const csp = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'"
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", csp)
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()")
+		h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func routeEmailAllowed(email string, config domain.JSONObject) bool {
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	allowedEmails := make([]string, 0)
+	switch raw := config["allowed_emails"].(type) {
+	case []any:
+		for _, entry := range raw {
+			if s, ok := entry.(string); ok {
+				allowedEmails = append(allowedEmails, strings.ToLower(strings.TrimSpace(s)))
+			}
+		}
+	case []string:
+		for _, entry := range raw {
+			allowedEmails = append(allowedEmails, strings.ToLower(strings.TrimSpace(entry)))
+		}
+	}
+	if len(allowedEmails) > 0 {
+		for _, allowed := range allowedEmails {
+			if allowed != "" && allowed == normalized {
+				return true
+			}
+		}
+		return false
+	}
+	if raw, ok := config["allowed_email_domain"].(string); ok {
+		allowed := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(raw)), "@")
+		if allowed == "" {
+			return true
+		}
+		parts := strings.Split(normalized, "@")
+		return len(parts) == 2 && parts[1] == allowed
+	}
+	return true
+}
+
 func (m *Manager) authenticateProxyRequest(r *http.Request) (*domain.User, []uint, int, bool) {
-	user, groupIDs, _, err := m.auth.AuthenticateRequest(r.Context(), r)
+	user, groupIDs, session, err := m.auth.AuthenticateRequest(r.Context(), r)
 	if err != nil {
 		return nil, nil, http.StatusUnauthorized, false
+	}
+	if !m.auth.BootstrapAccessAllowed(r.Context(), user, session) {
+		return nil, nil, http.StatusForbidden, false
 	}
 	return user, groupIDs, http.StatusOK, true
 }
@@ -895,7 +981,22 @@ func (m *Manager) enforceNetworkRules(w http.ResponseWriter, r *http.Request, ro
 		return false
 	}
 
-	if m.reputation != nil {
+	if m.reputation != nil && m.reputation.Enabled() {
+		if !m.reputation.Healthy() {
+			if m.crowdSecFailOpen {
+				if m.logger != nil {
+					m.logger.Warn("reputation decisions unavailable or stale; failing open per config",
+						"service_id", route.ServiceID, "host", route.Host)
+				}
+			} else {
+				if m.logger != nil {
+					m.logger.Warn("reputation decisions unavailable or stale; denying request (fail-closed)",
+						"service_id", route.ServiceID, "host", route.Host)
+				}
+				writeProxyError(w, http.StatusServiceUnavailable, "reputation_unavailable", "reputation cannot be evaluated")
+				return false
+			}
+		}
 		if blocked, reason := m.reputation.IsBlocked(net.IP(clientIP.AsSlice())); blocked {
 			writeProxyError(w, http.StatusForbidden, "forbidden", "reputation block: "+reason)
 			return false
@@ -1098,12 +1199,18 @@ func parseClientIP(remoteAddr string) (netip.Addr, error) {
 	return netip.ParseAddr(remoteAddr)
 }
 
+func (m *Manager) authoritativeClientIP(r *http.Request) string {
+	addr, err := m.realClientIP(r)
+	if err != nil || !addr.IsValid() {
+		return ""
+	}
+	return addr.String()
+}
+
 func (m *Manager) realClientIP(r *http.Request) (netip.Addr, error) {
 	if m.requestFromTrustedProxy(r) {
-		if forwarded := firstForwardedValue(r.Header.Get("X-Forwarded-For")); forwarded != "" {
-			if addr, err := netip.ParseAddr(strings.TrimSpace(forwarded)); err == nil {
-				return addr, nil
-			}
+		if addr, ok := clientIPFromForwardedChain(r.Header.Get("X-Forwarded-For"), m.trustedProxyCIDRs); ok {
+			return addr, nil
 		}
 		if realIP := strings.TrimSpace(r.Header.Get("X-Real-Ip")); realIP != "" {
 			if addr, err := netip.ParseAddr(realIP); err == nil {
@@ -1332,13 +1439,7 @@ func (m *Manager) requestFromTrustedProxy(r *http.Request) bool {
 	if err != nil {
 		return false
 	}
-	for _, raw := range m.trustedProxyCIDRs {
-		prefix, err := netip.ParsePrefix(strings.TrimSpace(raw))
-		if err == nil && prefix.Contains(addr) {
-			return true
-		}
-	}
-	return false
+	return addrInTrustedCIDRs(addr, m.trustedProxyCIDRs)
 }
 
 func firstForwardedValue(value string) string {
@@ -1348,6 +1449,34 @@ func firstForwardedValue(value string) string {
 	}
 	parts := strings.Split(value, ",")
 	return strings.TrimSpace(parts[0])
+}
+
+func addrInTrustedCIDRs(addr netip.Addr, cidrs []string) bool {
+	for _, raw := range cidrs {
+		prefix, err := netip.ParsePrefix(strings.TrimSpace(raw))
+		if err == nil && prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+func clientIPFromForwardedChain(header string, trustedCIDRs []string) (netip.Addr, bool) {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return netip.Addr{}, false
+	}
+	parts := strings.Split(header, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		addr, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
+		if err != nil {
+			continue
+		}
+		if !addrInTrustedCIDRs(addr, trustedCIDRs) {
+			return addr, true
+		}
+	}
+	return netip.Addr{}, false
 }
 
 func expectsTokenAuth(r *http.Request) bool {

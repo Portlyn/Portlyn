@@ -30,6 +30,7 @@ type ClientBundle struct {
 	DNS             string
 	ServerPublicKey string
 	ServerEndpoint  string
+	PresharedKey    string
 	AllowedIPs      []string
 	Keepalive       int
 }
@@ -86,6 +87,9 @@ func RenderClientConfig(bundle ClientBundle) string {
 
 	b.WriteString("\n[Peer]\n")
 	fmt.Fprintf(&b, "PublicKey = %s\n", bundle.ServerPublicKey)
+	if strings.TrimSpace(bundle.PresharedKey) != "" {
+		fmt.Fprintf(&b, "PresharedKey = %s\n", bundle.PresharedKey)
+	}
 	if len(bundle.AllowedIPs) > 0 {
 		fmt.Fprintf(&b, "AllowedIPs = %s\n", strings.Join(bundle.AllowedIPs, ", "))
 	}

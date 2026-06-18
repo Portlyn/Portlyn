@@ -24,14 +24,19 @@ func (m *Manager) handleRouteAccessBridge(w http.ResponseWriter, r *http.Request
 		writeProxyError(w, http.StatusForbidden, "forbidden", "route access bridge host mismatch")
 		return true
 	}
+	if !m.auth.ConsumeBridgeToken(r.Context(), claims.ID) {
+		writeProxyError(w, http.StatusUnauthorized, "invalid_token", "route access bridge token already used")
+		return true
+	}
 	if err := m.auth.SetRouteAccessCookie(w, claims.ServiceID, claims.Method, claims.Email); err != nil {
-		writeProxyError(w, http.StatusInternalServerError, "cookie_error", err.Error())
+		writeProxyError(w, http.StatusInternalServerError, "cookie_error", "could not establish route access")
 		return true
 	}
 	target := sanitizeReturnPath(claims.ReturnTo, r.Host, m.forwardedProto(r))
 	if target == "" {
 		target = "/"
 	}
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	http.Redirect(w, r, target, http.StatusFound)
 	return true
 }

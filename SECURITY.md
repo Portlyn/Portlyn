@@ -75,7 +75,7 @@ Each arrow is a separate trust boundary:
   cosign verify-blob \
     --certificate checksums.txt.pem \
     --signature   checksums.txt.sig \
-    --certificate-identity-regexp 'https://github.com/invaliduser231/Portlyn' \
+    --certificate-identity-regexp 'https://github.com/portlyn/Portlyn' \
     --certificate-oidc-issuer     https://token.actions.githubusercontent.com \
     checksums.txt
   ```

@@ -10,7 +10,7 @@ import (
 //go:embed assets/install-node.sh
 var installNodeScript string
 
-const defaultNodeAgentDownloadBase = "https://github.com/invaliduser231/portlyn/releases"
+const defaultNodeAgentDownloadBase = "https://github.com/portlyn/portlyn/releases"
 
 func (s *Server) nodeAgentDownloadBase() string {
 	if v := strings.TrimSpace(os.Getenv("PORTLYN_NODEAGENT_DOWNLOAD_BASE")); v != "" {

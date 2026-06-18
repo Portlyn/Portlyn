@@ -314,9 +314,19 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	return nil, fmt.Errorf("no tls certificate available")
 }
 
+const (
+	selfSignedRenewBefore     = time.Hour
+	maxSelfSignedCacheEntries = 256
+)
+
+func selfSignedCertFresh(cert *tls.Certificate, now time.Time) bool {
+	return cert != nil && cert.Leaf != nil && now.Before(cert.Leaf.NotAfter.Add(-selfSignedRenewBefore))
+}
+
 func (m *Manager) bootstrapCertFor(hostname string) (*tls.Certificate, error) {
+	now := time.Now()
 	m.selfSignedMu.RLock()
-	if cert, ok := m.selfSignedCache[hostname]; ok {
+	if cert, ok := m.selfSignedCache[hostname]; ok && selfSignedCertFresh(cert, now) {
 		m.selfSignedMu.RUnlock()
 		return cert, nil
 	}
@@ -328,9 +338,12 @@ func (m *Manager) bootstrapCertFor(hostname string) (*tls.Certificate, error) {
 	}
 
 	m.selfSignedMu.Lock()
-	if existing, ok := m.selfSignedCache[hostname]; ok {
+	if existing, ok := m.selfSignedCache[hostname]; ok && selfSignedCertFresh(existing, now) {
 		m.selfSignedMu.Unlock()
 		return existing, nil
+	}
+	if len(m.selfSignedCache) >= maxSelfSignedCacheEntries {
+		m.selfSignedCache = make(map[string]*tls.Certificate)
 	}
 	m.selfSignedCache[hostname] = cert
 	m.selfSignedMu.Unlock()

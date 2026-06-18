@@ -9,20 +9,25 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/crypto/argon2"
 )
 
 const (
 	EncryptedPrefixV2 = "enc:v2:"
-	argon2Time        = 1
+	argon2Time        = 2
 	argon2Memory      = 64 * 1024
 	argon2Threads     = 4
 	argon2KeyLen      = 32
 	argon2SaltLen     = 16
+	argon2CacheMax    = 512
 )
 
-var argon2KeyCache sync.Map
+var (
+	argon2KeyCache   sync.Map
+	argon2CacheCount atomic.Int64
+)
 
 func argon2CacheKey(secret, salt []byte) [sha256.Size]byte {
 	h := sha256.New()
@@ -40,7 +45,16 @@ func deriveArgon2Key(secret, salt []byte) []byte {
 		return value.([]byte)
 	}
 	derived := argon2.IDKey(secret, salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
-	argon2KeyCache.Store(cacheKey, derived)
+	if argon2CacheCount.Load() >= argon2CacheMax {
+		argon2KeyCache.Range(func(k, _ any) bool {
+			argon2KeyCache.Delete(k)
+			return true
+		})
+		argon2CacheCount.Store(0)
+	}
+	if _, loaded := argon2KeyCache.LoadOrStore(cacheKey, derived); !loaded {
+		argon2CacheCount.Add(1)
+	}
 	return derived
 }
 
@@ -136,24 +150,28 @@ func DecryptBytesAuto(secrets [][]byte, value []byte) ([]byte, error) {
 	return []byte(plaintext), nil
 }
 
+func decryptStringV2WithSecrets(secrets [][]byte, value string) (string, error) {
+	var lastErr error
+	for _, secret := range secrets {
+		if len(secret) == 0 {
+			continue
+		}
+		out, err := DecryptStringV2(secret, value)
+		if err == nil {
+			return out, nil
+		}
+		lastErr = err
+	}
+	if lastErr != nil {
+		return "", lastErr
+	}
+	return "", fmt.Errorf("no secrets available for v2 decryption")
+}
+
 func DecryptStringAuto(secrets [][]byte, value string) (string, error) {
 	trimmed := strings.TrimSpace(value)
 	if IsEncryptedValueV2(trimmed) {
-		var lastErr error
-		for _, secret := range secrets {
-			if len(secret) == 0 {
-				continue
-			}
-			out, err := DecryptStringV2(secret, trimmed)
-			if err == nil {
-				return out, nil
-			}
-			lastErr = err
-		}
-		if lastErr != nil {
-			return "", lastErr
-		}
-		return "", fmt.Errorf("no secrets available for v2 decryption")
+		return decryptStringV2WithSecrets(secrets, trimmed)
 	}
 	if IsEncryptedValueV1(trimmed) {
 		return DecryptStringV1WithSecrets(secrets, trimmed)

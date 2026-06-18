@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -42,6 +44,7 @@ type WebAuthnService struct {
 
 	rpDisplayName string
 	frontendBase  string
+	decoySecret   []byte
 }
 
 type webauthnSessionEntry struct {
@@ -56,10 +59,13 @@ type UserStoreReader interface {
 }
 
 func NewWebAuthnService(credentials CredentialStore, users UserStoreReader) *WebAuthnService {
+	decoySecret := make([]byte, 32)
+	_, _ = rand.Read(decoySecret)
 	return &WebAuthnService{
 		credentials: credentials,
 		users:       users,
 		sessions:    map[string]webauthnSessionEntry{},
+		decoySecret: decoySecret,
 	}
 }
 
@@ -148,7 +154,9 @@ func (w *WebAuthnService) BeginRegistration(ctx context.Context, userID uint) (*
 		return nil, err
 	}
 	wu := &webauthnUser{user: user, credentials: creds}
-	options, session, err := instance.BeginRegistration(wu)
+	options, session, err := instance.BeginRegistration(wu, webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
+		UserVerification: protocol.VerificationRequired,
+	}))
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +231,7 @@ func (w *WebAuthnService) BeginLogin(ctx context.Context, userID uint) (*BeginLo
 		return nil, errors.New("no credentials registered")
 	}
 	wu := &webauthnUser{user: user, credentials: creds}
-	options, session, err := instance.BeginLogin(wu)
+	options, session, err := instance.BeginLogin(wu, webauthn.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
 		return nil, err
 	}
@@ -232,6 +240,33 @@ func (w *WebAuthnService) BeginLogin(ctx context.Context, userID uint) (*BeginLo
 		return nil, err
 	}
 	w.storeSession(id, webauthnSessionEntry{UserID: userID, Session: *session, Purpose: "login"})
+	return &BeginLoginResult{Options: options, SessionID: id, ExpiresAt: time.Now().Add(5 * time.Minute)}, nil
+}
+
+func (w *WebAuthnService) decoyCredentialID(email string) []byte {
+	mac := hmac.New(sha256.New, w.decoySecret)
+	mac.Write([]byte(strings.ToLower(strings.TrimSpace(email))))
+	return mac.Sum(nil)
+}
+
+func (w *WebAuthnService) BeginLoginDecoy(email string) (*BeginLoginResult, error) {
+	instance, err := w.instance()
+	if err != nil {
+		return nil, err
+	}
+	fakeCred := domain.UserCredential{
+		CredentialID: base64.RawURLEncoding.EncodeToString(w.decoyCredentialID(email)),
+	}
+	wu := &webauthnUser{user: &domain.User{Email: email}, credentials: []domain.UserCredential{fakeCred}}
+	options, session, err := instance.BeginLogin(wu, webauthn.WithUserVerification(protocol.VerificationRequired))
+	if err != nil {
+		return nil, err
+	}
+	id, err := randomSessionID()
+	if err != nil {
+		return nil, err
+	}
+	w.storeSession(id, webauthnSessionEntry{UserID: 0, Session: *session, Purpose: "login"})
 	return &BeginLoginResult{Options: options, SessionID: id, ExpiresAt: time.Now().Add(5 * time.Minute)}, nil
 }
 
@@ -256,6 +291,9 @@ func (w *WebAuthnService) FinishLogin(ctx context.Context, sessionID string, res
 	credential, err := instance.FinishLogin(wu, entry.Session, response)
 	if err != nil {
 		return 0, err
+	}
+	if credential.Authenticator.CloneWarning {
+		return 0, errors.New("webauthn: authenticator clone detected")
 	}
 	stored, err := w.credentials.GetByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credential.ID))
 	if err != nil {

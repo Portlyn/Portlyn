@@ -51,6 +51,7 @@ func TestWebhookDispatcherFiresGenericPayload(t *testing.T) {
 		{ID: 1, URL: server.URL, Format: "generic", SecretEncrypted: "abc", Active: true, EventTypes: domain.JSONStringSlice{"login_succeeded"}},
 	}}
 	disp := NewWebhookDispatcher(stub)
+	disp.client = server.Client()
 	disp.Dispatch(context.Background(), domain.AuditLog{
 		Timestamp:    time.Now().UTC(),
 		Action:       "login_succeeded",

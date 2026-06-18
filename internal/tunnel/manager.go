@@ -18,7 +18,52 @@ var (
 	ErrNodeAlreadyProvisioned = errors.New("node already has a tunnel assignment")
 	ErrInvalidServerSettings  = errors.New("tunnel server settings are invalid")
 	ErrPeerKeyDuplicate       = errors.New("wireguard public key already in use")
+	ErrAllowedIPsNotPermitted = errors.New("requested allowed_ips fall outside the tunnel CIDR")
 )
+
+func validateClientAllowedIPs(requested []string, tunnelCIDR string, advertised []string) ([]string, error) {
+	tunnelPrefix, err := netip.ParsePrefix(strings.TrimSpace(tunnelCIDR))
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tunnel CIDR", ErrInvalidServerSettings)
+	}
+	allowedRanges := []netip.Prefix{tunnelPrefix.Masked()}
+	for _, adv := range advertised {
+		if prefix, parseErr := netip.ParsePrefix(strings.TrimSpace(adv)); parseErr == nil {
+			allowedRanges = append(allowedRanges, prefix.Masked())
+		}
+	}
+	out := make([]string, 0, len(requested))
+	for _, raw := range requested {
+		entry := strings.TrimSpace(raw)
+		if entry == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(entry)
+		if err != nil {
+			addr, addrErr := netip.ParseAddr(entry)
+			if addrErr != nil {
+				return nil, fmt.Errorf("%w: %q", ErrAllowedIPsNotPermitted, entry)
+			}
+			prefix = netip.PrefixFrom(addr, addr.BitLen())
+		}
+		prefix = prefix.Masked()
+		permitted := false
+		for _, allowed := range allowedRanges {
+			if allowed.Bits() <= prefix.Bits() && allowed.Contains(prefix.Addr()) {
+				permitted = true
+				break
+			}
+		}
+		if !permitted {
+			return nil, fmt.Errorf("%w: %q", ErrAllowedIPsNotPermitted, entry)
+		}
+		out = append(out, prefix.String())
+	}
+	if len(out) == 0 {
+		return []string{tunnelPrefix.Masked().String()}, nil
+	}
+	return out, nil
+}
 
 func (m *Manager) ensureUniquePeerKey(ctx context.Context, key string, excludeNodeID, excludeClientID uint) error {
 	key = strings.TrimSpace(key)
@@ -257,7 +302,16 @@ func (m *Manager) BootstrapNode(ctx context.Context, nodeID uint, opts Bootstrap
 
 	allowedIPs := []string{strings.TrimSpace(settings.TunnelCIDR)}
 	if len(opts.ClientAllowedIPs) > 0 {
-		allowedIPs = append([]string{}, opts.ClientAllowedIPs...)
+		validated, err := validateClientAllowedIPs(opts.ClientAllowedIPs, settings.TunnelCIDR, splitCSV(node.AdvertisedSubnets))
+		if err != nil {
+			return nil, err
+		}
+		allowedIPs = validated
+	}
+
+	presharedKey, err := GeneratePresharedKey()
+	if err != nil {
+		return nil, err
 	}
 
 	serverEndpoint := composeServerEndpoint(settings.TunnelServerEndpoint, settings.TunnelListenPort)
@@ -267,11 +321,13 @@ func (m *Manager) BootstrapNode(ctx context.Context, nodeID uint, opts Bootstrap
 		Address:         assignedIP.String() + "/32",
 		ServerPublicKey: settings.TunnelServerPublicKey,
 		ServerEndpoint:  serverEndpoint,
+		PresharedKey:    presharedKey,
 		AllowedIPs:      allowedIPs,
 		Keepalive:       25,
 	}
 
 	node.WGPublicKey = clientKeys.PublicKey
+	node.WGPresharedKey = presharedKey
 	node.WGTunnelIP = assignedIP.String()
 	node.WGAllowedIPs = assignedIP.String() + "/32"
 	node.WGEndpoint = serverEndpoint
@@ -327,10 +383,11 @@ func (m *Manager) writeServerConfigLocked(ctx context.Context, settings *domain.
 			continue
 		}
 		peers = append(peers, PeerConfig{
-			Name:       fmt.Sprintf("node-%d-%s", node.ID, node.Name),
-			PublicKey:  node.WGPublicKey,
-			AllowedIPs: []string{node.WGTunnelIP + "/32"},
-			Keepalive:  25,
+			Name:         fmt.Sprintf("node-%d-%s", node.ID, node.Name),
+			PublicKey:    node.WGPublicKey,
+			PresharedKey: strings.TrimSpace(node.WGPresharedKey),
+			AllowedIPs:   []string{node.WGTunnelIP + "/32"},
+			Keepalive:    25,
 		})
 	}
 	cfg := ServerConfig{
@@ -372,6 +429,7 @@ func (m *Manager) RevokeNode(ctx context.Context, nodeID uint) error {
 		return err
 	}
 	node.WGPublicKey = ""
+	node.WGPresharedKey = ""
 	node.WGTunnelIP = ""
 	node.WGAllowedIPs = ""
 	node.WGEndpoint = ""
@@ -413,7 +471,7 @@ func (m *Manager) BuildPeerSpecs(ctx context.Context) ([]PeerSpec, error) {
 		}
 		allowed := []string{ip + "/32"}
 		allowed = append(allowed, splitCSV(node.AdvertisedSubnets)...)
-		specs = append(specs, PeerSpec{PublicKey: pub, AllowedIPs: allowed})
+		specs = append(specs, PeerSpec{PublicKey: pub, PresharedKey: strings.TrimSpace(node.WGPresharedKey), AllowedIPs: allowed})
 	}
 	if m.clients != nil {
 		clients, err := m.clients.List(ctx)

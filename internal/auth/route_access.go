@@ -329,7 +329,7 @@ func (s *Service) RequestRouteEmailCode(ctx context.Context, serviceID uint, ema
 	if requests >= int64(otpCfg.RequestLimit) {
 		return nil, ErrRateLimited
 	}
-	code, err := randomCode(4)
+	code, err := randomCode(8)
 	if err != nil {
 		return nil, err
 	}
@@ -395,11 +395,16 @@ func (s *Service) IssueSessionBridgeToken(accessToken, host string) (string, err
 	if accessToken == "" || host == "" {
 		return "", ErrInvalidToken
 	}
+	jti, err := randomSessionID()
+	if err != nil {
+		return "", err
+	}
 	now := time.Now().UTC()
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, SessionBridgeClaims{
 		AccessToken: accessToken,
 		Host:        host,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
 			Issuer:    s.issuer,
 			Subject:   "session_bridge",
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -414,6 +419,10 @@ func (s *Service) IssueRouteAccessBridgeToken(serviceID uint, host, method, emai
 	if serviceID == 0 || host == "" {
 		return "", ErrInvalidToken
 	}
+	jti, err := randomSessionID()
+	if err != nil {
+		return "", err
+	}
 	now := time.Now().UTC()
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, RouteAccessBridgeClaims{
 		ServiceID: serviceID,
@@ -422,6 +431,7 @@ func (s *Service) IssueRouteAccessBridgeToken(serviceID uint, host, method, emai
 		Email:     strings.ToLower(strings.TrimSpace(email)),
 		ReturnTo:  sanitizeReturnTo(returnTo),
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
 			Issuer:    s.issuer,
 			Subject:   fmt.Sprintf("route_bridge:%d", serviceID),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -429,6 +439,24 @@ func (s *Service) IssueRouteAccessBridgeToken(serviceID uint, host, method, emai
 		},
 	})
 	return token.SignedString(s.sessionBridgeSecret)
+}
+
+func (s *Service) ConsumeBridgeToken(ctx context.Context, jti string) bool {
+	if strings.TrimSpace(jti) == "" {
+		return false
+	}
+	if s.distributedRateLimiter == nil {
+		return true
+	}
+	key := "bridge-jti:" + jti
+	allowed, _, _, err := s.distributedRateLimiter.Allow(ctx, key, 1, 5*time.Minute)
+	if err != nil {
+		if s.fallbackRateLimiter == nil {
+			return false
+		}
+		allowed, _, _, _ = s.fallbackRateLimiter.Allow(ctx, key, 1, 5*time.Minute)
+	}
+	return allowed
 }
 
 func (s *Service) ParseRouteAccessBridgeToken(tokenString string) (*RouteAccessBridgeClaims, error) {

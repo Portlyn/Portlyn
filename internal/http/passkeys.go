@@ -108,12 +108,21 @@ func (s *Server) handleBeginPasskeyLogin(w stdhttp.ResponseWriter, r *stdhttp.Re
 	}
 	user, err := s.auth.UserByEmail(r.Context(), req.Email)
 	if err != nil {
-		writeError(w, stdhttp.StatusUnauthorized, "no_passkey", "no passkey is registered for this account")
+		s.writePasskeyLoginDecoy(w, req.Email)
 		return
 	}
 	result, err := s.webauthn.BeginLogin(r.Context(), user.ID)
 	if err != nil {
-		writeError(w, stdhttp.StatusUnauthorized, "no_passkey", "no passkey is registered for this account")
+		s.writePasskeyLoginDecoy(w, req.Email)
+		return
+	}
+	writeJSON(w, stdhttp.StatusOK, result)
+}
+
+func (s *Server) writePasskeyLoginDecoy(w stdhttp.ResponseWriter, email string) {
+	result, err := s.webauthn.BeginLoginDecoy(email)
+	if err != nil {
+		s.internalError(w, err)
 		return
 	}
 	writeJSON(w, stdhttp.StatusOK, result)

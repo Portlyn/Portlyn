@@ -44,7 +44,7 @@ function resolveNodeAPIBaseUrl() {
 }
 
 function buildNodeCommands(apiBaseUrl: string, token: string, nodeName: string, nodeDescription: string) {
-  const dockerImage = "ghcr.io/invaliduser231/portlyn-nodeagent:latest";
+  const dockerImage = "ghcr.io/portlyn/portlyn-nodeagent:latest";
   const shArgs = (version: string) => [
     `--api ${shellEscape(apiBaseUrl)}`,
     `--token ${shellEscape(token)}`,

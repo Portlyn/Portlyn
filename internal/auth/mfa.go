@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"portlyn/internal/domain"
+	"portlyn/internal/secureconfig"
 )
 
 const mfaLoginScope = "mfa_login"
@@ -190,12 +191,16 @@ func (s *Service) beginMFAChallenge(ctx context.Context, user *domain.User, meta
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now().UTC()
+	if err := s.loginTokens.InvalidateOutstandingByUserScope(ctx, user.ID, mfaLoginScope, now); err != nil {
+		return nil, err
+	}
 	item := &domain.LoginToken{
 		UserID:     &user.ID,
 		Email:      user.Email,
 		Token:      hashToken(challengeToken),
 		Scope:      mfaLoginScope,
-		ExpiresAt:  time.Now().UTC().Add(10 * time.Minute),
+		ExpiresAt:  now.Add(10 * time.Minute),
 		RemoteAddr: meta.RemoteAddr,
 		UserAgent:  meta.UserAgent,
 	}
@@ -225,6 +230,10 @@ func (s *Service) CompleteMFA(ctx context.Context, mfaToken, code string, meta R
 	}
 	if item.ExpiresAt.Before(now) || item.UserID == nil {
 		return nil, ErrInvalidToken
+	}
+	if s.isRateLimited(ctx, fmt.Sprintf("mfa-user:%d", *item.UserID), now) {
+		s.observeAuth("mfa", "rate_limited")
+		return nil, ErrRateLimited
 	}
 	if item.AttemptCount >= maxMFAAttempts {
 		_ = s.loginTokens.MarkUsed(ctx, item.ID, now)
@@ -309,6 +318,16 @@ func (s *Service) BootstrapRequired(ctx context.Context, user *domain.User) bool
 	return !s.userHasPasskey(ctx, user.ID)
 }
 
+func (s *Service) BootstrapAccessAllowed(ctx context.Context, user *domain.User, session *domain.Session) bool {
+	if !s.BootstrapRequired(ctx, user) {
+		return true
+	}
+	if session != nil && session.BootstrapDismissed && s.bootstrapDismissAllowed(ctx, user) {
+		return true
+	}
+	return false
+}
+
 func (s *Service) MFARequiredForUser(ctx context.Context, user *domain.User) bool {
 	if user == nil || user.Role != domain.RoleAdmin {
 		return false
@@ -367,7 +386,7 @@ func buildOTPAuthURL(issuer, email, secret string) string {
 func validateTOTP(secret, code string, now time.Time) (uint64, bool) {
 	for _, offset := range []int64{0, -30} {
 		t := now.Add(time.Duration(offset) * time.Second)
-		if generateTOTP(secret, t) == code {
+		if hmac.Equal([]byte(generateTOTP(secret, t)), []byte(code)) {
 			return uint64(t.Unix() / 30), true
 		}
 	}
@@ -391,26 +410,23 @@ func generateTOTP(secret string, now time.Time) string {
 }
 
 func (s *Service) encryptSecret(value string) (string, error) {
-	block, err := aes.NewCipher(deriveSecretKey(s.mfaEncryptionSecret))
-	if err != nil {
-		return "", err
+	if strings.TrimSpace(value) == "" {
+		return "", nil
 	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return "", err
-	}
-	ciphertext := gcm.Seal(nonce, nonce, []byte(value), nil)
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
+	return secureconfig.EncryptStringV2(s.mfaEncryptionSecret, value)
 }
 
 func (s *Service) decryptSecret(value string) (string, error) {
 	if strings.TrimSpace(value) == "" {
 		return "", nil
 	}
+	if secureconfig.IsEncryptedValueV2(value) {
+		return secureconfig.DecryptStringV2(s.mfaEncryptionSecret, value)
+	}
+	return s.decryptSecretLegacy(value)
+}
+
+func (s *Service) decryptSecretLegacy(value string) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(value)
 	if err != nil {
 		return "", err

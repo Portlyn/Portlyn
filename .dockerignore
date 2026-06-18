@@ -1,5 +1,9 @@
 .git
 .idea
+.env
+.env.docker
+.env.*.local
+*.db
 portlyn.db
 tmp
 dist

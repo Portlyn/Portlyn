@@ -51,6 +51,7 @@ type selfBootstrapResponse struct {
 	TunnelIP          string   `json:"tunnel_ip"`
 	ServerPublicKey   string   `json:"server_public_key"`
 	ServerEndpoint    string   `json:"server_endpoint"`
+	PresharedKey      string   `json:"preshared_key"`
 	AllowedIPs        []string `json:"allowed_ips"`
 	Keepalive         int      `json:"keepalive"`
 	AdvertisedSubnets []string `json:"advertised_subnets"`
@@ -87,6 +88,10 @@ func main() {
 	statePath := flag.String("state", "", "path to the agent state file")
 	insecureSkipVerify := flag.Bool("insecure-skip-verify", false, "skip tls verification (development only)")
 	flag.Parse()
+
+	if *insecureSkipVerify && strings.TrimSpace(os.Getenv("PORTLYN_AGENT_ALLOW_INSECURE")) != "1" {
+		log.Fatal("--insecure-skip-verify requires PORTLYN_AGENT_ALLOW_INSECURE=1; refusing to disable TLS verification")
+	}
 
 	resolvedStatePath := strings.TrimSpace(*statePath)
 	if resolvedStatePath == "" {
@@ -135,6 +140,7 @@ func main() {
 		PrivateKey:      state.WGPrivateKey,
 		ServerPublicKey: state.ServerPublicKey,
 		ServerEndpoint:  state.ServerEndpoint,
+		PresharedKey:    state.PresharedKey,
 		TunnelIP:        tunnelIP,
 		AllowedIPs:      state.AllowedIPs,
 		Keepalive:       state.Keepalive,
@@ -212,6 +218,7 @@ func provision(client *http.Client, api, token, name, description, version strin
 		TunnelIP:        boot.TunnelIP,
 		ServerPublicKey: boot.ServerPublicKey,
 		ServerEndpoint:  boot.ServerEndpoint,
+		PresharedKey:    boot.PresharedKey,
 		AllowedIPs:      boot.AllowedIPs,
 		Subnets:         boot.AdvertisedSubnets,
 		Keepalive:       keepalive,

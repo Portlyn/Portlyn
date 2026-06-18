@@ -13,6 +13,10 @@ INSTALL_DIR="/usr/local/bin"
 BIN_NAME="portlyn-nodeagent"
 STATE_DIR="/var/lib/portlyn-nodeagent"
 SERVICE_NAME="portlyn-nodeagent"
+REQUIRE_SIGNATURE="1"
+ALLOW_UNSIGNED="${ALLOW_UNSIGNED:-0}"
+SAN_REGEXP='^https://github\.com/portlyn/Portlyn/'
+OIDC_ISSUER="https://token.actions.githubusercontent.com"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -26,6 +30,8 @@ while [ $# -gt 0 ]; do
     --version=*) VERSION="${1#*=}"; shift ;;
     --download-base) DOWNLOAD_BASE="$2"; shift 2 ;;
     --download-base=*) DOWNLOAD_BASE="${1#*=}"; shift ;;
+    --require-signature) REQUIRE_SIGNATURE="1"; shift ;;
+    --allow-unsigned) ALLOW_UNSIGNED="1"; shift ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -77,7 +83,9 @@ fi
 
 tmp="$(mktemp)"
 sums="$(mktemp)"
-trap 'rm -f "$tmp" "$sums"' EXIT
+sig="$(mktemp)"
+cert="$(mktemp)"
+trap 'rm -f "$tmp" "$sums" "$sig" "$cert"' EXIT
 echo "Downloading ${asset} ..."
 $DL "$tmp" "$url" || err "download failed: $url"
 
@@ -90,6 +98,32 @@ if [ "$expected" != "$actual" ]; then
   err "checksum mismatch for ${asset}: expected ${expected}, got ${actual}"
 fi
 echo "Checksum OK."
+
+# --allow-unsigned (or ALLOW_UNSIGNED=1) downgrades to checksum-only verification.
+# Note: checksums.txt is fetched over the same channel as the binary, so this
+# only proves integrity, not authenticity. Signature verification is the default.
+if [ "$ALLOW_UNSIGNED" = "1" ]; then
+  REQUIRE_SIGNATURE="0"
+fi
+
+if command -v cosign >/dev/null 2>&1; then
+  echo "Verifying signature ..."
+  $DL "$sig" "${release_base}/checksums.txt.sig" || err "could not fetch checksums.txt.sig for signature verification"
+  $DL "$cert" "${release_base}/checksums.txt.pem" || err "could not fetch checksums.txt.pem for signature verification"
+  cosign verify-blob \
+    --certificate "$cert" \
+    --signature "$sig" \
+    --certificate-identity-regexp "$SAN_REGEXP" \
+    --certificate-oidc-issuer "$OIDC_ISSUER" \
+    "$sums" >/dev/null 2>&1 || err "cosign signature verification failed for checksums.txt"
+  echo "Signature OK."
+elif [ "$REQUIRE_SIGNATURE" = "1" ]; then
+  err "cosign not found, but signature verification is required. Install cosign (https://docs.sigstore.dev/cosign) and retry, or pass --allow-unsigned (env ALLOW_UNSIGNED=1) to proceed with checksum-only verification."
+else
+  echo "WARNING: --allow-unsigned set; cosign not found. Verified checksum only." >&2
+  echo "WARNING: the download's authenticity is NOT verified. Install cosign for full Sigstore verification." >&2
+fi
+
 chmod +x "$tmp"
 
 SUDO=""

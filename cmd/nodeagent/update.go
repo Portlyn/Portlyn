@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	updateRepo        = "invaliduser231/Portlyn"
+	updateRepo        = "portlyn/Portlyn"
 	updateAssetPrefix = "portlyn-nodeagent"
 	updateDefaultUnit = "portlyn-nodeagent.service"
-	updateSANRegex    = `^https://github\.com/invaliduser231/Portlyn/`
+	updateSANRegex    = `^https://github\.com/portlyn/Portlyn/`
 	updateOIDCIssuer  = "https://token.actions.githubusercontent.com"
 )
 
@@ -26,6 +26,7 @@ func runUpdate(args []string) error {
 	targetVersion := fs.String("version", "", "specific release tag to install (default: latest)")
 	noRestart := fs.Bool("no-restart", false, "skip systemctl restart after the swap")
 	unit := fs.String("unit", updateDefaultUnit, "systemd unit name to restart")
+	allowDowngrade := fs.Bool("allow-downgrade", false, "permit installing an older release than the current one")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -58,6 +59,12 @@ func runUpdate(args []string) error {
 	if rel.Tag == version && target == "" {
 		fmt.Printf("Already up to date (current: %s).\n", version)
 		return nil
+	}
+
+	if !*allowDowngrade {
+		if cmp, ok := selfupdate.CompareVersions(rel.Tag, version); ok && cmp < 0 {
+			return fmt.Errorf("refusing to install %s which is older than current %s; pass --allow-downgrade to override", rel.Tag, version)
+		}
 	}
 
 	exe, err := os.Executable()
