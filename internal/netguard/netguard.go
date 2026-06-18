@@ -53,3 +53,11 @@ func IsBlockedAddr(addr netip.Addr) bool {
 	}
 	return false
 }
+
+func IsBlockedAddrStrict(addr netip.Addr) bool {
+	if IsBlockedAddr(addr) {
+		return true
+	}
+	addr = addr.Unmap()
+	return addr.IsLoopback() || addr.IsPrivate()
+}

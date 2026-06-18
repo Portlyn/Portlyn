@@ -37,21 +37,21 @@ jobs:
         run: docker build -t portlyn-frontend:scan ./frontend
 
       - name: Generate backend SBOM
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           image: portlyn-backend:scan
           artifact-name: sbom-backend.spdx.json
           format: spdx-json
 
       - name: Generate frontend SBOM
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           image: portlyn-frontend:scan
           artifact-name: sbom-frontend.spdx.json
           format: spdx-json
 
       - name: Run Trivy for backend image
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: portlyn-backend:scan
           format: sarif
@@ -60,7 +60,7 @@ jobs:
           exit-code: "0"
 
       - name: Run Trivy for frontend image
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: portlyn-frontend:scan
           format: sarif

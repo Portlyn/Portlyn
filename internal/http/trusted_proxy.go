@@ -25,19 +25,13 @@ func (s *Server) requestFromTrustedProxy(r *stdhttp.Request) bool {
 	if !ok {
 		return false
 	}
-	for _, raw := range s.cfg.TrustedProxyCIDRs {
-		prefix, err := netip.ParsePrefix(strings.TrimSpace(raw))
-		if err == nil && prefix.Contains(addr) {
-			return true
-		}
-	}
-	return false
+	return addrInTrustedCIDRs(addr, s.cfg.TrustedProxyCIDRs)
 }
 
 func (s *Server) clientIPForRequest(r *stdhttp.Request) string {
 	if s.requestFromTrustedProxy(r) {
-		if forwarded := firstForwardedValue(r.Header.Get("X-Forwarded-For")); forwarded != "" {
-			return forwarded
+		if addr, ok := clientIPFromForwardedChain(r.Header.Get("X-Forwarded-For"), s.cfg.TrustedProxyCIDRs); ok {
+			return addr.String()
 		}
 		if realIP := strings.TrimSpace(r.Header.Get("X-Real-Ip")); realIP != "" {
 			return realIP
@@ -65,4 +59,32 @@ func firstForwardedValue(value string) string {
 	}
 	parts := strings.Split(value, ",")
 	return strings.TrimSpace(parts[0])
+}
+
+func addrInTrustedCIDRs(addr netip.Addr, cidrs []string) bool {
+	for _, raw := range cidrs {
+		prefix, err := netip.ParsePrefix(strings.TrimSpace(raw))
+		if err == nil && prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+func clientIPFromForwardedChain(header string, trustedCIDRs []string) (netip.Addr, bool) {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return netip.Addr{}, false
+	}
+	parts := strings.Split(header, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		addr, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
+		if err != nil {
+			continue
+		}
+		if !addrInTrustedCIDRs(addr, trustedCIDRs) {
+			return addr, true
+		}
+	}
+	return netip.Addr{}, false
 }

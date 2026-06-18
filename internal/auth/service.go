@@ -51,6 +51,7 @@ type Service struct {
 	authCache               map[string]cachedAuthResult
 	userTokens              map[uint]map[string]struct{}
 	distributedRateLimiter  rate.RateLimiter
+	fallbackRateLimiter     *rate.LocalLimiter
 	distributedAuthCache    AuthCache
 	metrics                 *observability.Metrics
 	passkeyChecker          func(ctx context.Context, userID uint) bool
@@ -163,6 +164,7 @@ func NewService(
 		fallbackOTP:             otpCfg,
 		allowInsecureDevMode:    allowInsecureDevMode,
 		distributedRateLimiter:  rate.NewLocalLimiter(),
+		fallbackRateLimiter:     rate.NewLocalLimiter(),
 		cacheTTL:                cacheTTL,
 		authCache:               make(map[string]cachedAuthResult),
 		userTokens:              make(map[uint]map[string]struct{}),
@@ -680,6 +682,9 @@ func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity
 	if email != "" {
 		user, err := s.users.GetByEmail(ctx, email)
 		if err == nil {
+			if !claims.EmailVerified {
+				return nil, ErrOIDCLinkDenied
+			}
 			if user.AuthProvider == domain.AuthProviderLocal && !authenticator.cfg.AllowEmailLinking {
 				return nil, ErrOIDCLinkDenied
 			}
@@ -1102,7 +1107,10 @@ func (s *Service) isRateLimited(ctx context.Context, key string, now time.Time) 
 	if s.distributedRateLimiter != nil {
 		allowed, _, _, err := s.distributedRateLimiter.Allow(ctx, key, s.rateLimit.LoginAttempts, s.rateLimit.Window)
 		if err != nil {
-			return false
+			if s.fallbackRateLimiter == nil {
+				return true
+			}
+			allowed, _, _, _ = s.fallbackRateLimiter.Allow(ctx, key, s.rateLimit.LoginAttempts, s.rateLimit.Window)
 		}
 		if !allowed && s.metrics != nil {
 			namespace := strings.SplitN(key, ":", 2)[0]

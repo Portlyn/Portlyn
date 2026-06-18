@@ -7,17 +7,17 @@ Portlyn ships as two binaries: a hub (`portlyn`) and an optional node agent (`po
 Every tagged release is signed with Cosign keyless via Sigstore. Verify before running anything in production.
 
 ```bash
-curl -L https://github.com/invaliduser231/Portlyn/releases/latest/download/portlyn-linux-amd64 -o portlyn
-curl -L https://github.com/invaliduser231/Portlyn/releases/latest/download/checksums.txt     -o checksums.txt
-curl -L https://github.com/invaliduser231/Portlyn/releases/latest/download/checksums.txt.sig -o checksums.txt.sig
-curl -L https://github.com/invaliduser231/Portlyn/releases/latest/download/checksums.txt.pem -o checksums.txt.pem
+curl -L https://github.com/portlyn/Portlyn/releases/latest/download/portlyn-linux-amd64 -o portlyn
+curl -L https://github.com/portlyn/Portlyn/releases/latest/download/checksums.txt     -o checksums.txt
+curl -L https://github.com/portlyn/Portlyn/releases/latest/download/checksums.txt.sig -o checksums.txt.sig
+curl -L https://github.com/portlyn/Portlyn/releases/latest/download/checksums.txt.pem -o checksums.txt.pem
 
 sha256sum -c checksums.txt --ignore-missing
 
 cosign verify-blob \
   --certificate checksums.txt.pem \
   --signature   checksums.txt.sig \
-  --certificate-identity-regexp 'https://github.com/invaliduser231/Portlyn' \
+  --certificate-identity-regexp 'https://github.com/portlyn/Portlyn' \
   --certificate-oidc-issuer     https://token.actions.githubusercontent.com \
   checksums.txt
 ```
@@ -38,14 +38,14 @@ A systemd unit example is available at [`scripts/portlyn.service`](../scripts/po
 ## Docker Compose
 
 ```bash
-git clone https://github.com/invaliduser231/Portlyn.git
+git clone https://github.com/portlyn/Portlyn.git
 cd Portlyn
 cp .env.docker.example .env.docker
 # edit secrets and admin credentials in .env.docker
 docker compose --env-file .env.docker up -d
 ```
 
-The default `docker-compose.yml` pulls `ghcr.io/invaliduser231/portlyn:latest`. Pin a specific tag with `PORTLYN_IMAGE_TAG=v1.2.3`. To build the images locally instead of pulling them, add the dev overlay:
+The default `docker-compose.yml` pulls `ghcr.io/portlyn/portlyn:latest`. Pin a specific tag with `PORTLYN_IMAGE_TAG=v1.2.3`. To build the images locally instead of pulling them, add the dev overlay:
 
 ```bash
 docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.dev.yml up -d --build

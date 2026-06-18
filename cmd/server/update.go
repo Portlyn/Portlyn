@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	updateRepo        = "invaliduser231/Portlyn"
+	updateRepo        = "portlyn/Portlyn"
 	updateAssetPrefix = "portlyn"
 	updateDefaultUnit = "portlyn.service"
-	updateSANRegex    = `^https://github\.com/invaliduser231/Portlyn/`
+	updateSANRegex    = `^https://github\.com/portlyn/Portlyn/`
 	updateOIDCIssuer  = "https://token.actions.githubusercontent.com"
 )
 

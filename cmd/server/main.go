@@ -154,6 +154,12 @@ func main() {
 			logger.Warn("env value differs from stored setting (DB wins; run 'portlyn settings sync' to apply env)",
 				"field", d.Field, "env", d.EnvValue, "db", d.DBValue)
 		}
+		if cfg.RequireMFAForAdmins {
+			if settings, sErr := appSettingsStore.Get(context.Background()); sErr == nil && !settings.RequireMFAForAdmins {
+				logger.Error("REQUIRE_MFA_FOR_ADMINS=true but the stored setting has it disabled; refusing to start with silently weakened admin MFA. Run 'portlyn settings sync' to apply env or align the setting in the UI.")
+				os.Exit(1)
+			}
+		}
 	}
 	authService, err := auth.NewService(
 		userStore,
@@ -344,6 +350,9 @@ func main() {
 	defer stop()
 	server.SetNetworkSecurity(rootCtx, geoipLookup, crowdSecClient)
 	server.SetWebhookDispatcher(webhookDispatcher)
+	if redisClient != nil {
+		server.SetNodeRateLimiter(rate.NewRedisLimiter(redisClient, "portlyn:node:ratelimit"))
+	}
 	authService.StartCacheJanitor(rootCtx)
 	proxyManager.Start(rootCtx)
 	if crowdSecClient.Enabled() {
@@ -475,7 +484,7 @@ Usage:
   portlyn version       print version and exit
   portlyn help          show this help
 
-Documentation: https://github.com/invaliduser231/Portlyn`)
+Documentation: https://github.com/portlyn/Portlyn`)
 }
 
 func hostnameFromURL(raw string) string {

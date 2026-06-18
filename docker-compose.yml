@@ -17,7 +17,7 @@ services:
       start_period: 20s
 
   portlyn:
-    image: ghcr.io/invaliduser231/portlyn:${PORTLYN_IMAGE_TAG:-latest}
+    image: ghcr.io/portlyn/portlyn:${PORTLYN_IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
     init: true
@@ -31,7 +31,7 @@ services:
       PROXY_HTTP_ADDR: ":80"
       PROXY_HTTPS_ADDR: ":443"
       DATABASE_DRIVER: "${DATABASE_DRIVER:-postgres}"
-      DATABASE_URL: "${DATABASE_URL:-postgres://${POSTGRES_USER:-portlyn}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.docker}@postgres:5432/${POSTGRES_DB:-portlyn}?sslmode=prefer}"
+      DATABASE_URL: "${DATABASE_URL:-postgres://${POSTGRES_USER:-portlyn}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.docker}@postgres:5432/${POSTGRES_DB:-portlyn}?sslmode=disable}"
       DATABASE_PATH: "/data/portlyn.db"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env.docker}"
       JWT_SIGNING_SECRET: "${JWT_SIGNING_SECRET:?set JWT_SIGNING_SECRET in .env.docker}"
@@ -116,7 +116,7 @@ services:
       service: "portlyn"
 
   frontend:
-    image: ghcr.io/invaliduser231/portlyn-frontend:${PORTLYN_IMAGE_TAG:-latest}
+    image: ghcr.io/portlyn/portlyn-frontend:${PORTLYN_IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
     init: true

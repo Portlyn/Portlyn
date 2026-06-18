@@ -33,7 +33,7 @@ func (s *Server) enforceNodeRateLimit(w http.ResponseWriter, r *http.Request, bu
 	if s.nodeRateLimiter == nil || limit <= 0 || window <= 0 {
 		return true
 	}
-	key := bucket + ":" + nodeRateLimitClientKey(r, s.cfg.NodeTrustForwardedProto && s.requestFromTrustedProxy(r))
+	key := bucket + ":" + nodeRateLimitClientKey(r, s.cfg.NodeTrustForwardedProto && s.requestFromTrustedProxy(r), s.cfg.TrustedProxyCIDRs)
 	allowed, _, reset, err := s.nodeRateLimiter.Allow(r.Context(), key, limit, window)
 	if err != nil {
 		s.logger.Error("node rate limit check failed", "bucket", bucket, "error", err)
@@ -60,16 +60,10 @@ func forwardedProtoHeader(r *http.Request) string {
 	return strings.ToLower(strings.TrimSpace(parts[0]))
 }
 
-func nodeRateLimitClientKey(r *http.Request, trustForwarded bool) string {
+func nodeRateLimitClientKey(r *http.Request, trustForwarded bool, trustedCIDRs []string) string {
 	if trustForwarded {
-		if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwarded != "" {
-			parts := strings.Split(forwarded, ",")
-			if len(parts) > 0 {
-				value := strings.TrimSpace(parts[0])
-				if value != "" {
-					return value
-				}
-			}
+		if addr, ok := clientIPFromForwardedChain(r.Header.Get("X-Forwarded-For"), trustedCIDRs); ok {
+			return addr.String()
 		}
 	}
 	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))

@@ -30,11 +30,11 @@ func (m *Manager) handleMagicLink(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	if err := m.auth.ConsumeMagicLink(context.Background(), route.ServiceID, token); err != nil {
-		writeProxyError(w, http.StatusForbidden, "invalid_magic_link", err.Error())
+		writeProxyError(w, http.StatusForbidden, "invalid_magic_link", "magic link is invalid or expired")
 		return true
 	}
 	if err := m.auth.SetRouteAccessCookie(w, route.ServiceID, magicLinkMethod(route), ""); err != nil {
-		writeProxyError(w, http.StatusInternalServerError, "cookie_error", err.Error())
+		writeProxyError(w, http.StatusInternalServerError, "cookie_error", "could not establish route access")
 		return true
 	}
 	target := route.Path

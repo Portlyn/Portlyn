@@ -79,6 +79,12 @@ func (s *Server) SetWebhookDispatcher(dispatcher *audit.WebhookDispatcher) {
 	s.webhookDispatch = dispatcher
 }
 
+func (s *Server) SetNodeRateLimiter(limiter rate.RateLimiter) {
+	if limiter != nil {
+		s.nodeRateLimiter = limiter
+	}
+}
+
 func NewServer(
 	cfg config.Config,
 	logger *slog.Logger,

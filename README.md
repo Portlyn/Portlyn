@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/invaliduser231/Portlyn/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/invaliduser231/Portlyn/ci.yml?branch=main&label=ci"></a>
-  <a href="https://github.com/invaliduser231/Portlyn/releases"><img alt="Release" src="https://img.shields.io/github/v/release/invaliduser231/Portlyn?include_prereleases&sort=semver"></a>
+  <a href="https://github.com/portlyn/Portlyn/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/portlyn/Portlyn/ci.yml?branch=main&label=ci"></a>
+  <a href="https://github.com/portlyn/Portlyn/releases"><img alt="Release" src="https://img.shields.io/github/v/release/portlyn/Portlyn?include_prereleases&sort=semver"></a>
   <img alt="Go version" src="https://img.shields.io/badge/go-1.26-00ADD8">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue"></a>
 </p>
@@ -101,7 +101,7 @@ The hub runs as a standalone binary on a Linux host or as a Docker Compose stack
 Single binary on Linux:
 
 ```bash
-curl -L https://github.com/invaliduser231/Portlyn/releases/latest/download/portlyn-linux-amd64 -o portlyn
+curl -L https://github.com/portlyn/Portlyn/releases/latest/download/portlyn-linux-amd64 -o portlyn
 chmod +x portlyn
 sudo mv portlyn /usr/local/bin/portlyn
 sudo portlyn init
@@ -115,14 +115,14 @@ For production installs, verify the SHA-256 checksum and the Sigstore signature 
 Docker Compose with the published image:
 
 ```bash
-git clone https://github.com/invaliduser231/Portlyn.git
+git clone https://github.com/portlyn/Portlyn.git
 cd Portlyn
 cp .env.docker.example .env.docker
 # edit secrets and admin credentials in .env.docker
 docker compose --env-file .env.docker up -d
 ```
 
-The Compose stack pulls `ghcr.io/invaliduser231/portlyn:latest` by default. Pin a specific tag with `PORTLYN_IMAGE_TAG=v1.2.3`.
+The Compose stack pulls `ghcr.io/portlyn/portlyn:latest` by default. Pin a specific tag with `PORTLYN_IMAGE_TAG=v1.2.3`.
 
 Detailed steps for release verification with Cosign, node agent enrollment, configuration, and the production checklist are in [docs/INSTALL.md](docs/INSTALL.md).
 

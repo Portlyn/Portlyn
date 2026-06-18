@@ -180,7 +180,7 @@ func (s *Server) handleUpdateAuthSettings(w stdhttp.ResponseWriter, r *stdhttp.R
 	if req.SMTPInsecureSkipVerify != nil {
 		item.SMTPInsecureSkipVerify = *req.SMTPInsecureSkipVerify
 	}
-	if message := validateAuthSettings(item); message != "" {
+	if message := s.validateAuthSettings(item); message != "" {
 		writeError(w, stdhttp.StatusBadRequest, "validation_error", message)
 		return
 	}
@@ -308,10 +308,18 @@ func authUIResponse(item *domain.AppSettings) map[string]any {
 	}
 }
 
-func validateAuthSettings(item *domain.AppSettings) string {
+func (s *Server) validateAuthSettings(item *domain.AppSettings) string {
 	if item.OIDCEnabled {
 		if strings.TrimSpace(item.OIDCIssuerURL) == "" || strings.TrimSpace(item.OIDCClientID) == "" || strings.TrimSpace(item.OIDCClientSecret) == "" || strings.TrimSpace(item.OIDCRedirectURL) == "" {
 			return "enabled oidc requires issuer url, client id, client secret and redirect url"
+		}
+		if !s.cfg.AllowInsecureDevMode {
+			if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(item.OIDCIssuerURL)), "https://") {
+				return "oidc issuer url must use https"
+			}
+			if err := validateOutboundURL(item.OIDCIssuerURL); err != nil {
+				return "oidc issuer url is not allowed: " + err.Error()
+			}
 		}
 	}
 	if item.SMTPEnabled {

@@ -961,6 +961,14 @@ func resolveTargetHost(host string) ([]netip.Addr, error) {
 }
 
 func validateServiceTargetURL(raw string) error {
+	return validateTargetURL(raw, false)
+}
+
+func validateOutboundURL(raw string) error {
+	return validateTargetURL(raw, true)
+}
+
+func validateTargetURL(raw string, strict bool) error {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
 		return fmt.Errorf("target_url must be a valid URL")
@@ -976,8 +984,13 @@ func validateServiceTargetURL(raw string) error {
 		return fmt.Errorf("target_url host is blocked for security reasons")
 	}
 
+	blocked := netguard.IsBlockedAddr
+	if strict {
+		blocked = netguard.IsBlockedAddrStrict
+	}
+
 	if addr, err := netip.ParseAddr(host); err == nil {
-		if netguard.IsBlockedAddr(addr) {
+		if blocked(addr) {
 			return fmt.Errorf("target_url host is blocked for security reasons")
 		}
 		return nil
@@ -985,10 +998,13 @@ func validateServiceTargetURL(raw string) error {
 
 	addrs, err := resolveTargetHost(host)
 	if err != nil {
+		if strict {
+			return fmt.Errorf("target_url host could not be resolved")
+		}
 		return nil
 	}
 	for _, addr := range addrs {
-		if netguard.IsBlockedAddr(addr) {
+		if blocked(addr) {
 			return fmt.Errorf("target_url host resolves to a blocked address")
 		}
 	}

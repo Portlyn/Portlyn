@@ -108,8 +108,8 @@ func validateInitAnswers(a initAnswers) error {
 	if a.AdminEmail == "" {
 		return fmt.Errorf("admin email is required")
 	}
-	if len(a.AdminPassword) < 12 {
-		return fmt.Errorf("admin password must be at least 12 characters")
+	if len(a.AdminPassword) < 16 {
+		return fmt.Errorf("admin password must be at least 16 characters")
 	}
 	return nil
 }

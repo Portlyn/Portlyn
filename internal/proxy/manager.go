@@ -595,7 +595,12 @@ func (m *Manager) handleSessionBridge(w http.ResponseWriter, r *http.Request) bo
 		writeProxyError(w, http.StatusForbidden, "forbidden", "session bridge host mismatch")
 		return true
 	}
+	if !m.auth.ConsumeBridgeToken(r.Context(), claims.ID) {
+		writeProxyError(w, http.StatusUnauthorized, "invalid_token", "session bridge token already used")
+		return true
+	}
 	m.auth.SetSessionCookieForHost(w, claims.AccessToken, normalizeHost(r.Host), m.forwardedProto(r) == "https")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	http.Redirect(w, r, "/", http.StatusFound)
 	return true
 }
@@ -1100,10 +1105,8 @@ func parseClientIP(remoteAddr string) (netip.Addr, error) {
 
 func (m *Manager) realClientIP(r *http.Request) (netip.Addr, error) {
 	if m.requestFromTrustedProxy(r) {
-		if forwarded := firstForwardedValue(r.Header.Get("X-Forwarded-For")); forwarded != "" {
-			if addr, err := netip.ParseAddr(strings.TrimSpace(forwarded)); err == nil {
-				return addr, nil
-			}
+		if addr, ok := clientIPFromForwardedChain(r.Header.Get("X-Forwarded-For"), m.trustedProxyCIDRs); ok {
+			return addr, nil
 		}
 		if realIP := strings.TrimSpace(r.Header.Get("X-Real-Ip")); realIP != "" {
 			if addr, err := netip.ParseAddr(realIP); err == nil {
@@ -1332,13 +1335,7 @@ func (m *Manager) requestFromTrustedProxy(r *http.Request) bool {
 	if err != nil {
 		return false
 	}
-	for _, raw := range m.trustedProxyCIDRs {
-		prefix, err := netip.ParsePrefix(strings.TrimSpace(raw))
-		if err == nil && prefix.Contains(addr) {
-			return true
-		}
-	}
-	return false
+	return addrInTrustedCIDRs(addr, m.trustedProxyCIDRs)
 }
 
 func firstForwardedValue(value string) string {
@@ -1348,6 +1345,34 @@ func firstForwardedValue(value string) string {
 	}
 	parts := strings.Split(value, ",")
 	return strings.TrimSpace(parts[0])
+}
+
+func addrInTrustedCIDRs(addr netip.Addr, cidrs []string) bool {
+	for _, raw := range cidrs {
+		prefix, err := netip.ParsePrefix(strings.TrimSpace(raw))
+		if err == nil && prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+func clientIPFromForwardedChain(header string, trustedCIDRs []string) (netip.Addr, bool) {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return netip.Addr{}, false
+	}
+	parts := strings.Split(header, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		addr, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
+		if err != nil {
+			continue
+		}
+		if !addrInTrustedCIDRs(addr, trustedCIDRs) {
+			return addr, true
+		}
+	}
+	return netip.Addr{}, false
 }
 
 func expectsTokenAuth(r *http.Request) bool {
