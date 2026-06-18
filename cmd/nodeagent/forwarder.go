@@ -1,10 +1,10 @@
 package main
 
 import (
-	"io"
 	"log"
 	"net"
 	"sync"
+	"time"
 )
 
 type tunnelClient interface {
@@ -88,21 +88,32 @@ func (f *forwarder) stop() {
 
 func handleConn(tunnelConn net.Conn, localAddr string) {
 	defer tunnelConn.Close()
-	local, err := net.Dial("tcp", localAddr)
+	local, err := net.DialTimeout("tcp", localAddr, 10*time.Second)
 	if err != nil {
 		log.Printf("forwarder: dial local %s failed: %v", localAddr, err)
 		return
 	}
 	defer local.Close()
 
+	const idle = 5 * time.Minute
 	done := make(chan struct{}, 2)
-	go func() {
-		_, _ = io.Copy(local, tunnelConn)
+	copyIdle := func(dst, src net.Conn) {
+		buf := make([]byte, 32*1024)
+		for {
+			_ = src.SetReadDeadline(time.Now().Add(idle))
+			count, readErr := src.Read(buf)
+			if count > 0 {
+				if _, writeErr := dst.Write(buf[:count]); writeErr != nil {
+					break
+				}
+			}
+			if readErr != nil {
+				break
+			}
+		}
 		done <- struct{}{}
-	}()
-	go func() {
-		_, _ = io.Copy(tunnelConn, local)
-		done <- struct{}{}
-	}()
+	}
+	go copyIdle(local, tunnelConn)
+	go copyIdle(tunnelConn, local)
 	<-done
 }

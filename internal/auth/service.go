@@ -385,7 +385,7 @@ func (s *Service) RequestOTP(ctx context.Context, email string, meta RequestMeta
 		return nil, ErrRateLimited
 	}
 
-	token, err := randomCode(4)
+	token, err := randomCode(8)
 	if err != nil {
 		return nil, err
 	}
@@ -490,12 +490,15 @@ func (s *Service) GetUserGroupIDs(ctx context.Context, id uint) ([]uint, error) 
 
 func (s *Service) AuthenticateAccessToken(ctx context.Context, tokenString string) (*domain.User, []uint, *domain.Session, error) {
 	claims, parseErr := s.ParseToken(tokenString)
+	if parseErr != nil {
+		return nil, nil, nil, parseErr
+	}
 	if user, groupIDs, ok := s.getCachedAuthResult(ctx, tokenString); ok {
 		if user == nil || !user.Active {
 			return nil, nil, nil, ErrInactiveUser
 		}
 		var session *domain.Session
-		if parseErr == nil && claims.SessionID != 0 && s.sessions != nil {
+		if claims.SessionID != 0 && s.sessions != nil {
 			s2, err := s.sessions.GetByTokenID(ctx, claims.TokenID)
 			if err != nil {
 				return nil, nil, nil, ErrInvalidToken
@@ -510,9 +513,6 @@ func (s *Service) AuthenticateAccessToken(ctx context.Context, tokenString strin
 			session = s2
 		}
 		return user, groupIDs, session, nil
-	}
-	if parseErr != nil {
-		return nil, nil, nil, parseErr
 	}
 	user, err := s.GetUser(ctx, claims.UserID)
 	if err != nil {
@@ -641,6 +641,9 @@ func (s *Service) ChangeOwnPassword(ctx context.Context, userID uint, currentPas
 
 func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity, authenticator *OIDCAuthenticator) (*domain.User, error) {
 	ref := strings.TrimSpace(claims.Subject)
+	if ref == "" {
+		return nil, ErrOIDCLinkDenied
+	}
 	email := strings.ToLower(strings.TrimSpace(claims.Email))
 	role := domain.RoleViewer
 	if authenticator.IsAdmin(claims.Claims) {

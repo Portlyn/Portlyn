@@ -25,6 +25,7 @@ type ClientOptions struct {
 	PrivateKey      string
 	ServerPublicKey string
 	ServerEndpoint  string
+	PresharedKey    string
 	TunnelIP        netip.Addr
 	AllowedIPs      []string
 	MTU             int
@@ -106,6 +107,14 @@ func (c *Client) Start(ctx context.Context) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "private_key=%s\n", privHex)
 	fmt.Fprintf(&b, "public_key=%s\n", pubHex)
+	if psk := strings.TrimSpace(c.options.PresharedKey); psk != "" {
+		pskHex, err := keyToHex(psk)
+		if err != nil {
+			dev.Close()
+			return err
+		}
+		fmt.Fprintf(&b, "preshared_key=%s\n", pskHex)
+	}
 	fmt.Fprintf(&b, "endpoint=%s\n", resolved)
 	fmt.Fprintf(&b, "persistent_keepalive_interval=%d\n", c.options.Keepalive)
 	allowed := c.options.AllowedIPs

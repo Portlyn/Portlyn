@@ -160,7 +160,7 @@ func sanitizeDNSProvider(secrets [][]byte, item *domain.DNSProvider) *domain.DNS
 		return nil
 	}
 	out := *item
-	config, err := secureconfig.DecryptJSONWithSecrets(secrets, item.ConfigEncrypted)
+	config, err := secureconfig.DecryptJSONAuto(secrets, item.ConfigEncrypted)
 	if err == nil {
 		out.MaskedConfig = domain.JSONObject(secureconfig.MaskConfig(config))
 	}

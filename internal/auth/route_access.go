@@ -329,7 +329,7 @@ func (s *Service) RequestRouteEmailCode(ctx context.Context, serviceID uint, ema
 	if requests >= int64(otpCfg.RequestLimit) {
 		return nil, ErrRateLimited
 	}
-	code, err := randomCode(4)
+	code, err := randomCode(8)
 	if err != nil {
 		return nil, err
 	}

@@ -263,6 +263,7 @@ type Node struct {
 	HeartbeatTokenHash string     `gorm:"size:128" json:"-"`
 	MTLSCertSHA256     string     `gorm:"size:128" json:"mtls_cert_sha256"`
 	WGPublicKey        string     `gorm:"size:64;index" json:"wg_public_key"`
+	WGPresharedKey     string     `gorm:"size:64" json:"-"`
 	WGEndpoint         string     `gorm:"size:255" json:"wg_endpoint"`
 	WGAllowedIPs       string     `gorm:"size:255" json:"wg_allowed_ips"`
 	WGTunnelIP         string     `gorm:"size:64;index" json:"wg_tunnel_ip"`

@@ -11,7 +11,10 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+
+	"portlyn/internal/netguard"
 )
 
 type CrowdSec struct {
@@ -57,10 +60,33 @@ type decisionsStream struct {
 
 func NewCrowdSec() *CrowdSec {
 	return &CrowdSec{
-		httpClient:  &http.Client{Timeout: 10 * time.Second},
+		httpClient:  &http.Client{Timeout: 10 * time.Second, Transport: ssrfGuardedTransport()},
 		ipDecisions: make(map[string]string),
 		interval:    60 * time.Second,
 	}
+}
+
+func ssrfGuardedTransport() *http.Transport {
+	dialer := &net.Dialer{
+		Timeout: 10 * time.Second,
+		Control: func(_, address string, _ syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return err
+			}
+			addr, err := netip.ParseAddr(host)
+			if err != nil {
+				return fmt.Errorf("crowdsec target resolved to an unparseable address")
+			}
+			if netguard.IsBlockedAddr(addr) {
+				return fmt.Errorf("crowdsec target resolves to a blocked address")
+			}
+			return nil
+		},
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = dialer.DialContext
+	return transport
 }
 
 func (c *CrowdSec) SetLogger(logger *slog.Logger) {

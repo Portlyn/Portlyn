@@ -26,30 +26,33 @@ func runUpdate(args []string) error {
 	targetVersion := fs.String("version", "", "specific release tag to install (default: latest)")
 	noRestart := fs.Bool("no-restart", false, "skip systemctl restart after the swap")
 	unit := fs.String("unit", updateDefaultUnit, "systemd unit name to restart")
+	allowDowngrade := fs.Bool("allow-downgrade", false, "permit installing an older release than the current one")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	return runSelfUpdate(updateConfig{
-		assetPrefix:   updateAssetPrefix,
-		repo:          updateRepo,
-		unit:          *unit,
-		identity:      selfupdate.CosignIdentity{SANRegex: updateSANRegex, OIDCIssuer: updateOIDCIssuer},
-		currentVer:    version,
-		checkOnly:     *checkOnly,
-		targetVersion: strings.TrimSpace(*targetVersion),
-		noRestart:     *noRestart,
+		assetPrefix:    updateAssetPrefix,
+		repo:           updateRepo,
+		unit:           *unit,
+		identity:       selfupdate.CosignIdentity{SANRegex: updateSANRegex, OIDCIssuer: updateOIDCIssuer},
+		currentVer:     version,
+		checkOnly:      *checkOnly,
+		targetVersion:  strings.TrimSpace(*targetVersion),
+		noRestart:      *noRestart,
+		allowDowngrade: *allowDowngrade,
 	})
 }
 
 type updateConfig struct {
-	assetPrefix   string
-	repo          string
-	unit          string
-	identity      selfupdate.CosignIdentity
-	currentVer    string
-	checkOnly     bool
-	targetVersion string
-	noRestart     bool
+	assetPrefix    string
+	repo           string
+	unit           string
+	identity       selfupdate.CosignIdentity
+	currentVer     string
+	checkOnly      bool
+	targetVersion  string
+	noRestart      bool
+	allowDowngrade bool
 }
 
 func runSelfUpdate(cfg updateConfig) error {
@@ -81,6 +84,12 @@ func runSelfUpdate(cfg updateConfig) error {
 	if rel.Tag == cfg.currentVer && cfg.targetVersion == "" {
 		fmt.Printf("Already up to date (current: %s).\n", cfg.currentVer)
 		return nil
+	}
+
+	if !cfg.allowDowngrade {
+		if cmp, ok := selfupdate.CompareVersions(rel.Tag, cfg.currentVer); ok && cmp < 0 {
+			return fmt.Errorf("refusing to install %s which is older than current %s; pass --allow-downgrade to override", rel.Tag, cfg.currentVer)
+		}
 	}
 
 	exe, err := os.Executable()

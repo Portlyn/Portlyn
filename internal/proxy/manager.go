@@ -28,19 +28,25 @@ import (
 	"portlyn/internal/observability"
 )
 
-func ssrfSafeDialControl(network, address string, _ syscall.RawConn) error {
-	host, _, err := net.SplitHostPort(address)
-	if err != nil {
-		return fmt.Errorf("invalid dial address %q: %w", address, err)
+func makeDialControl(blockPrivate bool) func(network, address string, _ syscall.RawConn) error {
+	return func(network, address string, _ syscall.RawConn) error {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return fmt.Errorf("invalid dial address %q: %w", address, err)
+		}
+		addr, err := netip.ParseAddr(host)
+		if err != nil {
+			return fmt.Errorf("unresolved dial address %q", host)
+		}
+		blocked := netguard.IsBlockedAddr(addr)
+		if blockPrivate {
+			blocked = netguard.IsBlockedAddrStrict(addr)
+		}
+		if blocked {
+			return fmt.Errorf("connection to blocked address %s denied", host)
+		}
+		return nil
 	}
-	addr, err := netip.ParseAddr(host)
-	if err != nil {
-		return fmt.Errorf("unresolved dial address %q", host)
-	}
-	if netguard.IsBlockedAddr(addr) {
-		return fmt.Errorf("connection to blocked address %s denied", host)
-	}
-	return nil
 }
 
 type Manager struct {
@@ -141,6 +147,7 @@ type ManagerOptions struct {
 	ServiceDeploymentStore ServiceDeploymentStore
 	GeoIPFailOpen          bool
 	CrowdSecFailOpen       bool
+	BlockPrivateUpstreams  bool
 }
 
 type TunnelDialer interface {
@@ -165,7 +172,7 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
-			Control:   ssrfSafeDialControl,
+			Control:   makeDialControl(options.BlockPrivateUpstreams),
 		}).DialContext,
 		MaxIdleConns:          512,
 		MaxIdleConnsPerHost:   128,
@@ -185,7 +192,7 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 
 	var adminUIHandler http.Handler
 	if options.EmbeddedAdminUI != nil {
-		adminUIHandler = options.EmbeddedAdminUI
+		adminUIHandler = withStaticSecurityHeaders(options.EmbeddedAdminUI)
 	} else if strings.TrimSpace(options.AdminUITargetURL) != "" {
 		if target, err := url.Parse(strings.TrimSpace(options.AdminUITargetURL)); err == nil {
 			adminUIHandler = reverseProxyForTarget(target, transport, "/", directProto, nil)
@@ -875,6 +882,10 @@ func (m *Manager) enforceAccessMethod(w http.ResponseWriter, r *http.Request, ro
 			m.redirectToRouteLogin(w, r, route)
 			return nil, nil, false
 		}
+		if normalizedAccessMethod(route.EffectiveMethod) == domain.AccessMethodEmailCode && !routeEmailAllowed(claims.Email, route.EffectiveMethodConfig) {
+			m.redirectToRouteLogin(w, r, route)
+			return nil, nil, false
+		}
 		return nil, nil, true
 	default:
 		writeProxyError(w, http.StatusForbidden, "forbidden", "unsupported access method")
@@ -882,10 +893,61 @@ func (m *Manager) enforceAccessMethod(w http.ResponseWriter, r *http.Request, ro
 	}
 }
 
+func withStaticSecurityHeaders(next http.Handler) http.Handler {
+	const csp = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'"
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", csp)
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()")
+		h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func routeEmailAllowed(email string, config domain.JSONObject) bool {
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	allowedEmails := make([]string, 0)
+	switch raw := config["allowed_emails"].(type) {
+	case []any:
+		for _, entry := range raw {
+			if s, ok := entry.(string); ok {
+				allowedEmails = append(allowedEmails, strings.ToLower(strings.TrimSpace(s)))
+			}
+		}
+	case []string:
+		for _, entry := range raw {
+			allowedEmails = append(allowedEmails, strings.ToLower(strings.TrimSpace(entry)))
+		}
+	}
+	if len(allowedEmails) > 0 {
+		for _, allowed := range allowedEmails {
+			if allowed != "" && allowed == normalized {
+				return true
+			}
+		}
+		return false
+	}
+	if raw, ok := config["allowed_email_domain"].(string); ok {
+		allowed := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(raw)), "@")
+		if allowed == "" {
+			return true
+		}
+		parts := strings.Split(normalized, "@")
+		return len(parts) == 2 && parts[1] == allowed
+	}
+	return true
+}
+
 func (m *Manager) authenticateProxyRequest(r *http.Request) (*domain.User, []uint, int, bool) {
-	user, groupIDs, _, err := m.auth.AuthenticateRequest(r.Context(), r)
+	user, groupIDs, session, err := m.auth.AuthenticateRequest(r.Context(), r)
 	if err != nil {
 		return nil, nil, http.StatusUnauthorized, false
+	}
+	if !m.auth.BootstrapAccessAllowed(r.Context(), user, session) {
+		return nil, nil, http.StatusForbidden, false
 	}
 	return user, groupIDs, http.StatusOK, true
 }

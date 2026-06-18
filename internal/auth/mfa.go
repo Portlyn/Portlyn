@@ -318,6 +318,16 @@ func (s *Service) BootstrapRequired(ctx context.Context, user *domain.User) bool
 	return !s.userHasPasskey(ctx, user.ID)
 }
 
+func (s *Service) BootstrapAccessAllowed(ctx context.Context, user *domain.User, session *domain.Session) bool {
+	if !s.BootstrapRequired(ctx, user) {
+		return true
+	}
+	if session != nil && session.BootstrapDismissed && s.bootstrapDismissAllowed(ctx, user) {
+		return true
+	}
+	return false
+}
+
 func (s *Service) MFARequiredForUser(ctx context.Context, user *domain.User) bool {
 	if user == nil || user.Role != domain.RoleAdmin {
 		return false

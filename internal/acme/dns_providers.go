@@ -29,7 +29,7 @@ func buildDNSProvider(secrets []string, item *domain.DNSProvider) (libdns.Record
 			keySet = append(keySet, []byte(secret))
 		}
 	}
-	config, err := secureconfig.DecryptJSONWithSecrets(keySet, item.ConfigEncrypted)
+	config, err := secureconfig.DecryptJSONAuto(keySet, item.ConfigEncrypted)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -14,6 +14,7 @@ type agentState struct {
 	TunnelIP        string   `json:"tunnel_ip"`
 	ServerPublicKey string   `json:"server_public_key"`
 	ServerEndpoint  string   `json:"server_endpoint"`
+	PresharedKey    string   `json:"preshared_key"`
 	AllowedIPs      []string `json:"allowed_ips"`
 	Subnets         []string `json:"subnets"`
 	Keepalive       int      `json:"keepalive"`
@@ -32,6 +33,9 @@ func defaultStatePath() (string, error) {
 }
 
 func loadState(path string) (*agentState, error) {
+	if info, statErr := os.Stat(path); statErr == nil && info.Mode().Perm()&0o077 != 0 {
+		_ = os.Chmod(path, 0o600)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

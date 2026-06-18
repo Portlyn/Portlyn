@@ -34,7 +34,9 @@ func (s *Server) clientIPForRequest(r *stdhttp.Request) string {
 			return addr.String()
 		}
 		if realIP := strings.TrimSpace(r.Header.Get("X-Real-Ip")); realIP != "" {
-			return realIP
+			if parsed, err := netip.ParseAddr(realIP); err == nil {
+				return parsed.String()
+			}
 		}
 	}
 	if host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr)); err == nil {

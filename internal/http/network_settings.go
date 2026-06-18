@@ -84,7 +84,14 @@ func (s *Server) handleUpdateNetworkSettings(w stdhttp.ResponseWriter, r *stdhtt
 		settings.CrowdSecEnabled = *req.CrowdSecEnabled
 	}
 	if req.CrowdSecAPIURL != nil {
-		settings.CrowdSecAPIURL = strings.TrimSpace(*req.CrowdSecAPIURL)
+		trimmed := strings.TrimSpace(*req.CrowdSecAPIURL)
+		if trimmed != "" {
+			if err := validateServiceTargetURL(trimmed); err != nil {
+				writeError(w, stdhttp.StatusBadRequest, "invalid_crowdsec_url", "crowdsec_api_url is not a valid or permitted URL")
+				return
+			}
+		}
+		settings.CrowdSecAPIURL = trimmed
 	}
 	if req.CrowdSecAPIKey != nil && strings.TrimSpace(*req.CrowdSecAPIKey) != "" {
 		settings.CrowdSecAPIKeyEncrypted = strings.TrimSpace(*req.CrowdSecAPIKey)

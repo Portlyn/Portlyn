@@ -60,6 +60,7 @@ func AtomicSwap(currentPath string, payload io.Reader, mode os.FileMode) (string
 		_ = os.Rename(backupPath, currentPath)
 		return "", fmt.Errorf("atomic rename: %w", err)
 	}
+	_ = os.Chmod(backupPath, 0o600)
 	return backupPath, nil
 }
 

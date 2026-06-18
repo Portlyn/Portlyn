@@ -10,11 +10,14 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"portlyn/internal/domain"
+	"portlyn/internal/netguard"
 )
 
 func verifyTLSChain(host string, state *tls.ConnectionState) bool {
@@ -61,7 +64,23 @@ func NewScanner(services ServiceProvider, reports ReportStore, logger *slog.Logg
 	transport := &http.Transport{
 		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		ResponseHeaderTimeout: 10 * time.Second,
-		DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+		DialContext: (&net.Dialer{
+			Timeout: 5 * time.Second,
+			Control: func(_, address string, _ syscall.RawConn) error {
+				host, _, err := net.SplitHostPort(address)
+				if err != nil {
+					return err
+				}
+				addr, err := netip.ParseAddr(host)
+				if err != nil {
+					return fmt.Errorf("scan target resolved to an unparseable address")
+				}
+				if netguard.IsBlockedAddr(addr) {
+					return fmt.Errorf("scan target resolves to a blocked address")
+				}
+				return nil
+			},
+		}).DialContext,
 	}
 	return &Scanner{
 		services: services,

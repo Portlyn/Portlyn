@@ -154,7 +154,9 @@ func (w *WebAuthnService) BeginRegistration(ctx context.Context, userID uint) (*
 		return nil, err
 	}
 	wu := &webauthnUser{user: user, credentials: creds}
-	options, session, err := instance.BeginRegistration(wu)
+	options, session, err := instance.BeginRegistration(wu, webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
+		UserVerification: protocol.VerificationRequired,
+	}))
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +231,7 @@ func (w *WebAuthnService) BeginLogin(ctx context.Context, userID uint) (*BeginLo
 		return nil, errors.New("no credentials registered")
 	}
 	wu := &webauthnUser{user: user, credentials: creds}
-	options, session, err := instance.BeginLogin(wu)
+	options, session, err := instance.BeginLogin(wu, webauthn.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +258,7 @@ func (w *WebAuthnService) BeginLoginDecoy(email string) (*BeginLoginResult, erro
 		CredentialID: base64.RawURLEncoding.EncodeToString(w.decoyCredentialID(email)),
 	}
 	wu := &webauthnUser{user: &domain.User{Email: email}, credentials: []domain.UserCredential{fakeCred}}
-	options, session, err := instance.BeginLogin(wu)
+	options, session, err := instance.BeginLogin(wu, webauthn.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
 		return nil, err
 	}

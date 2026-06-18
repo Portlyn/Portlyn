@@ -273,6 +273,7 @@ func (s *Server) Router() stdhttp.Handler {
 				r.Get("/services/{id}/last-denials", s.handleListServiceDenials)
 				r.Post("/services/{id}/explain", s.handleExplainServiceAccess)
 				r.Get("/audit-logs", s.handleListAuditLogs)
+				r.Get("/audit-logs/verify", s.handleVerifyAuditChain)
 				r.Get("/settings/auth", s.handleGetAuthSettings)
 				r.Patch("/settings/auth", s.handleUpdateAuthSettings)
 				r.Post("/settings/auth/test-email", s.handleSendTestEmail)
@@ -447,10 +448,22 @@ func (s *Server) decodeAndValidate(w stdhttp.ResponseWriter, r *stdhttp.Request,
 		return false
 	}
 	if err := s.validate.Struct(target); err != nil {
-		writeErrorRequest(w, r, stdhttp.StatusBadRequest, "validation_error", err.Error())
+		writeErrorRequest(w, r, stdhttp.StatusBadRequest, "validation_error", formatValidationError(err))
 		return false
 	}
 	return true
+}
+
+func formatValidationError(err error) string {
+	var verrs validator.ValidationErrors
+	if !errors.As(err, &verrs) || len(verrs) == 0 {
+		return "request validation failed"
+	}
+	fields := make([]string, 0, len(verrs))
+	for _, fe := range verrs {
+		fields = append(fields, fe.Field())
+	}
+	return "invalid or missing fields: " + strings.Join(fields, ", ")
 }
 
 func (s *Server) parseIDParam(w stdhttp.ResponseWriter, r *stdhttp.Request, key string) (uint, bool) {

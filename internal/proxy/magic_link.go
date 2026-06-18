@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -29,7 +28,11 @@ func (m *Manager) handleMagicLink(w http.ResponseWriter, r *http.Request) bool {
 		writeProxyError(w, http.StatusNotFound, "route_not_found", "no service matches this host")
 		return true
 	}
-	if err := m.auth.ConsumeMagicLink(context.Background(), route.ServiceID, token); err != nil {
+	remoteAddr := r.RemoteAddr
+	if ip, err := m.realClientIP(r); err == nil {
+		remoteAddr = ip.String()
+	}
+	if err := m.auth.ConsumeMagicLink(r.Context(), route.ServiceID, token, remoteAddr); err != nil {
 		writeProxyError(w, http.StatusForbidden, "invalid_magic_link", "magic link is invalid or expired")
 		return true
 	}

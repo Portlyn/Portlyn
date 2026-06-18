@@ -93,6 +93,7 @@ type Config struct {
 	CrowdSecFailOpen                bool
 	HealthExposeVersion             bool
 	AuditHMACSecret                 string
+	AllowPrivateUpstreams           bool
 }
 
 type OIDCConfig struct {
@@ -235,6 +236,7 @@ func Load() (Config, error) {
 		CrowdSecFailOpen:      getEnvBool("CROWDSEC_FAIL_OPEN", true),
 		HealthExposeVersion:   getEnvBool("HEALTH_EXPOSE_VERSION", false),
 		AuditHMACSecret:       getSecretEnv("AUDIT_HMAC_SECRET", secrets, allowInsecureDevMode),
+		AllowPrivateUpstreams: getEnvBool("PROXY_ALLOW_PRIVATE_UPSTREAMS", true),
 	}
 
 	return cfg, cfg.Validate()

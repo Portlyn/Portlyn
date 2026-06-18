@@ -161,15 +161,65 @@ func computeAuditHash(key []byte, prevHash string, item *domain.AuditLog) string
 func VerifyAuditHashChain(key []byte, items []domain.AuditLog) error {
 	prevHash := ""
 	for i := range items {
+		next, err := verifyAuditChainSegment(key, prevHash, items[i:i+1])
+		if err != nil {
+			return err
+		}
+		prevHash = next
+	}
+	return nil
+}
+
+func verifyAuditChainSegment(key []byte, prevHash string, items []domain.AuditLog) (string, error) {
+	for i := range items {
 		item := &items[i]
 		if item.PrevHash != prevHash {
-			return fmt.Errorf("audit chain mismatch at id %d", item.ID)
+			return "", fmt.Errorf("audit chain mismatch at id %d", item.ID)
 		}
 		expected := computeAuditHash(key, prevHash, item)
 		if item.Hash != expected {
-			return fmt.Errorf("audit hash mismatch at id %d", item.ID)
+			return "", fmt.Errorf("audit hash mismatch at id %d", item.ID)
 		}
 		prevHash = item.Hash
 	}
-	return nil
+	return prevHash, nil
+}
+
+type AuditChainResult struct {
+	Verified   int64  `json:"verified"`
+	LatestID   uint   `json:"latest_id"`
+	LatestHash string `json:"latest_hash"`
+}
+
+func (s *AuditStore) VerifyChain(ctx context.Context) (AuditChainResult, error) {
+	const batchSize = 500
+	result := AuditChainResult{}
+	prevHash := ""
+	var lastID uint
+	for {
+		var batch []domain.AuditLog
+		if err := s.db.WithContext(ctx).
+			Where("id > ?", lastID).
+			Order("id asc").
+			Limit(batchSize).
+			Find(&batch).Error; err != nil {
+			return result, err
+		}
+		if len(batch) == 0 {
+			break
+		}
+		next, err := verifyAuditChainSegment(s.hmacKey, prevHash, batch)
+		if err != nil {
+			return result, err
+		}
+		prevHash = next
+		lastID = batch[len(batch)-1].ID
+		result.Verified += int64(len(batch))
+		if len(batch) < batchSize {
+			break
+		}
+	}
+	result.LatestID = lastID
+	result.LatestHash = prevHash
+	return result, nil
 }

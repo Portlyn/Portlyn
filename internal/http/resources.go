@@ -1180,6 +1180,23 @@ func (s *Server) handleListAuditLogs(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	})
 }
 
+func (s *Server) handleVerifyAuditChain(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	result, err := s.auditStore.VerifyChain(r.Context())
+	if err != nil {
+		writeJSON(w, stdhttp.StatusOK, map[string]any{
+			"valid":  false,
+			"reason": err.Error(),
+		})
+		return
+	}
+	writeJSON(w, stdhttp.StatusOK, map[string]any{
+		"valid":       true,
+		"verified":    result.Verified,
+		"latest_id":   result.LatestID,
+		"latest_hash": result.LatestHash,
+	})
+}
+
 func parseIntQuery(r *stdhttp.Request, key string, fallback int) int {
 	raw := r.URL.Query().Get(key)
 	if raw == "" {

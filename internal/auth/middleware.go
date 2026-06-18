@@ -56,11 +56,8 @@ func (s *Service) RequireBootstrapComplete(next http.Handler) http.Handler {
 			_, _ = w.Write([]byte(`{"error":{"code":"unauthorized","message":"missing auth context"}}`))
 			return
 		}
-		if !s.BootstrapRequired(r.Context(), user) {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if session, ok := SessionFromContext(r.Context()); ok && session.BootstrapDismissed && s.bootstrapDismissAllowed(r.Context(), user) {
+		session, _ := SessionFromContext(r.Context())
+		if s.BootstrapAccessAllowed(r.Context(), user, session) {
 			next.ServeHTTP(w, r)
 			return
 		}

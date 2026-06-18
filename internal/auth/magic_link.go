@@ -44,9 +44,12 @@ func (s *Service) IssueMagicLink(ctx context.Context, serviceID uint, ttl time.D
 	return &MagicLinkIssueResult{Token: token, ExpiresAt: expires}, nil
 }
 
-func (s *Service) ConsumeMagicLink(ctx context.Context, serviceID uint, token string) error {
+func (s *Service) ConsumeMagicLink(ctx context.Context, serviceID uint, token, remoteAddr string) error {
 	if serviceID == 0 || strings.TrimSpace(token) == "" {
 		return ErrInvalidToken
+	}
+	if s.isRateLimited(ctx, "magic-consume:"+rateLimitRemoteAddr(remoteAddr), time.Now().UTC()) {
+		return ErrRateLimited
 	}
 	item, err := s.loginTokens.GetMagicLink(ctx, serviceID, token)
 	if err != nil {

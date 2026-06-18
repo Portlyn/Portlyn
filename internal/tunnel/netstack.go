@@ -3,7 +3,6 @@ package tunnel
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
 	"os"
@@ -223,9 +222,26 @@ func proxyTCP(tunnelConn net.Conn, target string, dial DialFunc) {
 		return
 	}
 	defer remote.Close()
+	const idle = 5 * time.Minute
 	done := make(chan struct{}, 2)
-	go func() { _, _ = io.Copy(remote, tunnelConn); done <- struct{}{} }()
-	go func() { _, _ = io.Copy(tunnelConn, remote); done <- struct{}{} }()
+	copyIdle := func(dst, src net.Conn) {
+		buf := make([]byte, 32*1024)
+		for {
+			_ = src.SetReadDeadline(time.Now().Add(idle))
+			count, readErr := src.Read(buf)
+			if count > 0 {
+				if _, writeErr := dst.Write(buf[:count]); writeErr != nil {
+					break
+				}
+			}
+			if readErr != nil {
+				break
+			}
+		}
+		done <- struct{}{}
+	}
+	go copyIdle(remote, tunnelConn)
+	go copyIdle(tunnelConn, remote)
 	<-done
 }
 

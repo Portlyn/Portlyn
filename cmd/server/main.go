@@ -97,6 +97,11 @@ func main() {
 	routingStore := store.NewRoutingStore(db)
 	loginTokenStore := store.NewLoginTokenStore(db)
 	auditStore := store.NewAuditStore(db, []byte(cfg.AuditHMACSecret))
+	if result, err := auditStore.VerifyChain(context.Background()); err != nil {
+		logger.Error("audit log integrity verification failed", "error", err)
+	} else {
+		logger.Info("audit log integrity verified", "entries", result.Verified, "latest_id", result.LatestID)
+	}
 	appSettingsStore := store.NewAppSettingsStore(db)
 	appSettingsStore.SetDataEncryptionSecrets(cfg.DataEncryptionSecrets())
 	sessionStore := store.NewSessionStore(db)
@@ -289,6 +294,7 @@ func main() {
 			ServiceDeploymentStore: serviceStore,
 			GeoIPFailOpen:          cfg.GeoIPFailOpen,
 			CrowdSecFailOpen:       cfg.CrowdSecFailOpen,
+			BlockPrivateUpstreams:  !cfg.AllowPrivateUpstreams,
 		},
 	)
 
@@ -369,6 +375,9 @@ func main() {
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.Router(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	proxyHTTPHandler := acmeManager.HTTPChallengeHandler(server.ProxyHandler())
@@ -391,6 +400,7 @@ func main() {
 		Addr:              cfg.ProxyHTTPAddr,
 		Handler:           proxyHTTPHandler,
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	var proxyHTTPSServer *http.Server
@@ -424,6 +434,7 @@ func main() {
 			Addr:              cfg.ProxyHTTPSAddr,
 			Handler:           server.ProxyHandler(),
 			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       120 * time.Second,
 		}
 
 		go func() {

@@ -123,10 +123,13 @@ func (s *Server) handleUpdateAuditWebhook(w stdhttp.ResponseWriter, r *stdhttp.R
 		item.Active = *req.Active
 	}
 	if req.Secret != nil {
-		item.SecretEncrypted = *req.Secret
-		if len(*req.Secret) >= 8 {
-			item.SecretPreview = (*req.Secret)[:8]
+		secret := strings.TrimSpace(*req.Secret)
+		if len(secret) < 16 {
+			writeError(w, stdhttp.StatusBadRequest, "weak_webhook_secret", "webhook secret must be at least 16 characters")
+			return
 		}
+		item.SecretEncrypted = secret
+		item.SecretPreview = secret[:4]
 	}
 	if err := s.auditWebhooks.Update(r.Context(), item); err != nil {
 		s.internalError(w, err)
