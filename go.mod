@@ -3,7 +3,7 @@ module portlyn
 go 1.26.4
 
 require (
-	github.com/caddyserver/certmagic v0.25.3
+	github.com/caddyserver/certmagic v0.25.4
 	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-chi/chi/v5 v5.3.0
