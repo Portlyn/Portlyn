@@ -51,6 +51,23 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "doctor":
+			if err := runDoctor(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
+		case "config":
+			if len(os.Args) > 2 && os.Args[2] == "check" {
+				if err := runDoctor(os.Args[3:]); err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
+				}
+				return
+			}
+			fmt.Fprintln(os.Stderr, "usage: portlyn config check")
+			os.Exit(1)
+			return
 		case "update":
 			if err := runUpdate(os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "update:", err)
@@ -64,10 +81,14 @@ func main() {
 	}
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "config error:", err)
+		fmt.Fprintln(os.Stderr, "Portlyn cannot start: the configuration has errors.")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Run './portlyn init' first to generate a .env file with required secrets.")
+		printValidationIssues(os.Stderr, cfg.ValidationIssues(), false)
+		fmt.Fprintln(os.Stderr, "Run './portlyn doctor' to re-check, or './portlyn init' to generate a valid .env.")
 		os.Exit(1)
+	}
+	if cfg.AppVersion == "" || cfg.AppVersion == "dev" {
+		cfg.AppVersion = version
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
@@ -200,6 +221,8 @@ func main() {
 		logger.Error("failed to seed viewer user", "error", err)
 		os.Exit(1)
 	}
+
+	seedDNSProviderFromEnv(context.Background(), cfg, dnsProviderStore, logger)
 
 	acmeManager, err := acme.NewManager(cfg, db, certificateStore, domainStore, dnsProviderStore, metrics)
 	if err != nil {
@@ -494,7 +517,9 @@ func printUsage() {
 
 Usage:
   portlyn               start the server (requires .env)
-  portlyn init          interactive setup wizard (generates .env and admin user)
+  portlyn init          setup wizard (generates .env and admin user; --non-interactive for CI)
+  portlyn doctor        validate the full environment and list every issue with a fix hint
+  portlyn config check  alias for 'portlyn doctor'
   portlyn settings sync apply env values for env-controlled settings to the database
   portlyn update        download, verify and install the latest release (flags: --check, --version, --no-restart, --unit)
   portlyn version       print version and exit

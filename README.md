@@ -98,7 +98,14 @@ The hub runs as a standalone binary on a Linux host or as a Docker Compose stack
 
 ## Installation
 
-Single binary on Linux:
+One line install on Linux (downloads, verifies checksum + Cosign signature, creates a system user, installs the systemd unit):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/portlyn/Portlyn/main/scripts/install-hub.sh \
+  | sudo PORTLYN_DOMAIN=portlyn.example.com PORTLYN_ADMIN_EMAIL=admin@example.com sh
+```
+
+Or install the single binary manually:
 
 ```bash
 curl -L https://github.com/portlyn/Portlyn/releases/latest/download/portlyn-linux-amd64 -o portlyn
@@ -108,7 +115,7 @@ sudo portlyn init
 sudo portlyn
 ```
 
-`portlyn init` is an interactive wizard. It generates secrets, writes a `.env` file, prepares the data directory, and creates the admin account.
+`portlyn init` generates secrets, writes a `.env` file, prepares the data directory, and creates the admin account. Use `portlyn init --non-interactive` for scripted installs, and `portlyn doctor` to validate the whole environment in one pass.
 
 For production installs, verify the SHA-256 checksum and the Sigstore signature of the binary before running it. The full verification procedure is in [docs/INSTALL.md](docs/INSTALL.md).
 
@@ -122,7 +129,7 @@ cp .env.docker.example .env.docker
 docker compose --env-file .env.docker up -d
 ```
 
-The Compose stack pulls `ghcr.io/portlyn/portlyn:latest` by default. Pin a specific tag with `PORTLYN_IMAGE_TAG=v1.2.3`.
+The Compose stack pulls `ghcr.io/portlyn/portlyn:latest` by default. Pin a specific tag with `PORTLYN_IMAGE_TAG=v1.2.3`. If the pull is denied because the GHCR packages are private, `docker login ghcr.io` or build locally with the dev overlay (`-f docker-compose.yml -f docker-compose.dev.yml up -d --build`).
 
 Detailed steps for release verification with Cosign, node agent enrollment, configuration, and the production checklist are in [docs/INSTALL.md](docs/INSTALL.md).
 

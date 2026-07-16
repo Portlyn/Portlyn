@@ -53,6 +53,8 @@ type Config struct {
 	ACMECAURL                       string
 	ACMEEnabled                     bool
 	ACMELeader                      bool
+	ACMEDNSProvider                 string
+	ACMEDNSConfig                   map[string]string
 	ACMEPollInterval                time.Duration
 	ACMERenewWithin                 time.Duration
 	NodeOfflineAfter                time.Duration
@@ -129,6 +131,7 @@ type ValidationIssue struct {
 	Field   string `json:"field"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	Hint    string `json:"hint,omitempty"`
 }
 
 func Load() (Config, error) {
@@ -174,6 +177,8 @@ func Load() (Config, error) {
 		ACMECAURL:                       strings.TrimSpace(os.Getenv("ACME_CA_URL")),
 		ACMEEnabled:                     getEnvBool("ACME_ENABLED", false),
 		ACMELeader:                      getEnvBool("ACME_LEADER", false),
+		ACMEDNSProvider:                 strings.ToLower(strings.TrimSpace(os.Getenv("ACME_DNS_PROVIDER"))),
+		ACMEDNSConfig:                   dnsProviderConfigFromEnv(strings.ToLower(strings.TrimSpace(os.Getenv("ACME_DNS_PROVIDER")))),
 		ACMEPollInterval:                getEnvDuration("ACME_POLL_INTERVAL", 1*time.Minute),
 		ACMERenewWithin:                 getEnvDuration("ACME_RENEW_WITHIN", 30*24*time.Hour),
 		NodeOfflineAfter:                getEnvDuration("NODE_OFFLINE_AFTER", 2*time.Minute),
@@ -293,8 +298,13 @@ func (cfg *Config) ValidationIssues() []ValidationIssue {
 			add("error", "DATABASE_URL", "missing_database_url", "DATABASE_URL must not be empty when DATABASE_DRIVER=postgres")
 		} else if !cfg.AllowInsecureDevMode {
 			sslMode := postgresSSLMode(cfg.DatabaseURL)
+			privateDB := isPrivateOrLocalHost(hostFromURL(cfg.DatabaseURL))
 			if sslMode == "disable" {
-				add("error", "DATABASE_URL", "insecure_database_transport", "DATABASE_URL must not disable TLS in production (avoid sslmode=disable)")
+				if privateDB {
+					add("warn", "DATABASE_URL", "insecure_database_transport_private", "DATABASE_URL disables TLS (sslmode=disable) to a private/container-local host; acceptable on a trusted network but prefer TLS if the link ever crosses one")
+				} else {
+					add("error", "DATABASE_URL", "insecure_database_transport", "DATABASE_URL must not disable TLS in production (avoid sslmode=disable)")
+				}
 			}
 			if sslMode == "allow" || sslMode == "prefer" || sslMode == "" {
 				add("warn", "DATABASE_URL", "weak_database_transport", "DATABASE_URL is not enforcing TLS verification; prefer sslmode=require, verify-ca, or verify-full")
@@ -423,6 +433,23 @@ func (cfg *Config) ValidationIssues() []ValidationIssue {
 		if _, err := netip.ParsePrefix(strings.TrimSpace(raw)); err != nil {
 			add("error", "TRUSTED_PROXY_CIDRS", "invalid_trusted_proxy_cidr", "TRUSTED_PROXY_CIDRS entries must be CIDR prefixes")
 			break
+		}
+	}
+	if cfg.ACMEDNSProvider != "" {
+		required, supported := dnsProviderRequiredKeys(cfg.ACMEDNSProvider)
+		if !supported {
+			add("error", "ACME_DNS_PROVIDER", "unsupported_dns_provider", fmt.Sprintf("unsupported ACME_DNS_PROVIDER %q (expected cloudflare, hetzner, digitalocean, or route53)", cfg.ACMEDNSProvider))
+		} else {
+			for _, key := range required {
+				if strings.TrimSpace(cfg.ACMEDNSConfig[key]) == "" {
+					add("error", "ACME_DNS_PROVIDER", "missing_dns_provider_credential", fmt.Sprintf("ACME_DNS_PROVIDER=%s requires %s", cfg.ACMEDNSProvider, dnsProviderEnvKey(cfg.ACMEDNSProvider, key)))
+				}
+			}
+		}
+	}
+	for i := range issues {
+		if hint := validationHint(issues[i].Code); hint != "" {
+			issues[i].Hint = hint
 		}
 	}
 	return issues
@@ -603,4 +630,112 @@ func postgresSSLMode(raw string) string {
 		return ""
 	}
 	return strings.ToLower(strings.TrimSpace(parsed.Query().Get("sslmode")))
+}
+
+func isPrivateOrLocalHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
+	}
+	if isLoopbackHost(host) {
+		return true
+	}
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast()
+	}
+	return !strings.Contains(host, ".")
+}
+
+func dnsProviderRequiredKeys(providerType string) ([]string, bool) {
+	switch providerType {
+	case "cloudflare":
+		return []string{"api_token"}, true
+	case "hetzner":
+		return []string{"dns_api_token"}, true
+	case "digitalocean":
+		return []string{"api_token"}, true
+	case "route53":
+		return nil, true
+	default:
+		return nil, false
+	}
+}
+
+func dnsProviderEnvKey(providerType, configKey string) string {
+	switch providerType {
+	case "cloudflare":
+		return "ACME_DNS_CLOUDFLARE_API_TOKEN"
+	case "hetzner":
+		return "ACME_DNS_HETZNER_API_TOKEN"
+	case "digitalocean":
+		return "ACME_DNS_DIGITALOCEAN_API_TOKEN"
+	default:
+		return "ACME_DNS_" + strings.ToUpper(providerType) + "_" + strings.ToUpper(configKey)
+	}
+}
+
+func dnsProviderConfigFromEnv(providerType string) map[string]string {
+	out := make(map[string]string)
+	set := func(key, envName string) {
+		if value := strings.TrimSpace(os.Getenv(envName)); value != "" {
+			out[key] = value
+		}
+	}
+	switch providerType {
+	case "cloudflare":
+		set("api_token", "ACME_DNS_CLOUDFLARE_API_TOKEN")
+	case "hetzner":
+		set("dns_api_token", "ACME_DNS_HETZNER_API_TOKEN")
+	case "digitalocean":
+		set("api_token", "ACME_DNS_DIGITALOCEAN_API_TOKEN")
+	case "route53":
+		set("access_key_id", "ACME_DNS_ROUTE53_ACCESS_KEY_ID")
+		set("secret_access_key", "ACME_DNS_ROUTE53_SECRET_ACCESS_KEY")
+		set("session_token", "ACME_DNS_ROUTE53_SESSION_TOKEN")
+		set("region", "ACME_DNS_ROUTE53_REGION")
+		set("hosted_zone_id", "ACME_DNS_ROUTE53_HOSTED_ZONE_ID")
+		set("profile", "ACME_DNS_ROUTE53_PROFILE")
+	}
+	return out
+}
+
+func validationHint(code string) string {
+	switch code {
+	case "missing_secret", "weak_secret", "secret_reuse":
+		return "Run 'portlyn init' to generate strong unique secrets, or set a distinct 32+ char random value (openssl rand -base64 48)."
+	case "insecure_database_transport":
+		return "Add ?sslmode=require (or verify-full) to DATABASE_URL, or point it at a private/container-local host."
+	case "unsupported_database_driver":
+		return "Set DATABASE_DRIVER to 'sqlite' or 'postgres'."
+	case "missing_database_url":
+		return "Set DATABASE_URL, e.g. postgres://user:pass@host:5432/portlyn?sslmode=require."
+	case "insecure_frontend_base_url":
+		return "Use an https:// URL for FRONTEND_BASE_URL, or keep http://localhost for local development."
+	case "insecure_cors_origin":
+		return "List https:// origins in CORS_ALLOWED_ORIGINS (http:// is only allowed for localhost)."
+	case "insecure_oidc_redirect":
+		return "OIDC_REDIRECT_URL must be https:// in production."
+	case "oidc_incomplete":
+		return "Set OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URL, or disable OIDC with OIDC_ENABLED=false."
+	case "insecure_dev_mode_in_production":
+		return "Set ALLOW_INSECURE_DEV_MODE=false for any non-localhost FRONTEND_BASE_URL."
+	case "node_https_required":
+		return "Keep NODE_REQUIRE_HTTPS=true; only relax it in insecure dev mode."
+	case "unsafe_token_exposure":
+		return "Set EXPOSE_AUTH_TOKENS=false outside local development."
+	case "unsafe_otp_setting":
+		return "Set OTP_RESPONSE_INCLUDES_CODE=false; the code must never be returned in API responses in production."
+	case "missing_trusted_proxy_cidrs":
+		return "Set TRUSTED_PROXY_CIDRS to the CIDR(s) of your fronting proxy, or set NODE_TRUST_FORWARDED_PROTO=false."
+	case "missing_https_listener":
+		return "Set PROXY_HTTPS_ADDR (e.g. :443) when REDIRECT_HTTP_TO_HTTPS=true."
+	case "unsupported_dns_provider":
+		return "Set ACME_DNS_PROVIDER to cloudflare, hetzner, digitalocean, or route53."
+	case "missing_dns_provider_credential":
+		return "Provide the API token env var for the selected ACME_DNS_PROVIDER."
+	case "missing_break_glass_token":
+		return "Set BREAK_GLASS_TOKEN (32+ random chars) when BREAK_GLASS_ENABLED=true."
+	default:
+		return ""
+	}
 }

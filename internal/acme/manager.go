@@ -7,6 +7,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -306,12 +307,25 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	}
 	m.mu.RUnlock()
 
-	if serverName != "" {
-		if cert, err := m.bootstrapCertFor(serverName); err == nil {
+	bootstrapName := serverName
+	if bootstrapName == "" {
+		bootstrapName = m.bootstrapFallbackHost()
+	}
+	if bootstrapName != "" {
+		if cert, err := m.bootstrapCertFor(bootstrapName); err == nil {
 			return cert, nil
 		}
 	}
 	return nil, fmt.Errorf("no tls certificate available")
+}
+
+func (m *Manager) bootstrapFallbackHost() string {
+	if parsed, err := url.Parse(strings.TrimSpace(m.cfg.FrontendBaseURL)); err == nil {
+		if host := parsed.Hostname(); host != "" {
+			return normalizeDomain(host)
+		}
+	}
+	return "localhost"
 }
 
 const (
