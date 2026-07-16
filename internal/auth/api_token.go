@@ -49,7 +49,7 @@ func LooksLikeAPIToken(token string) bool {
 }
 
 func apiTokenPrefix(token string) (string, bool) {
-	parts := strings.Split(strings.TrimSpace(token), "_")
+	parts := strings.SplitN(strings.TrimSpace(token), "_", 3)
 	if len(parts) != 3 || parts[0] != apiTokenScheme || parts[1] == "" || parts[2] == "" {
 		return "", false
 	}

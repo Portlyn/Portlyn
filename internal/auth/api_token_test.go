@@ -67,4 +67,17 @@ func TestGenerateAndAuthenticateAPIToken(t *testing.T) {
 	}
 }
 
+func TestAPITokenPrefixHandlesUnderscoreSecret(t *testing.T) {
+	prefix, ok := apiTokenPrefix("plyn_f5e69d01_ab_cd-ef_gh")
+	if !ok || prefix != "plyn_f5e69d01" {
+		t.Fatalf("expected prefix plyn_f5e69d01, got %q ok=%v", prefix, ok)
+	}
+	if _, ok := apiTokenPrefix("plyn_only"); ok {
+		t.Fatal("token without a secret segment must not parse")
+	}
+	if _, ok := apiTokenPrefix("nope_ab_cd"); ok {
+		t.Fatal("token with wrong scheme must not parse")
+	}
+}
+
 func ptrTime(t time.Time) *time.Time { return &t }
