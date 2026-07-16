@@ -64,6 +64,9 @@ func (s *Service) AuthenticateRequest(ctx context.Context, r *http.Request) (*do
 	if token == "" {
 		return nil, nil, nil, ErrInvalidToken
 	}
+	if s.apiTokens != nil && LooksLikeAPIToken(token) {
+		return s.authenticateAPIToken(ctx, token)
+	}
 	return s.AuthenticateAccessToken(ctx, token)
 }
 

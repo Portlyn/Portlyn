@@ -224,6 +224,20 @@ type User struct {
 	UpdatedAt               time.Time       `json:"updated_at"`
 }
 
+type APIToken struct {
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	Name        string     `gorm:"size:255;not null" json:"name"`
+	Prefix      string     `gorm:"uniqueIndex;size:64;not null" json:"prefix"`
+	TokenHash   string     `gorm:"size:128;not null" json:"-"`
+	Role        string     `gorm:"size:32;not null;default:viewer" json:"role"`
+	CreatedByID *uint      `gorm:"index" json:"created_by_id"`
+	LastUsedAt  *time.Time `json:"last_used_at"`
+	ExpiresAt   *time.Time `json:"expires_at"`
+	RevokedAt   *time.Time `json:"revoked_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
 type Group struct {
 	ID            uint      `gorm:"primaryKey" json:"id"`
 	Name          string    `gorm:"uniqueIndex;size:255;not null" json:"name"`

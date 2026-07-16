@@ -82,7 +82,8 @@ tmp="$(mktemp)"
 sums="$(mktemp)"
 sig="$(mktemp)"
 cert="$(mktemp)"
-trap 'rm -f "$tmp" "$sums" "$sig" "$cert"' EXIT
+bundle="$(mktemp)"
+trap 'rm -f "$tmp" "$sums" "$sig" "$cert" "$bundle"' EXIT
 
 echo "Downloading ${asset} ..."
 $DL "$tmp" "$url" || err "download failed: $url"
@@ -99,8 +100,10 @@ if [ "$ALLOW_UNSIGNED" = "1" ]; then
   REQUIRE_SIGNATURE="0"
 fi
 
+chmod +x "$tmp"
+
 if command -v cosign >/dev/null 2>&1; then
-  echo "Verifying signature ..."
+  echo "Verifying signature (cosign) ..."
   $DL "$sig" "${release_base}/checksums.txt.sig" || err "could not fetch checksums.txt.sig"
   $DL "$cert" "${release_base}/checksums.txt.pem" || err "could not fetch checksums.txt.pem"
   cosign verify-blob \
@@ -111,13 +114,15 @@ if command -v cosign >/dev/null 2>&1; then
     "$sums" >/dev/null 2>&1 || err "cosign signature verification failed for checksums.txt"
   echo "Signature OK."
 elif [ "$REQUIRE_SIGNATURE" = "1" ]; then
-  err "cosign not found, but signature verification is required. Install cosign (https://docs.sigstore.dev/cosign) and retry, or pass --allow-unsigned (env ALLOW_UNSIGNED=1) for checksum-only verification."
+  echo "cosign not found; verifying signature in-process with the downloaded binary ..."
+  $DL "$bundle" "${release_base}/checksums.txt.bundle.json" || err "could not fetch checksums.txt.bundle.json for in-process verification"
+  "$tmp" verify-release --checksums "$sums" --bundle "$bundle" --asset "$tmp" --asset-name "$asset" \
+    || err "in-process signature verification failed for checksums.txt"
+  echo "Signature OK (verified in-process via embedded Sigstore trust root)."
 else
-  echo "WARNING: --allow-unsigned set; cosign not found. Verified checksum only." >&2
-  echo "WARNING: the download's authenticity is NOT verified. Install cosign for full Sigstore verification." >&2
+  echo "WARNING: --allow-unsigned set. Verified checksum only." >&2
+  echo "WARNING: the download's authenticity is NOT verified." >&2
 fi
-
-chmod +x "$tmp"
 $SUDO mkdir -p "$INSTALL_DIR"
 $SUDO mv "$tmp" "${INSTALL_DIR}/${BIN_NAME}"
 echo "Installed ${INSTALL_DIR}/${BIN_NAME}"

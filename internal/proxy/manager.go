@@ -50,31 +50,32 @@ func makeDialControl(blockPrivate bool) func(network, address string, _ syscall.
 }
 
 type Manager struct {
-	routes                RoutingStore
-	services              ServiceDeploymentStore
-	cache                 ConfigCache
-	bus                   ConfigBus
-	auth                  *auth.Service
-	audit                 *audit.Logger
-	logger                *slog.Logger
-	transport             *http.Transport
-	revision              uint64
-	localCache            *ttlLRU[string, []Route]
-	startOnce             sync.Once
-	metrics               *observability.Metrics
-	breakersMu            sync.Mutex
-	breakers              map[string]*targetCircuitState
-	adminHost             string
-	trustedProxyCIDRs     []string
-	bootstrapAdminEnabled bool
-	adminUI               http.Handler
-	adminAPI              http.Handler
-	tunnelTransport       *http.Transport
-	tunnelDialer          TunnelDialer
-	countryLookup         CountryLookup
-	reputation            ReputationBlocklist
-	geoIPFailOpen         bool
-	crowdSecFailOpen      bool
+	routes                    RoutingStore
+	services                  ServiceDeploymentStore
+	cache                     ConfigCache
+	bus                       ConfigBus
+	auth                      *auth.Service
+	audit                     *audit.Logger
+	logger                    *slog.Logger
+	transport                 *http.Transport
+	revision                  uint64
+	localCache                *ttlLRU[string, []Route]
+	startOnce                 sync.Once
+	metrics                   *observability.Metrics
+	breakersMu                sync.Mutex
+	breakers                  map[string]*targetCircuitState
+	adminHost                 string
+	trustedProxyCIDRs         []string
+	bootstrapAdminEnabled     bool
+	bootstrapAdminAllowRemote bool
+	adminUI                   http.Handler
+	adminAPI                  http.Handler
+	tunnelTransport           *http.Transport
+	tunnelDialer              TunnelDialer
+	countryLookup             CountryLookup
+	reputation                ReputationBlocklist
+	geoIPFailOpen             bool
+	crowdSecFailOpen          bool
 }
 
 type RuntimeRoute struct {
@@ -133,21 +134,22 @@ type compiledAccessWindow struct {
 }
 
 type ManagerOptions struct {
-	LocalCacheTTL          time.Duration
-	LocalCacheCapacity     int
-	AdminHost              string
-	TrustedProxyCIDRs      []string
-	BootstrapAdminEnabled  bool
-	AdminUITargetURL       string
-	AdminAPITargetURL      string
-	EmbeddedAdminUI        http.Handler
-	TunnelDialer           TunnelDialer
-	CountryLookup          CountryLookup
-	Reputation             ReputationBlocklist
-	ServiceDeploymentStore ServiceDeploymentStore
-	GeoIPFailOpen          bool
-	CrowdSecFailOpen       bool
-	BlockPrivateUpstreams  bool
+	LocalCacheTTL             time.Duration
+	LocalCacheCapacity        int
+	AdminHost                 string
+	TrustedProxyCIDRs         []string
+	BootstrapAdminEnabled     bool
+	BootstrapAdminAllowRemote bool
+	AdminUITargetURL          string
+	AdminAPITargetURL         string
+	EmbeddedAdminUI           http.Handler
+	TunnelDialer              TunnelDialer
+	CountryLookup             CountryLookup
+	Reputation                ReputationBlocklist
+	ServiceDeploymentStore    ServiceDeploymentStore
+	GeoIPFailOpen             bool
+	CrowdSecFailOpen          bool
+	BlockPrivateUpstreams     bool
 }
 
 type TunnelDialer interface {
@@ -221,28 +223,29 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 	}
 
 	return &Manager{
-		routes:                routingStore,
-		services:              options.ServiceDeploymentStore,
-		cache:                 cache,
-		bus:                   bus,
-		auth:                  authService,
-		audit:                 auditLogger,
-		logger:                logger,
-		transport:             transport,
-		localCache:            newTTLLRU[string, []Route](options.LocalCacheCapacity, options.LocalCacheTTL),
-		metrics:               metrics,
-		breakers:              make(map[string]*targetCircuitState),
-		adminHost:             normalizeHost(options.AdminHost),
-		trustedProxyCIDRs:     append([]string(nil), options.TrustedProxyCIDRs...),
-		bootstrapAdminEnabled: options.BootstrapAdminEnabled,
-		adminUI:               adminUIHandler,
-		adminAPI:              adminAPIHandler,
-		tunnelTransport:       tunnelTransport,
-		tunnelDialer:          options.TunnelDialer,
-		countryLookup:         options.CountryLookup,
-		reputation:            options.Reputation,
-		geoIPFailOpen:         options.GeoIPFailOpen,
-		crowdSecFailOpen:      options.CrowdSecFailOpen,
+		routes:                    routingStore,
+		services:                  options.ServiceDeploymentStore,
+		cache:                     cache,
+		bus:                       bus,
+		auth:                      authService,
+		audit:                     auditLogger,
+		logger:                    logger,
+		transport:                 transport,
+		localCache:                newTTLLRU[string, []Route](options.LocalCacheCapacity, options.LocalCacheTTL),
+		metrics:                   metrics,
+		breakers:                  make(map[string]*targetCircuitState),
+		adminHost:                 normalizeHost(options.AdminHost),
+		trustedProxyCIDRs:         append([]string(nil), options.TrustedProxyCIDRs...),
+		bootstrapAdminEnabled:     options.BootstrapAdminEnabled,
+		bootstrapAdminAllowRemote: options.BootstrapAdminAllowRemote,
+		adminUI:                   adminUIHandler,
+		adminAPI:                  adminAPIHandler,
+		tunnelTransport:           tunnelTransport,
+		tunnelDialer:              options.TunnelDialer,
+		countryLookup:             options.CountryLookup,
+		reputation:                options.Reputation,
+		geoIPFailOpen:             options.GeoIPFailOpen,
+		crowdSecFailOpen:          options.CrowdSecFailOpen,
 	}
 }
 
@@ -516,6 +519,9 @@ func (m *Manager) allowAdminHost(host string, r *http.Request) bool {
 	}
 	if !m.bootstrapAdminEnabled || !isBootstrapAdminHost(normalized) {
 		return false
+	}
+	if m.bootstrapAdminAllowRemote {
+		return true
 	}
 	return isLocalRequestSource(r)
 }

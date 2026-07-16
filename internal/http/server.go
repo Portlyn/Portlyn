@@ -42,6 +42,7 @@ type Server struct {
 	acme             *acme.Manager
 	proxy            *proxy.Manager
 	users            *store.UserStore
+	apiTokens        *store.APITokenStore
 	groups           *store.GroupStore
 	nodes            *store.NodeStore
 	clients          *store.ClientStore
@@ -137,6 +138,7 @@ func NewServer(
 		acme:             acmeManager,
 		proxy:            proxyManager,
 		users:            userStore,
+		apiTokens:        store.NewAPITokenStore(db),
 		groups:           groupStore,
 		nodes:            nodeStore,
 		clients:          clientStore,
@@ -283,6 +285,9 @@ func (s *Server) Router() stdhttp.Handler {
 				r.Get("/system/security-alerts", s.handleSecurityAlerts)
 				r.Get("/security/rotation/status", s.handleRotationStatus)
 				r.Post("/security/rotation/data-key/reencrypt", s.handleReencryptDataKey)
+				r.Get("/api-tokens", s.handleListAPITokens)
+				r.Post("/api-tokens", s.handleCreateAPIToken)
+				r.Delete("/api-tokens/{id}", s.handleRevokeAPIToken)
 				r.Get("/users", s.handleListUsers)
 				r.Get("/users/{id}", s.handleGetUser)
 				r.Post("/users", s.handleCreateUser)

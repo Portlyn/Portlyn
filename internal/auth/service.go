@@ -55,6 +55,7 @@ type Service struct {
 	distributedAuthCache    AuthCache
 	metrics                 *observability.Metrics
 	passkeyChecker          func(ctx context.Context, userID uint) bool
+	apiTokens               APITokenStore
 }
 
 func (s *Service) SetPasskeyChecker(fn func(ctx context.Context, userID uint) bool) {

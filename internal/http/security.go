@@ -45,6 +45,11 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		if strings.HasPrefix(strings.TrimSpace(r.Header.Get("Authorization")), "Bearer ") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		token := s.ensureCSRFCookie(w, r)
 		if isSafeMethod(r.Method) {
 			next.ServeHTTP(w, r)

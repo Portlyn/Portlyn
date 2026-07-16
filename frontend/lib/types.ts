@@ -17,6 +17,22 @@ export interface ApiErrorPayload {
   };
 }
 
+export interface ApiToken {
+  id: number;
+  name: string;
+  prefix: string;
+  role: "admin" | "viewer";
+  status: "active" | "revoked" | "expired";
+  last_used_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export interface ApiTokenCreated extends ApiToken {
+  token: string;
+}
+
 export interface User {
   id: number;
   email: string;

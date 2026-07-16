@@ -117,6 +117,8 @@ sudo portlyn
 
 `portlyn init` generates secrets, writes a `.env` file, prepares the data directory, and creates the admin account. Use `portlyn init --non-interactive` for scripted installs, and `portlyn doctor` to validate the whole environment in one pass.
 
+Just want to try it locally (no domain, no TLS, no root)? `PORTLYN_DOMAIN=localhost ./portlyn init --non-interactive && ./portlyn` → dashboard on `http://localhost:8000`.
+
 For production installs, verify the SHA-256 checksum and the Sigstore signature of the binary before running it. The full verification procedure is in [docs/INSTALL.md](docs/INSTALL.md).
 
 Docker Compose with the published image:

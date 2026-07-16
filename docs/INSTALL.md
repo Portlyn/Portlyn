@@ -2,6 +2,19 @@
 
 Portlyn ships as two binaries: a hub (`portlyn`) and an optional node agent (`portlyn-nodeagent`). The hub can run from a single binary on a Linux host or via Docker Compose. The node agent runs on machines behind NAT or CGNAT and dials out to the hub over WireGuard.
 
+## Try it locally (no domain, no TLS, no root)
+
+To kick the tyres before any real deployment:
+
+```bash
+PORTLYN_DOMAIN=localhost ./portlyn init --non-interactive
+./portlyn
+```
+
+The `localhost` domain makes `init` write a local profile: plain HTTP, ACME disabled, the dashboard on `http://localhost:8000` (an unprivileged port, so no `sudo`). The admin account is `admin@localhost`; read its generated password with `grep '^ADMIN_PASSWORD=' .env`.
+
+Portlyn's config validation is strict on purpose (no non-localhost URL without TLS, unique 32+ char secrets, and so on). If a start-up ever fails, run `./portlyn doctor` to see **every** problem at once with a fix hint instead of one at a time.
+
 ## Verify a release
 
 Every tagged release is signed with Cosign keyless via Sigstore. Verify before running anything in production.
@@ -31,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/portlyn/Portlyn/main/scripts/instal
   | sudo PORTLYN_DOMAIN=portlyn.example.com PORTLYN_ADMIN_EMAIL=admin@example.com sh
 ```
 
-Run without the environment variables to install the binary and unit only, then configure interactively. The script requires `cosign` for signature verification; install it first, or pass `ALLOW_UNSIGNED=1` for checksum-only verification.
+Run without the environment variables to install the binary and unit only, then configure interactively. Signature verification needs no external tools: if `cosign` is present it is used, otherwise the freshly downloaded (and checksum-verified) binary verifies the release signature itself via the embedded Sigstore trust root (`portlyn verify-release`). Pass `ALLOW_UNSIGNED=1` to skip signature verification (checksum only).
 
 ## Single binary (manual)
 
@@ -93,10 +106,16 @@ The bundled PostgreSQL connects over the private Compose network with `sslmode=d
 
 Portlyn is reachable immediately after start, before any real certificate exists:
 
-1. **Install and start.** The hub generates a short-lived self-signed bootstrap certificate on demand for whichever hostname it is asked for.
+1. **Install and start.** The hub generates a short-lived self-signed bootstrap certificate on demand for whichever hostname (or server IP) it is asked for.
 2. **Open the dashboard** at `https://<your-domain>` and accept the temporary certificate warning. Log in with the admin account from `init`.
 3. **Configure a DNS-01 provider** under **Certificates → DNS providers** (or seed it from the environment, below).
 4. **Request a certificate.** Once issued, the hub serves the real certificate automatically and the warning disappears.
+
+### Reaching the dashboard by IP (no DNS yet)
+
+For a Proxmox/Portainer-style flow where you first reach the UI at `https://<server-ip>` and configure the domain from there, set `BOOTSTRAP_ADMIN_ENABLED=true` (the default from `portlyn init`) **and** `BOOTSTRAP_ADMIN_ALLOW_REMOTE=true`. The hub then serves the admin UI on the raw server IP with a matching self-signed certificate, so you can log in, add your domain and DNS token, and let Portlyn fetch the real certificate.
+
+This exposes the admin login on the server IP to any client that can reach it, so turn it back off (`BOOTSTRAP_ADMIN_ALLOW_REMOTE=false`) once the domain and real certificate are active. Left at its default (`false`), the bootstrap admin UI is only reachable from the local host (loopback/SSH tunnel).
 
 The bootstrap certificate is also served when a client connects without SNI. When testing with a spoofed `Host` header, pass SNI explicitly so the right certificate is selected:
 
@@ -142,6 +161,50 @@ sudo portlyn update --no-restart # swap the binary but leave the service alone
 ```
 
 The same command exists for the node agent: `sudo portlyn-nodeagent update`. Backups are written next to the binary as `<path>.bak`. There are no automatic update checks. The CLI only contacts GitHub when you run the command.
+
+## Deployment topologies
+
+Which ACME challenge and which proxy settings you need depends on how traffic reaches the hub.
+
+### A) Direct on a public IP
+
+The hub has a public IP and inbound `:80`/`:443` are reachable. Point an `A`/`AAAA` record at it.
+
+```env
+FRONTEND_BASE_URL=https://portlyn.example.com
+ACME_ENABLED=true
+REDIRECT_HTTP_TO_HTTPS=true
+```
+
+HTTP-01 works out of the box (Let's Encrypt reaches `:80`). No `TRUSTED_PROXY_CIDRS` needed — the hub sees real client IPs directly. DNS-01 is optional (useful for wildcards).
+
+### B) Behind the Cloudflare proxy (orange cloud)
+
+Cloudflare terminates TLS and forwards to the hub, so the client IP arrives in a forwarded header and HTTP-01 is intercepted by Cloudflare.
+
+```env
+FRONTEND_BASE_URL=https://portlyn.example.com
+ACME_ENABLED=true
+ACME_DNS_PROVIDER=cloudflare
+ACME_DNS_CLOUDFLARE_API_TOKEN=...
+TRUSTED_PROXY_CIDRS=173.245.48.0/20,103.21.244.0/22,...   # Cloudflare ranges
+NODE_TRUST_FORWARDED_PROTO=true
+```
+
+Use **DNS-01** (Cloudflare provider) so issuance does not depend on inbound `:80`. Set `TRUSTED_PROXY_CIDRS` to Cloudflare's published ranges so the hub trusts `X-Forwarded-For`/`-Proto` from Cloudflare only. Set the Cloudflare SSL mode to *Full (strict)*.
+
+### C) Behind NAT/CGNAT or another load balancer (no inbound)
+
+No inbound port reaches the hub (home lab, CGNAT), so HTTP-01 is impossible. This is the node-agent scenario: the machine dials out over WireGuard.
+
+```env
+FRONTEND_BASE_URL=https://portlyn.example.com
+ACME_ENABLED=true
+ACME_DNS_PROVIDER=cloudflare
+ACME_DNS_CLOUDFLARE_API_TOKEN=...
+```
+
+**DNS-01 only.** With a DNS provider configured, the hub also enqueues the admin/dashboard certificate over DNS-01 automatically, so the first certificate succeeds without any inbound connectivity.
 
 ## Configuration
 
@@ -197,6 +260,16 @@ DATABASE_URL=
 - External PostgreSQL connection verified from inside the Portlyn container
 
 See [PRODUCTION-HARDENING.md](PRODUCTION-HARDENING.md) for the full hardening guide.
+
+## API tokens (CI and automation)
+
+Human logins use a session cookie plus CSRF and MFA. For scripts and CI, create an **API token** under **Access → API Tokens** (admin only). A token is shown once, carries a role (`viewer` = read-only, `admin` = full access), and can be given an expiry. Send it as a bearer token; it is exempt from CSRF and MFA and can be revoked at any time:
+
+```bash
+curl -H "Authorization: Bearer plyn_..." https://portlyn.example.com/api/v1/services
+```
+
+Tokens are stored only as a SHA-256 hash. Revoking one takes effect immediately.
 
 ## Observability
 

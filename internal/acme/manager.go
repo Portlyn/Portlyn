@@ -6,7 +6,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -309,6 +311,9 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 
 	bootstrapName := serverName
 	if bootstrapName == "" {
+		bootstrapName = localIPFromHello(hello)
+	}
+	if bootstrapName == "" {
 		bootstrapName = m.bootstrapFallbackHost()
 	}
 	if bootstrapName != "" {
@@ -317,6 +322,21 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 		}
 	}
 	return nil, fmt.Errorf("no tls certificate available")
+}
+
+func localIPFromHello(hello *tls.ClientHelloInfo) string {
+	if hello == nil || hello.Conn == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(hello.Conn.LocalAddr().String())
+	if err != nil {
+		return ""
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil || addr.IsLoopback() || addr.IsUnspecified() {
+		return ""
+	}
+	return host
 }
 
 func (m *Manager) bootstrapFallbackHost() string {

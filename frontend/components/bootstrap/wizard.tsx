@@ -12,6 +12,7 @@ import {
   Modal,
   PasswordInput,
   SegmentedControl,
+  Select,
   Stack,
   Stepper,
   Text,
@@ -65,6 +66,14 @@ export function BootstrapWizard({ user, onComplete }: BootstrapWizardProps) {
   const [savedCodes, setSavedCodes] = useState(false);
 
   const [skipping, setSkipping] = useState(false);
+
+  const isAdmin = user.role === "admin";
+  const doneStep = isAdmin ? 3 : 2;
+  const [domainName, setDomainName] = useState("");
+  const [dnsProviderType, setDnsProviderType] = useState("cloudflare");
+  const [dnsToken, setDnsToken] = useState("");
+  const [domainBusy, setDomainBusy] = useState(false);
+  const [domainConfigured, setDomainConfigured] = useState(false);
 
   useEffect(() => {
     if (step === 1 && method === "totp" && !totpSetup && !totpBusy) {
@@ -199,6 +208,45 @@ export function BootstrapWizard({ user, onComplete }: BootstrapWizardProps) {
     }
   };
 
+  const configureDomain = async () => {
+    const domain = domainName.trim();
+    if (!domain || !dnsToken.trim()) {
+      notifications.show({ color: "danger", message: "Enter a domain and DNS API token." });
+      return;
+    }
+    setDomainBusy(true);
+    try {
+      const configKey = dnsProviderType === "hetzner" ? "dns_api_token" : "api_token";
+      const provider = await apiFetch<{ id: number }>("/api/v1/dns-providers", {
+        method: "POST",
+        body: JSON.stringify({ name: `${dnsProviderType} (setup)`, type: dnsProviderType, config: { [configKey]: dnsToken.trim() } })
+      });
+      const domainType = domain.split(".").length > 2 ? "subdomain" : "root";
+      const created = await apiFetch<{ id: number }>("/api/v1/domains", {
+        method: "POST",
+        body: JSON.stringify({ name: domain, type: domainType })
+      });
+      await apiFetch("/api/v1/certificates", {
+        method: "POST",
+        body: JSON.stringify({
+          domain_id: created.id,
+          type: "single",
+          challenge_type: "dns-01",
+          issuer: "letsencrypt_prod",
+          dns_provider_id: provider.id,
+          primary_domain: domain,
+          is_auto_renew: true
+        })
+      });
+      setDomainConfigured(true);
+      notifications.show({ color: "success", message: "Domain saved. A certificate is being requested over DNS-01." });
+    } catch (err) {
+      notifications.show({ color: "danger", message: err instanceof ApiError ? err.message : "Could not configure the domain." });
+    } finally {
+      setDomainBusy(false);
+    }
+  };
+
   const totpReady = totpSetup && !recoveryCodes;
   const totpDone = Boolean(recoveryCodes);
 
@@ -216,6 +264,7 @@ export function BootstrapWizard({ user, onComplete }: BootstrapWizardProps) {
       <Stepper active={step} size="sm" mb="lg">
         {needsAccountStep ? <Stepper.Step label="Account" /> : null}
         <Stepper.Step label="Multi-factor" />
+        {isAdmin ? <Stepper.Step label="Domain" /> : null}
         <Stepper.Step label="Done" />
       </Stepper>
 
@@ -395,7 +444,66 @@ export function BootstrapWizard({ user, onComplete }: BootstrapWizardProps) {
         </Stack>
       ) : null}
 
-      {step === 2 ? (
+      {step === 2 && isAdmin ? (
+        <Stack gap="md">
+          <Text c="dimmed" size="sm">
+            Point Portlyn at your domain and DNS provider so it can obtain a real certificate over DNS-01. You can also
+            do this later under Certificates.
+          </Text>
+          {!domainConfigured ? (
+            <>
+              <TextInput
+                label="Domain"
+                placeholder="portlyn.example.com"
+                value={domainName}
+                onChange={(event) => setDomainName(event.currentTarget.value)}
+                disabled={domainBusy}
+              />
+              <Select
+                label="DNS provider"
+                data={[
+                  { value: "cloudflare", label: "Cloudflare" },
+                  { value: "hetzner", label: "Hetzner" },
+                  { value: "digitalocean", label: "DigitalOcean" }
+                ]}
+                value={dnsProviderType}
+                onChange={(value) => setDnsProviderType(value || "cloudflare")}
+                allowDeselect={false}
+                disabled={domainBusy}
+              />
+              <PasswordInput
+                label="DNS API token"
+                description="A token with permission to edit DNS records for the zone."
+                value={dnsToken}
+                onChange={(event) => setDnsToken(event.currentTarget.value)}
+                disabled={domainBusy}
+              />
+              <Group justify="space-between">
+                <Button variant="subtle" color="gray" onClick={() => setStep(doneStep)} disabled={domainBusy}>
+                  Skip for now
+                </Button>
+                <Button onClick={() => void configureDomain()} loading={domainBusy} disabled={!domainName.trim() || !dnsToken.trim()}>
+                  Save and request certificate
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <>
+              <Alert color="success" variant="light" title="Domain configured">
+                <Text size="sm">
+                  Portlyn is requesting a certificate for {domainName.trim()} over DNS-01. Once issued, restart Portlyn
+                  with <Code>FRONTEND_BASE_URL=https://{domainName.trim()}</Code> to serve the dashboard on your domain.
+                </Text>
+              </Alert>
+              <Group justify="flex-end">
+                <Button onClick={() => setStep(doneStep)}>Continue</Button>
+              </Group>
+            </>
+          )}
+        </Stack>
+      ) : null}
+
+      {step === doneStep ? (
         <Stack gap="md" align="center">
           <IconCheck size={48} color="var(--mantine-color-success-6, #2f9e44)" />
           <Text fw={600}>You are all set</Text>

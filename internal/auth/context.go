@@ -11,6 +11,16 @@ type contextKey string
 const userContextKey contextKey = "user"
 const groupIDsContextKey contextKey = "group_ids"
 const sessionContextKey contextKey = "session"
+const apiTokenAuthContextKey contextKey = "api_token_auth"
+
+func ContextWithAPITokenAuth(ctx context.Context) context.Context {
+	return context.WithValue(ctx, apiTokenAuthContextKey, true)
+}
+
+func IsAPITokenAuth(ctx context.Context) bool {
+	v, _ := ctx.Value(apiTokenAuthContextKey).(bool)
+	return v
+}
 
 func ContextWithUser(ctx context.Context, user *domain.User) context.Context {
 	return context.WithValue(ctx, userContextKey, user)

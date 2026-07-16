@@ -51,6 +51,7 @@ const navSections: Array<{ section: string; items: NavItem[] }> = [
       { label: "Users", href: "/users", icon: IconUsers, roles: ["admin"] },
       { label: "Groups", href: "/groups", icon: IconUsers, roles: ["admin"] },
       { label: "Service Groups", href: "/service-groups", icon: IconGridDots, roles: ["admin"] },
+      { label: "API Tokens", href: "/api-tokens", icon: IconKey, roles: ["admin"] },
       { label: "Security", href: "/security", icon: IconKey, roles: ["admin", "viewer"] }
     ]
   },

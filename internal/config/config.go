@@ -20,6 +20,7 @@ type Config struct {
 	HTTPAddr                        string
 	FrontendBaseURL                 string
 	BootstrapAdminEnabled           bool
+	BootstrapAdminAllowRemote       bool
 	ProxyHTTPAddr                   string
 	ProxyHTTPSAddr                  string
 	RedisURL                        string
@@ -144,6 +145,7 @@ func Load() (Config, error) {
 		HTTPAddr:                        getEnv("HTTP_ADDR", ":8080"),
 		FrontendBaseURL:                 strings.TrimRight(getEnv("FRONTEND_BASE_URL", "http://localhost"), "/"),
 		BootstrapAdminEnabled:           getEnvBool("BOOTSTRAP_ADMIN_ENABLED", false),
+		BootstrapAdminAllowRemote:       getEnvBool("BOOTSTRAP_ADMIN_ALLOW_REMOTE", false),
 		ProxyHTTPAddr:                   getEnv("PROXY_HTTP_ADDR", ":80"),
 		ProxyHTTPSAddr:                  getEnv("PROXY_HTTPS_ADDR", ":443"),
 		RedisURL:                        strings.TrimSpace(os.Getenv("REDIS_URL")),
@@ -434,6 +436,9 @@ func (cfg *Config) ValidationIssues() []ValidationIssue {
 			add("error", "TRUSTED_PROXY_CIDRS", "invalid_trusted_proxy_cidr", "TRUSTED_PROXY_CIDRS entries must be CIDR prefixes")
 			break
 		}
+	}
+	if cfg.BootstrapAdminAllowRemote {
+		add("warn", "BOOTSTRAP_ADMIN_ALLOW_REMOTE", "bootstrap_admin_remote_exposed", "BOOTSTRAP_ADMIN_ALLOW_REMOTE=true exposes the admin UI on the server IP to any client (self-signed during bootstrap); disable it once your domain and real certificate are active")
 	}
 	if cfg.ACMEDNSProvider != "" {
 		required, supported := dnsProviderRequiredKeys(cfg.ACMEDNSProvider)
@@ -735,6 +740,8 @@ func validationHint(code string) string {
 		return "Provide the API token env var for the selected ACME_DNS_PROVIDER."
 	case "missing_break_glass_token":
 		return "Set BREAK_GLASS_TOKEN (32+ random chars) when BREAK_GLASS_ENABLED=true."
+	case "bootstrap_admin_remote_exposed":
+		return "Set BOOTSTRAP_ADMIN_ALLOW_REMOTE=false once the dashboard is reachable via its real domain and certificate."
 	default:
 		return ""
 	}

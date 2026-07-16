@@ -78,6 +78,7 @@ func NewDatabase(cfg config.Config) (*gorm.DB, error) {
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&domain.User{},
+		&domain.APIToken{},
 		&domain.Group{},
 		&domain.GroupMembership{},
 		&domain.Node{},

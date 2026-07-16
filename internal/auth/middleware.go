@@ -21,6 +21,9 @@ func (s *Service) RequireAuth(next http.Handler) http.Handler {
 		if session != nil {
 			ctx = ContextWithSession(ctx, session)
 		}
+		if LooksLikeAPIToken(bearerTokenFromHeader(r.Header.Get("Authorization"))) {
+			ctx = ContextWithAPITokenAuth(ctx)
+		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -54,6 +57,10 @@ func (s *Service) RequireBootstrapComplete(next http.Handler) http.Handler {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(`{"error":{"code":"unauthorized","message":"missing auth context"}}`))
+			return
+		}
+		if IsAPITokenAuth(r.Context()) {
+			next.ServeHTTP(w, r)
 			return
 		}
 		session, _ := SessionFromContext(r.Context())

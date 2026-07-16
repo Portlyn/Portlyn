@@ -223,6 +223,31 @@ func TestManagerServesBootstrapAdminHosts(t *testing.T) {
 	}
 }
 
+func TestManagerServesBootstrapAdminToRemoteWhenAllowed(t *testing.T) {
+	adminUI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer adminUI.Close()
+
+	manager := NewManager(newFakeRoutingStore(), NewInMemoryConfigCache(), NewInMemoryConfigBus(), nil, nil, nil, nil, ManagerOptions{
+		LocalCacheTTL:             time.Hour,
+		LocalCacheCapacity:        16,
+		BootstrapAdminEnabled:     true,
+		BootstrapAdminAllowRemote: true,
+		AdminUITargetURL:          adminUI.URL,
+	})
+
+	remoteReq := httptest.NewRequest(http.MethodGet, "http://203.0.113.10/login", nil)
+	remoteReq.Host = "203.0.113.10"
+	remoteReq.RemoteAddr = "198.51.100.7:54321"
+	recorder := httptest.NewRecorder()
+	manager.Handler().ServeHTTP(recorder, remoteReq)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("expected bootstrap admin to be served to remote source when BOOTSTRAP_ADMIN_ALLOW_REMOTE=true, got %d", recorder.Code)
+	}
+}
+
 func TestSanitizePortlynIdentityHeaders(t *testing.T) {
 	headers := http.Header{}
 	headers.Set("X-Portlyn-User-Email", "spoof@example.com")

@@ -74,6 +74,13 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "verify-release":
+			if err := runVerifyRelease(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "verify-release:", err)
+				os.Exit(1)
+			}
+			fmt.Println("release verification succeeded")
+			return
 		case "help", "--help", "-h":
 			printUsage()
 			return
@@ -213,6 +220,7 @@ func main() {
 		authService.SetRateLimiter(rate.NewRedisLimiter(redisClient, "portlyn:auth:ratelimit"))
 		authService.SetAuthCache(auth.NewRedisAuthCache(redisClient, "portlyn:auth:cache"))
 	}
+	authService.SetAPITokenStore(store.NewAPITokenStore(db))
 	if err := authService.SeedInitialAdmin(context.Background(), cfg.AdminEmail, cfg.AdminPassword); err != nil {
 		logger.Error("failed to seed admin user", "error", err)
 		os.Exit(1)
@@ -303,21 +311,22 @@ func main() {
 		logger,
 		metrics,
 		proxy.ManagerOptions{
-			LocalCacheTTL:          cfg.RouteLocalCacheTTL,
-			LocalCacheCapacity:     cfg.RouteLocalCacheSize,
-			AdminHost:              hostnameFromURL(cfg.FrontendBaseURL),
-			TrustedProxyCIDRs:      cfg.TrustedProxyCIDRs,
-			BootstrapAdminEnabled:  cfg.BootstrapAdminEnabled,
-			AdminUITargetURL:       "http://frontend:3000",
-			AdminAPITargetURL:      "http://127.0.0.1:8080",
-			EmbeddedAdminUI:        embeddedFrontendHandler(),
-			TunnelDialer:           tunnelServer,
-			CountryLookup:          geoipLookup,
-			Reputation:             crowdSecClient,
-			ServiceDeploymentStore: serviceStore,
-			GeoIPFailOpen:          cfg.GeoIPFailOpen,
-			CrowdSecFailOpen:       cfg.CrowdSecFailOpen,
-			BlockPrivateUpstreams:  !cfg.AllowPrivateUpstreams,
+			LocalCacheTTL:             cfg.RouteLocalCacheTTL,
+			LocalCacheCapacity:        cfg.RouteLocalCacheSize,
+			AdminHost:                 hostnameFromURL(cfg.FrontendBaseURL),
+			TrustedProxyCIDRs:         cfg.TrustedProxyCIDRs,
+			BootstrapAdminEnabled:     cfg.BootstrapAdminEnabled,
+			BootstrapAdminAllowRemote: cfg.BootstrapAdminAllowRemote,
+			AdminUITargetURL:          "http://frontend:3000",
+			AdminAPITargetURL:         "http://127.0.0.1:8080",
+			EmbeddedAdminUI:           embeddedFrontendHandler(),
+			TunnelDialer:              tunnelServer,
+			CountryLookup:             geoipLookup,
+			Reputation:                crowdSecClient,
+			ServiceDeploymentStore:    serviceStore,
+			GeoIPFailOpen:             cfg.GeoIPFailOpen,
+			CrowdSecFailOpen:          cfg.CrowdSecFailOpen,
+			BlockPrivateUpstreams:     !cfg.AllowPrivateUpstreams,
 		},
 	)
 
@@ -522,6 +531,7 @@ Usage:
   portlyn config check  alias for 'portlyn doctor'
   portlyn settings sync apply env values for env-controlled settings to the database
   portlyn update        download, verify and install the latest release (flags: --check, --version, --no-restart, --unit)
+  portlyn verify-release verify a release signature in-process (--checksums, --bundle, --asset, --asset-name)
   portlyn version       print version and exit
   portlyn help          show this help
 
