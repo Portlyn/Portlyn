@@ -1,10 +1,11 @@
 openapi: 3.1.0
 info:
   title: Portlyn API
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    Initial OpenAPI description for core Portlyn control-plane APIs.
-    This spec focuses on auth, nodes, certificates, and DNS providers.
+    OpenAPI description for the Portlyn control plane. Still a work in progress:
+    it covers auth, nodes, certificates, DNS providers, and API tokens so far.
+    Endpoints not listed here still exist; the routing lives in internal/http.
 servers:
   - url: /api/v1
 paths:
@@ -183,7 +184,51 @@ paths:
       responses:
         "200":
           description: Validation success
+  /api-tokens:
+    get:
+      summary: List API tokens
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Token list, without secrets
+    post:
+      summary: Create an API token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/APITokenCreate"
+      responses:
+        "201":
+          description: Created; the plaintext token is returned once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APITokenCreated"
+  /api-tokens/{id}:
+    delete:
+      summary: Revoke an API token
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Revoked
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: A session JWT or an API token (`plyn_...`). API tokens skip CSRF and MFA.
   schemas:
     LoginResponse:
       type: object
@@ -263,3 +308,30 @@ components:
             type: string
         is_active:
           type: boolean
+    APITokenCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, viewer]
+        expires_in_days:
+          type: integer
+    APITokenCreated:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        prefix:
+          type: string
+        role:
+          type: string
+        status:
+          type: string
+        token:
+          type: string
+          description: The full secret. Shown once, never again.

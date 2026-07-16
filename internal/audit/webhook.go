@@ -10,9 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/netip"
 	"strings"
-	"syscall"
 	"time"
 
 	"portlyn/internal/domain"
@@ -30,31 +28,18 @@ type WebhookDispatcher struct {
 	timeout time.Duration
 }
 
-func NewWebhookDispatcher(store WebhookStore) *WebhookDispatcher {
+func NewWebhookDispatcher(store WebhookStore, allowPrivateTargets bool) *WebhookDispatcher {
 	return &WebhookDispatcher{
 		store:   store,
-		client:  &http.Client{Timeout: 5 * time.Second, Transport: ssrfGuardedTransport()},
+		client:  &http.Client{Timeout: 5 * time.Second, Transport: ssrfGuardedTransport(allowPrivateTargets)},
 		timeout: 5 * time.Second,
 	}
 }
 
-func ssrfGuardedTransport() *http.Transport {
+func ssrfGuardedTransport(allowPrivateTargets bool) *http.Transport {
 	dialer := &net.Dialer{
 		Timeout: 5 * time.Second,
-		Control: func(_, address string, _ syscall.RawConn) error {
-			host, _, err := net.SplitHostPort(address)
-			if err != nil {
-				return err
-			}
-			addr, err := netip.ParseAddr(host)
-			if err != nil {
-				return fmt.Errorf("webhook target resolved to an unparseable address")
-			}
-			if netguard.IsBlockedAddrStrict(addr) {
-				return fmt.Errorf("webhook target resolves to a blocked address")
-			}
-			return nil
-		},
+		Control: netguard.DialControl(allowPrivateTargets),
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialContext = dialer.DialContext

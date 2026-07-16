@@ -10,9 +10,24 @@ func TestValidateOutboundURLBlocksNumericEncodedMetadata(t *testing.T) {
 		"http://0x7f.0.0.1/",
 	}
 	for _, raw := range cases {
-		if err := validateOutboundURL(raw); err == nil {
+		if err := validateOutboundURL(raw, false); err == nil {
 			t.Errorf("expected %s to be rejected as a blocked address", raw)
 		}
+		if err := validateOutboundURL(raw, true); err == nil {
+			t.Errorf("expected %s to stay blocked even with allowPrivate (loopback/metadata)", raw)
+		}
+	}
+}
+
+func TestValidateOutboundURLAllowPrivate(t *testing.T) {
+	if err := validateOutboundURL("http://10.0.1.160/", false); err == nil {
+		t.Error("expected private issuer to be blocked by default")
+	}
+	if err := validateOutboundURL("http://10.0.1.160/", true); err != nil {
+		t.Errorf("expected private issuer to be allowed with allowPrivate, got %v", err)
+	}
+	if err := validateOutboundURL("http://127.0.0.1/", true); err == nil {
+		t.Error("expected loopback to stay blocked even with allowPrivate")
 	}
 }
 

@@ -85,6 +85,7 @@ type Config struct {
 	AuditBatchSize                  int
 	AuditFlushInterval              time.Duration
 	AuditDropPolicy                 string
+	AuditWebhookAllowPrivateTargets bool
 	RouteCacheTTL                   time.Duration
 	RouteLocalCacheTTL              time.Duration
 	RouteLocalCacheSize             int
@@ -112,6 +113,7 @@ type OIDCConfig struct {
 	AllowEmailLinking    bool
 	RequireVerifiedEmail bool
 	ManageRoles          bool
+	AllowPrivateIssuer   bool
 }
 
 type OTPConfig struct {
@@ -214,6 +216,7 @@ func Load() (Config, error) {
 			AllowEmailLinking:    getEnvBool("OIDC_ALLOW_EMAIL_LINKING", false),
 			RequireVerifiedEmail: getEnvBool("OIDC_REQUIRE_VERIFIED_EMAIL", true),
 			ManageRoles:          getEnvBool("OIDC_MANAGE_ROLES", true),
+			AllowPrivateIssuer:   getEnvBool("OIDC_ALLOW_PRIVATE_ISSUER", false),
 		},
 		OTP: OTPConfig{
 			Enabled:              getEnvBool("OTP_ENABLED", true),
@@ -227,23 +230,24 @@ func Load() (Config, error) {
 			LoginAttempts: getEnvInt("AUTH_RATE_LIMIT_ATTEMPTS", 10),
 			Window:        getEnvDuration("AUTH_RATE_LIMIT_WINDOW", 10*time.Minute),
 		},
-		AuthCacheTTL:          getEnvDuration("AUTH_CACHE_TTL", 1*time.Minute),
-		AuditBufferSize:       getEnvInt("AUDIT_BUFFER_SIZE", 1024),
-		AuditBatchSize:        getEnvInt("AUDIT_BATCH_SIZE", 128),
-		AuditFlushInterval:    getEnvDuration("AUDIT_FLUSH_INTERVAL", 250*time.Millisecond),
-		AuditDropPolicy:       strings.ToLower(getEnv("AUDIT_DROP_POLICY", "sync_fallback")),
-		RouteCacheTTL:         getEnvDuration("ROUTE_CACHE_TTL", 30*time.Second),
-		RouteLocalCacheTTL:    getEnvDuration("ROUTE_LOCAL_CACHE_TTL", 5*time.Second),
-		RouteLocalCacheSize:   getEnvInt("ROUTE_LOCAL_CACHE_SIZE", 2048),
-		AllowInsecureDevMode:  allowInsecureDevMode,
-		RequireMFAForAdmins:   getEnvBool("REQUIRE_MFA_FOR_ADMINS", true),
-		CSRFTokenTTL:          getEnvDuration("CSRF_TOKEN_TTL", 12*time.Hour),
-		RequestBodyLimitBytes: getEnvInt64("REQUEST_BODY_LIMIT_BYTES", 1<<20),
-		GeoIPFailOpen:         getEnvBool("GEOIP_FAIL_OPEN", false),
-		CrowdSecFailOpen:      getEnvBool("CROWDSEC_FAIL_OPEN", true),
-		HealthExposeVersion:   getEnvBool("HEALTH_EXPOSE_VERSION", false),
-		AuditHMACSecret:       getSecretEnv("AUDIT_HMAC_SECRET", secrets, allowInsecureDevMode),
-		AllowPrivateUpstreams: getEnvBool("PROXY_ALLOW_PRIVATE_UPSTREAMS", true),
+		AuthCacheTTL:                    getEnvDuration("AUTH_CACHE_TTL", 1*time.Minute),
+		AuditBufferSize:                 getEnvInt("AUDIT_BUFFER_SIZE", 1024),
+		AuditBatchSize:                  getEnvInt("AUDIT_BATCH_SIZE", 128),
+		AuditFlushInterval:              getEnvDuration("AUDIT_FLUSH_INTERVAL", 250*time.Millisecond),
+		AuditDropPolicy:                 strings.ToLower(getEnv("AUDIT_DROP_POLICY", "sync_fallback")),
+		AuditWebhookAllowPrivateTargets: getEnvBool("AUDIT_WEBHOOK_ALLOW_PRIVATE_TARGETS", false),
+		RouteCacheTTL:                   getEnvDuration("ROUTE_CACHE_TTL", 30*time.Second),
+		RouteLocalCacheTTL:              getEnvDuration("ROUTE_LOCAL_CACHE_TTL", 5*time.Second),
+		RouteLocalCacheSize:             getEnvInt("ROUTE_LOCAL_CACHE_SIZE", 2048),
+		AllowInsecureDevMode:            allowInsecureDevMode,
+		RequireMFAForAdmins:             getEnvBool("REQUIRE_MFA_FOR_ADMINS", true),
+		CSRFTokenTTL:                    getEnvDuration("CSRF_TOKEN_TTL", 12*time.Hour),
+		RequestBodyLimitBytes:           getEnvInt64("REQUEST_BODY_LIMIT_BYTES", 1<<20),
+		GeoIPFailOpen:                   getEnvBool("GEOIP_FAIL_OPEN", false),
+		CrowdSecFailOpen:                getEnvBool("CROWDSEC_FAIL_OPEN", true),
+		HealthExposeVersion:             getEnvBool("HEALTH_EXPOSE_VERSION", false),
+		AuditHMACSecret:                 getSecretEnv("AUDIT_HMAC_SECRET", secrets, allowInsecureDevMode),
+		AllowPrivateUpstreams:           getEnvBool("PROXY_ALLOW_PRIVATE_UPSTREAMS", true),
 	}
 
 	return cfg, cfg.Validate()
@@ -439,6 +443,12 @@ func (cfg *Config) ValidationIssues() []ValidationIssue {
 	}
 	if cfg.BootstrapAdminAllowRemote {
 		add("warn", "BOOTSTRAP_ADMIN_ALLOW_REMOTE", "bootstrap_admin_remote_exposed", "BOOTSTRAP_ADMIN_ALLOW_REMOTE=true exposes the admin UI on the server IP to any client (self-signed during bootstrap); disable it once your domain and real certificate are active")
+	}
+	if cfg.OIDC.AllowPrivateIssuer {
+		add("warn", "OIDC_ALLOW_PRIVATE_ISSUER", "oidc_private_issuer_allowed", "OIDC_ALLOW_PRIVATE_ISSUER=true lets the OIDC issuer resolve to a private (RFC1918) address; loopback and cloud-metadata addresses stay blocked")
+	}
+	if cfg.AuditWebhookAllowPrivateTargets {
+		add("warn", "AUDIT_WEBHOOK_ALLOW_PRIVATE_TARGETS", "webhook_private_targets_allowed", "AUDIT_WEBHOOK_ALLOW_PRIVATE_TARGETS=true lets audit webhooks reach private (RFC1918) addresses; loopback and cloud-metadata addresses stay blocked")
 	}
 	if cfg.ACMEDNSProvider != "" {
 		required, supported := dnsProviderRequiredKeys(cfg.ACMEDNSProvider)
@@ -742,6 +752,10 @@ func validationHint(code string) string {
 		return "Set BREAK_GLASS_TOKEN (32+ random chars) when BREAK_GLASS_ENABLED=true."
 	case "bootstrap_admin_remote_exposed":
 		return "Set BOOTSTRAP_ADMIN_ALLOW_REMOTE=false once the dashboard is reachable via its real domain and certificate."
+	case "oidc_private_issuer_allowed":
+		return "Only keep OIDC_ALLOW_PRIVATE_ISSUER=true if your identity provider really sits on a private address you control."
+	case "webhook_private_targets_allowed":
+		return "Only keep AUDIT_WEBHOOK_ALLOW_PRIVATE_TARGETS=true if your webhook receiver is on a private address you control."
 	default:
 		return ""
 	}

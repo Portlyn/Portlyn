@@ -100,7 +100,7 @@ If the pull fails with `denied` / `unauthorized`, the GHCR packages are private 
 docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
-The bundled PostgreSQL connects over the private Compose network with `sslmode=disable`. Portlyn treats a plaintext link to a private or container-local database host as acceptable (it emits a warning, not an error). For an external database, use `sslmode=require` or stronger — the config validator rejects `sslmode=disable` to a public host.
+The bundled PostgreSQL connects over the private Compose network with `sslmode=disable`. Portlyn treats a plaintext link to a private or container-local database host as acceptable (it emits a warning, not an error). For an external database, use `sslmode=require` or stronger. The config validator rejects `sslmode=disable` to a public host.
 
 ## First boot and TLS onboarding
 
@@ -134,10 +134,10 @@ ACME_DNS_CLOUDFLARE_API_TOKEN=...
 
 Supported providers and their credential variables:
 
-- `cloudflare` — `ACME_DNS_CLOUDFLARE_API_TOKEN`
-- `hetzner` — `ACME_DNS_HETZNER_API_TOKEN`
-- `digitalocean` — `ACME_DNS_DIGITALOCEAN_API_TOKEN`
-- `route53` — `ACME_DNS_ROUTE53_ACCESS_KEY_ID`, `ACME_DNS_ROUTE53_SECRET_ACCESS_KEY`, and optionally `ACME_DNS_ROUTE53_SESSION_TOKEN`, `ACME_DNS_ROUTE53_REGION`, `ACME_DNS_ROUTE53_HOSTED_ZONE_ID`, `ACME_DNS_ROUTE53_PROFILE`
+- Cloudflare: `ACME_DNS_CLOUDFLARE_API_TOKEN`
+- Hetzner: `ACME_DNS_HETZNER_API_TOKEN`
+- DigitalOcean: `ACME_DNS_DIGITALOCEAN_API_TOKEN`
+- Route53: `ACME_DNS_ROUTE53_ACCESS_KEY_ID` and `ACME_DNS_ROUTE53_SECRET_ACCESS_KEY`, plus optional `ACME_DNS_ROUTE53_SESSION_TOKEN`, `ACME_DNS_ROUTE53_REGION`, `ACME_DNS_ROUTE53_HOSTED_ZONE_ID`, `ACME_DNS_ROUTE53_PROFILE`
 
 `portlyn init` writes these lines for you when you pass `--dns-provider` and `--dns-token`.
 
@@ -176,7 +176,7 @@ ACME_ENABLED=true
 REDIRECT_HTTP_TO_HTTPS=true
 ```
 
-HTTP-01 works out of the box (Let's Encrypt reaches `:80`). No `TRUSTED_PROXY_CIDRS` needed — the hub sees real client IPs directly. DNS-01 is optional (useful for wildcards).
+HTTP-01 works out of the box (Let's Encrypt reaches `:80`). No `TRUSTED_PROXY_CIDRS` needed, since the hub sees real client IPs directly. DNS-01 is optional (useful for wildcards).
 
 ### B) Behind the Cloudflare proxy (orange cloud)
 

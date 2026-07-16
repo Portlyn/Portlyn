@@ -1,0 +1,57 @@
+---
+title: Portlyn
+description: Self-hosted reverse proxy and access gateway for people who host their own things.
+template: splash
+hero:
+  tagline: Put TLS and a login in front of anything you host, including the box at home that's stuck behind CGNAT.
+  actions:
+    - text: Expose your first service
+      link: /guides/expose-a-service/
+      icon: right-arrow
+    - text: Try it locally in 2 min
+      link: /start/quickstart/
+      icon: seti:powershell
+      variant: minimal
+    - text: GitHub
+      link: https://github.com/portlyn/Portlyn
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+import hero from "../../assets/hero.gif";
+import authPin from "../../assets/auth-pin.gif";
+
+<img src={hero.src} alt="Adding a service in Portlyn and watching it go live" style="border-radius:12px;width:100%;margin:1rem 0;" />
+
+Portlyn is one Go binary. It runs as a hub on a VPS, terminates TLS, and checks who's allowed in. An optional node agent runs on a machine behind your firewall and dials the hub over WireGuard, so nothing at home ever opens a port.
+
+I got tired of wiring Traefik, Authelia, and WireGuard together every time I wanted to share one service. So I put the three jobs in one binary that a normal person can actually run.
+
+## Why not just...
+
+- **Cloudflare Tunnel?** Works, but your traffic runs through Cloudflare and the auth is theirs. Portlyn keeps both on your own box.
+- **Nginx Proxy Manager?** Great proxy, no auth layer and no answer for the machine behind NAT.
+- **Traefik + Authelia + WireGuard?** That's exactly the stack Portlyn replaces. Three moving parts become one.
+- **Tailscale?** Different goal. Tailscale gets *you* onto the network. Portlyn puts a *public* service online with a login in front, for people who aren't on your tailnet.
+
+<CardGrid>
+  <Card title="Expose a home service" icon="rocket">
+    The [end-to-end guide](/guides/expose-a-service/): VPS hub, node agent at home, a real app online with TLS and a PIN.
+  </Card>
+  <Card title="Pick your setup" icon="setting">
+    Public IP, behind Cloudflare, or fully behind NAT. The [topologies](/guides/topologies/) page has a recipe for each.
+  </Card>
+  <Card title="Auth that fits the job" icon="approve-check">
+    A shared PIN or an emailed code for quick sharing. OIDC and passkeys for the admin side.
+  </Card>
+  <Card title="Automate it" icon="seti:config">
+    [API tokens](/guides/api-tokens/) for CI, non-interactive [init](/start/install/#non-interactive-setup), and self-updating binaries.
+  </Card>
+</CardGrid>
+
+## Sharing without accounts
+
+Drop a PIN or a one-time email code in front of any route. Good enough to hand a link to a friend, no account for them to make.
+
+<img src={authPin.src} alt="A route protected by a PIN prompt" style="border-radius:12px;max-width:520px;width:100%;margin:0.5rem 0;" />

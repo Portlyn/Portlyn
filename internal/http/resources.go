@@ -1029,14 +1029,14 @@ func parseLegacyIPv4(host string) (netip.Addr, bool) {
 }
 
 func validateServiceTargetURL(raw string) error {
-	return validateTargetURL(raw, false)
+	return validateTargetURL(raw, netguard.IsBlockedAddr, false)
 }
 
-func validateOutboundURL(raw string) error {
-	return validateTargetURL(raw, true)
+func validateOutboundURL(raw string, allowPrivate bool) error {
+	return validateTargetURL(raw, func(addr netip.Addr) bool { return netguard.Blocked(addr, allowPrivate) }, true)
 }
 
-func validateTargetURL(raw string, strict bool) error {
+func validateTargetURL(raw string, blocked func(netip.Addr) bool, strictResolve bool) error {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
 		return fmt.Errorf("target_url must be a valid URL")
@@ -1050,11 +1050,6 @@ func validateTargetURL(raw string, strict bool) error {
 	}
 	if netguard.IsBlockedHostName(host) {
 		return fmt.Errorf("target_url host is blocked for security reasons")
-	}
-
-	blocked := netguard.IsBlockedAddr
-	if strict {
-		blocked = netguard.IsBlockedAddrStrict
 	}
 
 	if addr, err := netip.ParseAddr(host); err == nil {
@@ -1073,7 +1068,7 @@ func validateTargetURL(raw string, strict bool) error {
 
 	addrs, err := resolveTargetHost(host)
 	if err != nil {
-		if strict {
+		if strictResolve {
 			return fmt.Errorf("target_url host could not be resolved")
 		}
 		return nil

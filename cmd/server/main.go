@@ -252,7 +252,7 @@ func main() {
 	auditLogger := audit.NewLogger(auditSink)
 	auditWebhookStore := store.NewAuditWebhookStore(db)
 	auditWebhookStore.SetDataEncryptionSecrets(cfg.DataEncryptionSecrets())
-	webhookDispatcher := audit.NewWebhookDispatcher(auditWebhookStore)
+	webhookDispatcher := audit.NewWebhookDispatcher(auditWebhookStore, cfg.AuditWebhookAllowPrivateTargets)
 	auditLogger.SetWebhookDispatcher(webhookDispatcher)
 	exposureReportStore := store.NewExposureReportStore(db)
 	exposureScanner := scanner.NewScanner(serviceStore, exposureReportStore, logger)

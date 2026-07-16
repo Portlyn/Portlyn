@@ -1,0 +1,78 @@
+---
+title: Expose a service behind your firewall
+description: A full walkthrough. Put a service running at home online with TLS and a PIN, without opening a port.
+sidebar:
+  order: 0
+---
+
+import { Steps } from "@astrojs/starlight/components";
+import serviceDetail from "../../../assets/service-detail.png";
+import routeLogin from "../../../assets/route-login.png";
+
+This is the reason Portlyn exists. You have something running at home, say a dashboard on `192.168.1.20:8096`, and you want to reach it at `https://app.example.com` with a login, from anywhere. Your home box stays behind NAT the whole time and never opens a port. The hub on a cheap VPS does the public-facing work.
+
+## What you need
+
+- A small VPS with a public IP (the hub). A €4 box is plenty.
+- A domain you can point at that VPS.
+- The machine at home running the service. It only needs outbound internet.
+
+## Steps
+
+<Steps>
+
+1. **Install the hub on the VPS.**
+
+   ```bash
+   curl -fsSL https://get.portlyn.dev \
+     | sudo PORTLYN_DOMAIN=portlyn.example.com PORTLYN_ADMIN_EMAIL=you@example.com sh
+   ```
+
+   This installs the binary, writes a systemd unit, and generates the admin login. Grab the password with `sudo grep '^ADMIN_PASSWORD=' /var/lib/portlyn/.env`.
+
+2. **Point DNS at the VPS.**
+
+   An `A` record for `portlyn.example.com` (the dashboard) and one for `app.example.com` (the service), both pointing at the VPS IP. A wildcard `*.example.com` saves you doing this per service later.
+
+3. **Log in and get a certificate.**
+
+   Open `https://portlyn.example.com`. If ports 80 and 443 are open on the VPS, HTTP-01 gets a cert on its own. If you'd rather not rely on inbound port 80, add a DNS-01 provider under **Certificates → DNS providers** and drop in an API token. See [DNS providers](/guides/dns-providers/).
+
+4. **Add your home box as a node.**
+
+   Go to **Nodes → Install node**. It hands you a one-time command. Run it on the home machine:
+
+   ```bash
+   curl -fsSL https://portlyn.example.com/install.sh | sudo sh -s -- --token <ENROLL_TOKEN>
+   ```
+
+   The node dials the hub over WireGuard and shows up as online in a few seconds. Nothing listens for inbound traffic on the home side.
+
+5. **Add the service.**
+
+   **Services → New**. The fields that matter:
+
+   - **Root domain** and **Subdomain**: `example.com` and `app`, so the public URL is `app.example.com`.
+   - **Target URL**: `http://192.168.1.20:8096`, the address of the service on your home LAN.
+   - **Route via tunnel node**: pick the node you just enrolled. This is what sends the upstream traffic back through the tunnel, so the hub can reach a LAN address it otherwise couldn't.
+   - **Authentication flow**: pick a Route-PIN and set one. A shared PIN is the least friction for handing a link to someone.
+
+   <img src={serviceDetail.src} alt="A service configured in Portlyn" style="border-radius:10px;width:100%;margin:0.5rem 0;" />
+
+6. **Open it.**
+
+   Visit `https://app.example.com`. You get the PIN prompt, then your service. TLS is real, the home box never opened a port, and the person you shared it with never made an account.
+
+   <img src={routeLogin.src} alt="The PIN login shown to visitors" style="border-radius:10px;max-width:460px;width:100%;margin:0.5rem 0;" />
+
+</Steps>
+
+## If something's off
+
+- **The node shows offline.** Check the agent on the home box: `systemctl status portlyn-nodeagent`. It needs outbound access to the hub.
+- **The service returns 502.** The hub can't reach the target. Confirm the Target URL is right and that you picked the tunnel node, and that the service is actually up on the home box.
+- **The certificate is stuck pending.** For HTTP-01 the VPS needs port 80 reachable. For DNS-01 the token needs permission to edit records for the zone. `portlyn doctor` on the VPS catches most config mistakes.
+
+## Next
+
+Swap the PIN for an emailed one-time code, or wire up OIDC for the people who should have real accounts. Group several services under one policy so you set access once. The [topologies](/guides/topologies/) page covers the public-IP and behind-Cloudflare variants of this same setup.

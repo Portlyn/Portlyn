@@ -7,6 +7,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"portlyn/internal/config"
+	"portlyn/internal/netguard"
 )
 
 type OIDCAuthenticator struct {
@@ -23,6 +26,16 @@ type OIDCAuthenticator struct {
 	oauthConfig oauth2.Config
 	verifier    *oidc.IDTokenVerifier
 	stateSecret []byte
+	httpClient  *http.Client
+}
+
+func oidcHTTPClient(allowPrivate bool) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{
+		Timeout: 10 * time.Second,
+		Control: netguard.DialControl(allowPrivate),
+	}).DialContext
+	return &http.Client{Transport: transport, Timeout: 15 * time.Second}
 }
 
 type oidcStateClaims struct {
@@ -41,7 +54,8 @@ type OIDCIdentity struct {
 }
 
 func NewOIDCAuthenticator(cfg config.OIDCConfig, stateSecret []byte) (*OIDCAuthenticator, error) {
-	ctx := context.Background()
+	client := oidcHTTPClient(cfg.AllowPrivateIssuer)
+	ctx := oidc.ClientContext(context.Background(), client)
 	provider, err := oidc.NewProvider(ctx, cfg.IssuerURL)
 	if err != nil {
 		return nil, fmt.Errorf("initialize oidc provider: %w", err)
@@ -58,6 +72,7 @@ func NewOIDCAuthenticator(cfg config.OIDCConfig, stateSecret []byte) (*OIDCAuthe
 		},
 		verifier:    provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
 		stateSecret: stateSecret,
+		httpClient:  client,
 	}, nil
 }
 
@@ -90,6 +105,9 @@ func pkceChallenge(verifier string) string {
 }
 
 func (a *OIDCAuthenticator) Exchange(ctx context.Context, code, state string) (*OIDCIdentity, string, error) {
+	if a.httpClient != nil {
+		ctx = oidc.ClientContext(ctx, a.httpClient)
+	}
 	stateClaims, err := a.parseState(state)
 	if err != nil {
 		return nil, "", err

@@ -317,7 +317,7 @@ func (s *Server) validateAuthSettings(item *domain.AppSettings) string {
 			if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(item.OIDCIssuerURL)), "https://") {
 				return "oidc issuer url must use https"
 			}
-			if err := validateOutboundURL(item.OIDCIssuerURL); err != nil {
+			if err := validateOutboundURL(item.OIDCIssuerURL, s.cfg.OIDC.AllowPrivateIssuer); err != nil {
 				return "oidc issuer url is not allowed: " + err.Error()
 			}
 		}

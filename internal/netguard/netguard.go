@@ -1,8 +1,11 @@
 package netguard
 
 import (
+	"fmt"
+	"net"
 	"net/netip"
 	"strings"
+	"syscall"
 )
 
 var BlockedHostNames = map[string]struct{}{
@@ -89,4 +92,35 @@ func IsBlockedAddrStrict(addr netip.Addr) bool {
 	}
 	addr = canonicalAddr(addr)
 	return addr.IsLoopback() || addr.IsPrivate()
+}
+
+func Blocked(addr netip.Addr, allowPrivate bool) bool {
+	if IsBlockedAddr(addr) {
+		return true
+	}
+	canonical := canonicalAddr(addr)
+	if canonical.IsLoopback() {
+		return true
+	}
+	if allowPrivate {
+		return false
+	}
+	return canonical.IsPrivate()
+}
+
+func DialControl(allowPrivate bool) func(network, address string, c syscall.RawConn) error {
+	return func(_, address string, _ syscall.RawConn) error {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return fmt.Errorf("invalid dial address %q: %w", address, err)
+		}
+		addr, err := netip.ParseAddr(host)
+		if err != nil {
+			return fmt.Errorf("unresolved dial address %q", host)
+		}
+		if Blocked(addr, allowPrivate) {
+			return fmt.Errorf("egress to %s is blocked", host)
+		}
+		return nil
+	}
 }
