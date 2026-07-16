@@ -1,0 +1,21 @@
+# CrowdSec acquisition for Portlyn.
+#
+# Reads Portlyn's structured JSON straight from journald. The journal's MESSAGE
+# field is the raw stdout line, i.e. clean JSON with no "Jul 16 host portlyn[pid]:"
+# syslog prefix. That prefix only shows up in `journalctl`'s text formatting, not
+# in the structured field CrowdSec reads here, so the parser stays simple.
+#
+# Copy to /etc/crowdsec/acquis.d/portlyn.yaml and restart crowdsec.
+source: journalctl
+journalctl_filter:
+  - "_SYSTEMD_UNIT=portlyn.service"
+labels:
+  type: portlyn
+---
+# Alternative: if you run Portlyn in Docker or point it at a log file, read the
+# file instead and drop the journald block above. The JSON is already clean.
+# source: file
+# filenames:
+#   - /var/log/portlyn/portlyn.log
+# labels:
+#   type: portlyn

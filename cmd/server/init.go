@@ -29,6 +29,8 @@ type initAnswers struct {
 	DNSProvider       string
 	DNSToken          string
 	PasswordGenerated bool
+	BreakGlassEnabled bool
+	BreakGlassToken   string
 }
 
 func runInitWizard(args []string) error {
@@ -43,6 +45,7 @@ func runInitWizard(args []string) error {
 	dnsTokenFlag := flags.String("dns-token", os.Getenv("PORTLYN_DNS_TOKEN"), "API token for the selected --dns-provider")
 	nonInteractive := flags.Bool("non-interactive", envBoolDefault("PORTLYN_NONINTERACTIVE", false), "never prompt; fail if required values are missing")
 	acmeEnabled := flags.Bool("acme", true, "enable ACME/Letsencrypt HTTPS")
+	breakGlass := flags.Bool("break-glass", true, "seed a loopback-only break-glass recovery login (recommended, prevents SSO-only lockout)")
 	force := flags.Bool("force", false, "overwrite existing output file")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -53,14 +56,22 @@ func runInitWizard(args []string) error {
 	}
 
 	answers := initAnswers{
-		Domain:        strings.TrimSpace(*domainFlag),
-		AdminEmail:    strings.TrimSpace(*adminEmailFlag),
-		AdminPassword: *adminPasswordFlag,
-		ACMEEmail:     strings.TrimSpace(*acmeEmailFlag),
-		DataDir:       strings.TrimSpace(*dataDir),
-		DNSProvider:   strings.ToLower(strings.TrimSpace(*dnsProviderFlag)),
-		DNSToken:      strings.TrimSpace(*dnsTokenFlag),
-		HTTPSEnabled:  *acmeEnabled,
+		Domain:            strings.TrimSpace(*domainFlag),
+		AdminEmail:        strings.TrimSpace(*adminEmailFlag),
+		AdminPassword:     *adminPasswordFlag,
+		ACMEEmail:         strings.TrimSpace(*acmeEmailFlag),
+		DataDir:           strings.TrimSpace(*dataDir),
+		DNSProvider:       strings.ToLower(strings.TrimSpace(*dnsProviderFlag)),
+		DNSToken:          strings.TrimSpace(*dnsTokenFlag),
+		HTTPSEnabled:      *acmeEnabled,
+		BreakGlassEnabled: *breakGlass,
+	}
+	if answers.BreakGlassEnabled {
+		token, err := randomURLSafe(32)
+		if err != nil {
+			return err
+		}
+		answers.BreakGlassToken = token
 	}
 
 	if *nonInteractive {
@@ -125,6 +136,10 @@ func runInitWizard(args []string) error {
 	if answers.PasswordGenerated {
 		fmt.Printf("\nA random admin password was written to %s (ADMIN_PASSWORD).\n", *output)
 		fmt.Printf("Read it with: grep '^ADMIN_PASSWORD=' %s\n", *output)
+	}
+	if answers.BreakGlassEnabled {
+		fmt.Printf("\nBreak-glass recovery is enabled, reachable only from the server itself (loopback).\n")
+		fmt.Printf("If you ever lock yourself out (e.g. SSO-only plus a lost authenticator), use the token in BREAK_GLASS_TOKEN.\n")
 	}
 	fmt.Printf("\nStart the server with:\n  portlyn\n")
 	return nil
@@ -243,6 +258,10 @@ func buildEnvFile(a initAnswers) (string, error) {
 	}
 	fmt.Fprintln(&b, "NODE_REQUIRE_HTTPS=true")
 	fmt.Fprintln(&b, "BOOTSTRAP_ADMIN_ENABLED=true")
+	if a.BreakGlassEnabled && strings.TrimSpace(a.BreakGlassToken) != "" {
+		fmt.Fprintln(&b, "BREAK_GLASS_ENABLED=true")
+		fmt.Fprintf(&b, "BREAK_GLASS_TOKEN=%s\n", a.BreakGlassToken)
+	}
 	fmt.Fprintln(&b, "LOG_LEVEL=info")
 	fmt.Fprintln(&b)
 	for key, value := range secrets {

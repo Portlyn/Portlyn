@@ -1,0 +1,17 @@
+type: leaky
+name: portlyn/http-404-scan
+description: "Detect path scanning against Portlyn services (many distinct 404s from one IP)"
+filter: "evt.Meta.log_type == 'portlyn_proxy_access' && evt.Meta.http_status == '404' && evt.Meta.proxy_outcome != 'denied'"
+distinct: "evt.Meta.http_path"
+groupby: "evt.Meta.source_ip"
+capacity: 15
+leakspeed: "30s"
+blackhole: 5m
+labels:
+  service: http
+  type: scan
+  remediation: true
+# The `proxy_outcome != 'denied'` guard is deliberate: a blocked request also
+# gets logged (status 403, outcome 'denied'), so a naive 4xx scenario would
+# re-count the block it just caused and keep the ban alive forever. Only real
+# upstream 404s (not_found) feed this scenario.

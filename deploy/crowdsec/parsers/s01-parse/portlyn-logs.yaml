@@ -1,0 +1,24 @@
+onsuccess: next_stage
+filter: "evt.Line.Labels.type == 'portlyn' && evt.Line.Raw contains '\"kind\":\"proxy_access\"'"
+name: portlyn/proxy-logs
+description: "Parse Portlyn JSON proxy access logs"
+statics:
+  - meta: service
+    value: portlyn
+  - meta: log_type
+    value: portlyn_proxy_access
+  - meta: source_ip
+    expression: JsonExtract(evt.Line.Raw, "remote_addr")
+  - meta: http_status
+    expression: JsonExtract(evt.Line.Raw, "status")
+  - meta: http_path
+    expression: JsonExtract(evt.Line.Raw, "path")
+  - meta: http_host
+    expression: JsonExtract(evt.Line.Raw, "host")
+  - meta: proxy_outcome
+    expression: JsonExtract(evt.Line.Raw, "outcome")
+  - meta: proxy_reason
+    expression: JsonExtract(evt.Line.Raw, "reason")
+# Strip a leading syslog prefix if the line ever arrives pre-formatted
+# (e.g. read via `journalctl -o short` instead of the structured MESSAGE).
+# Falls back cleanly when the line already starts with '{'.

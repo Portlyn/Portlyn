@@ -774,6 +774,10 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 	latency := time.Since(startedAt)
 
 	requestID := middleware.GetReqID(r.Context())
+	remoteAddr := m.authoritativeClientIP(r)
+	if remoteAddr == "" {
+		remoteAddr = r.RemoteAddr
+	}
 	args := []any{
 		"component", "proxy",
 		"kind", "proxy_access",
@@ -787,7 +791,7 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 		"bytes", writer.BytesWritten(),
 		"outcome", outcome,
 		"reason", reason,
-		"remote_addr", r.RemoteAddr,
+		"remote_addr", remoteAddr,
 		"user_agent", r.UserAgent(),
 	}
 

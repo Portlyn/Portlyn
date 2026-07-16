@@ -132,6 +132,8 @@ func serviceResponse(item domain.Service, health serviceHealthInfo) map[string]a
 		"path":                           item.Path,
 		"target_url":                     item.TargetURL,
 		"tls_mode":                       item.TLSMode,
+		"pass_host_header":               item.PassHostHeader,
+		"upstream_skip_verify":           item.UpstreamSkipVerify,
 		"auth_policy":                    item.AuthPolicy,
 		"access_mode":                    item.AccessMode,
 		"allowed_roles":                  item.AllowedRoles,
