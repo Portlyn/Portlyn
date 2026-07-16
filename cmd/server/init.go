@@ -118,8 +118,8 @@ func runInitWizard(args []string) error {
 	fmt.Printf("Database path: %s\n", filepath.Join(answers.DataDir, "portlyn.db"))
 	fmt.Printf("Certificate dir: %s\n", filepath.Join(answers.DataDir, "certificates"))
 	if answers.PasswordGenerated {
-		fmt.Printf("\nGenerated admin password: %s\n", answers.AdminPassword)
-		fmt.Printf("Store it now; it is only shown once.\n")
+		fmt.Printf("\nA random admin password was written to %s (ADMIN_PASSWORD).\n", *output)
+		fmt.Printf("Read it with: grep '^ADMIN_PASSWORD=' %s\n", *output)
 	}
 	fmt.Printf("\nStart the server with:\n  portlyn\n")
 	return nil
