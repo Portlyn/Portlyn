@@ -17,7 +17,7 @@ sha256sum -c checksums.txt --ignore-missing
 cosign verify-blob \
   --certificate checksums.txt.pem \
   --signature   checksums.txt.sig \
-  --certificate-identity-regexp 'https://github.com/portlyn/Portlyn' \
+  --certificate-identity-regexp 'https://github.com/[Pp]ortlyn/[Pp]ortlyn' \
   --certificate-oidc-issuer     https://token.actions.githubusercontent.com \
   checksums.txt
 ```

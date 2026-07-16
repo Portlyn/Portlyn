@@ -16,7 +16,7 @@ const (
 	updateRepo        = "portlyn/Portlyn"
 	updateAssetPrefix = "portlyn"
 	updateDefaultUnit = "portlyn.service"
-	updateSANRegex    = `^https://github\.com/portlyn/Portlyn/`
+	updateSANRegex    = `^https://github\.com/[Pp]ortlyn/[Pp]ortlyn/`
 	updateOIDCIssuer  = "https://token.actions.githubusercontent.com"
 )
 

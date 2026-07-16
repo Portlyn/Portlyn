@@ -11,7 +11,7 @@ import (
 	"portlyn/internal/store"
 )
 
-func bootstrapAdminCertificate(ctx context.Context, cfg config.Config, domains *store.DomainStore, certificates *store.CertificateStore, logger *slog.Logger) {
+func bootstrapAdminCertificate(ctx context.Context, cfg config.Config, domains *store.DomainStore, certificates *store.CertificateStore, dnsProviders *store.DNSProviderStore, logger *slog.Logger) {
 	if !cfg.ACMEEnabled {
 		return
 	}
@@ -52,12 +52,28 @@ func bootstrapAdminCertificate(ctx context.Context, cfg config.Config, domains *
 		}
 	}
 
+	challengeType := domain.CertificateChallengeHTTP01
+	var dnsProviderID *uint
+	if providers, err := dnsProviders.List(ctx); err != nil {
+		logger.Warn("admin certificate dns provider lookup failed", "error", err)
+	} else {
+		for i := range providers {
+			if providers[i].IsActive {
+				id := providers[i].ID
+				dnsProviderID = &id
+				challengeType = domain.CertificateChallengeDNS01
+				break
+			}
+		}
+	}
+
 	cert := &domain.Certificate{
 		DomainID:      dom.ID,
 		PrimaryDomain: host,
 		Type:          domain.CertificateTypeSingle,
 		Status:        domain.CertificateStatusPending,
-		ChallengeType: "http-01",
+		ChallengeType: challengeType,
+		DNSProviderID: dnsProviderID,
 		Issuer:        "letsencrypt_prod",
 		IsAutoRenew:   true,
 	}

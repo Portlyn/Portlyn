@@ -4,6 +4,9 @@
 #   curl -fsSL https://<portlyn-host>/install.sh | sudo sh -s -- --token <ENROLLMENT_TOKEN>
 set -eu
 
+PATH="${PATH}:/usr/local/bin:/usr/bin:/bin"
+export PATH
+
 API_BASE="__API_BASE__"
 DOWNLOAD_BASE="__DOWNLOAD_BASE__"
 VERSION="__VERSION__"
@@ -15,7 +18,7 @@ STATE_DIR="/var/lib/portlyn-nodeagent"
 SERVICE_NAME="portlyn-nodeagent"
 REQUIRE_SIGNATURE="1"
 ALLOW_UNSIGNED="${ALLOW_UNSIGNED:-0}"
-SAN_REGEXP='^https://github\.com/portlyn/Portlyn/'
+SAN_REGEXP='^https://github\.com/[Pp]ortlyn/[Pp]ortlyn/'
 OIDC_ISSUER="https://token.actions.githubusercontent.com"
 
 while [ $# -gt 0 ]; do

@@ -6,6 +6,9 @@
 #     PORTLYN_ADMIN_EMAIL=admin@example.com sh
 set -eu
 
+PATH="${PATH}:/usr/local/bin:/usr/bin:/bin"
+export PATH
+
 REPO="portlyn/Portlyn"
 DOWNLOAD_BASE="https://github.com/${REPO}/releases"
 VERSION="${PORTLYN_VERSION:-latest}"
@@ -16,7 +19,7 @@ SERVICE_NAME="portlyn"
 SERVICE_USER="portlyn"
 REQUIRE_SIGNATURE="1"
 ALLOW_UNSIGNED="${ALLOW_UNSIGNED:-0}"
-SAN_REGEXP='^https://github\.com/portlyn/Portlyn/'
+SAN_REGEXP='^https://github\.com/[Pp]ortlyn/[Pp]ortlyn/'
 OIDC_ISSUER="https://token.actions.githubusercontent.com"
 
 while [ $# -gt 0 ]; do
@@ -135,7 +138,7 @@ if [ -n "${PORTLYN_DOMAIN:-}" ] && [ -n "${PORTLYN_ADMIN_EMAIL:-}" ]; then
     echo "${STATE_DIR}/.env already exists; skipping init."
   else
     echo "Generating configuration with 'portlyn init --non-interactive' ..."
-    $SUDO -u "$SERVICE_USER" env \
+    $SUDO env \
       PORTLYN_DOMAIN="$PORTLYN_DOMAIN" \
       PORTLYN_ADMIN_EMAIL="$PORTLYN_ADMIN_EMAIL" \
       PORTLYN_ADMIN_PASSWORD="${PORTLYN_ADMIN_PASSWORD:-}" \
@@ -144,6 +147,8 @@ if [ -n "${PORTLYN_DOMAIN:-}" ] && [ -n "${PORTLYN_ADMIN_EMAIL:-}" ]; then
       PORTLYN_DNS_TOKEN="${PORTLYN_DNS_TOKEN:-}" \
       "${INSTALL_DIR}/${BIN_NAME}" init --non-interactive \
         --output "${STATE_DIR}/.env" --data-dir "$STATE_DIR"
+    $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$STATE_DIR"
+    $SUDO chmod 0600 "${STATE_DIR}/.env"
   fi
   INIT_DONE="1"
 else
