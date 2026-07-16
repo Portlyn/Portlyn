@@ -23,12 +23,33 @@ func runDoctor(args []string) error {
 	}
 
 	cfg, _ := config.Load()
+	if noEnvContext() {
+		fmt.Println("No .env found here and the secret variables are empty, so everything below will look broken.")
+		fmt.Println("If Portlyn runs as a service, load its environment first, for example:")
+		fmt.Println("  set -a; . /var/lib/portlyn/.env; set +a; portlyn doctor")
+		fmt.Println()
+	}
 	issues := cfg.ValidationIssues()
 	errCount := printValidationIssues(os.Stdout, issues, quiet)
 	if errCount > 0 {
 		return fmt.Errorf("%d configuration error(s) must be fixed before Portlyn can start", errCount)
 	}
 	return nil
+}
+
+func noEnvContext() bool {
+	if _, err := os.Stat(".env"); err == nil {
+		return false
+	}
+	for _, key := range []string{
+		"JWT_SECRET", "JWT_SIGNING_SECRET", "SESSION_BRIDGE_SECRET", "OIDC_STATE_SECRET",
+		"MFA_ENCRYPTION_SECRET", "CSRF_SECRET", "DATA_ENCRYPTION_SECRET", "AUDIT_HMAC_SECRET",
+	} {
+		if strings.TrimSpace(os.Getenv(key)) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func printValidationIssues(w io.Writer, issues []config.ValidationIssue, quiet bool) int {

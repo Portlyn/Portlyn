@@ -46,6 +46,12 @@ func NewDBCertificateStore(db *gorm.DB, dataSecrets []string) *DBCertificateStor
 	return &DBCertificateStore{db: db, dataSecrets: normalized}
 }
 
+func (s *DBCertificateStore) DeleteCertificate(ctx context.Context, domainName string) error {
+	return s.db.WithContext(ctx).
+		Where("domain = ?", normalizeDomain(domainName)).
+		Delete(&domain.StoredTLSCertificate{}).Error
+}
+
 func (s *DBCertificateStore) GetCertificate(ctx context.Context, domainName string) (*tls.Certificate, error) {
 	var item domain.StoredTLSCertificate
 	err := s.db.WithContext(ctx).Where("domain = ?", normalizeDomain(domainName)).First(&item).Error

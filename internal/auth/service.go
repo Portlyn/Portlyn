@@ -235,9 +235,24 @@ func (s *Service) SeedUserIfMissing(ctx context.Context, email, password, role s
 	})
 }
 
+func (s *Service) localLoginDisabled(ctx context.Context) bool {
+	if s.settings == nil {
+		return false
+	}
+	settings, err := s.settings.Get(ctx)
+	if err != nil || settings == nil {
+		return false
+	}
+	return settings.LocalLoginDisabled
+}
+
 func (s *Service) Login(ctx context.Context, email, password string, meta RequestMetadata) (*LoginResult, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	now := time.Now().UTC()
+	if s.localLoginDisabled(ctx) {
+		s.observeAuth("password", "local_login_disabled")
+		return nil, ErrLocalLoginDisabled
+	}
 	if s.isRateLimited(ctx, "pwd:"+email, now) || s.isRateLimited(ctx, "pwd-ip:"+rateLimitRemoteAddr(meta.RemoteAddr), now) {
 		s.observeAuth("password", "rate_limited")
 		return nil, ErrRateLimited
@@ -656,12 +671,12 @@ func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity
 		if err == nil {
 			user.Email = email
 			user.Username = claims.PreferredUsername
-			user.DisplayName = claims.Name
+			user.DisplayName = oidcDisplayName(claims)
 			user.AuthIssuer = authenticator.Issuer()
 			columns := map[string]any{
 				"email":             email,
 				"username":          claims.PreferredUsername,
-				"display_name":      claims.Name,
+				"display_name":      oidcDisplayName(claims),
 				"auth_provider":     domain.AuthProviderOIDC,
 				"auth_provider_ref": ref,
 				"auth_issuer":       authenticator.Issuer(),
@@ -695,7 +710,7 @@ func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity
 			if user.AuthProvider == domain.AuthProviderOIDC && user.AuthProviderRef != "" && ref != "" && user.AuthProviderRef != ref {
 				return nil, ErrOIDCLinkDenied
 			}
-			user.DisplayName = claims.Name
+			user.DisplayName = oidcDisplayName(claims)
 			user.Username = claims.PreferredUsername
 			if user.AuthProvider == "" || user.AuthProvider == domain.AuthProviderLocal {
 				user.AuthProvider = domain.AuthProviderOIDC
@@ -723,13 +738,29 @@ func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity
 		AuthProvider:    domain.AuthProviderOIDC,
 		AuthProviderRef: ref,
 		AuthIssuer:      authenticator.Issuer(),
-		DisplayName:     claims.Name,
+		DisplayName:     oidcDisplayName(claims),
 		Username:        claims.PreferredUsername,
 	}
 	if err := s.users.Create(ctx, user); err != nil {
 		return nil, err
 	}
 	return user, nil
+}
+
+func oidcDisplayName(claims *OIDCIdentity) string {
+	if name := strings.TrimSpace(claims.Name); name != "" {
+		return name
+	}
+	if username := strings.TrimSpace(claims.PreferredUsername); username != "" {
+		return username
+	}
+	if email := strings.TrimSpace(claims.Email); email != "" {
+		if at := strings.IndexByte(email, '@'); at > 0 {
+			return email[:at]
+		}
+		return email
+	}
+	return ""
 }
 
 func (s *Service) logOIDCRoleChange(user *domain.User, newRole string) {

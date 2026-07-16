@@ -126,6 +126,23 @@ func (m *Manager) MigrateStoredSecrets(ctx context.Context) (SecretMigrationSumm
 	return summary, nil
 }
 
+func (m *Manager) PurgeCertificateData(ctx context.Context, names []string) error {
+	var firstErr error
+	for _, raw := range names {
+		name := normalizeDomain(raw)
+		if name == "" {
+			continue
+		}
+		if err := m.tlsStore.DeleteCertificate(ctx, name); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if err := m.storage.DeleteCertificatesForDomain(ctx, name); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
 func (m *Manager) SyncCertificate(ctx context.Context, item *domain.Certificate) (*domain.Certificate, error) {
 	started := time.Now()
 	now := time.Now().UTC()

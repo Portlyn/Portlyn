@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -566,12 +567,36 @@ func (s *Server) handleDeleteCertificate(w stdhttp.ResponseWriter, r *stdhttp.Re
 	if !ok {
 		return
 	}
+	item, err := s.certificates.GetByID(r.Context(), id)
+	if err != nil {
+		s.handleStoreError(w, err)
+		return
+	}
+	names := certificateDomainNames(item)
 	if err := s.certificates.Delete(r.Context(), id); err != nil {
 		s.handleStoreError(w, err)
 		return
 	}
+	if err := s.acme.PurgeCertificateData(r.Context(), names); err != nil {
+		s.logger.Warn("certificate delete: purging stored and certmagic data failed", "id", id, "error", err)
+	}
 	_ = s.audit.Log(r.Context(), s.currentUserID(r), "delete", "certificate", &id, map[string]any{"id": id})
 	w.WriteHeader(stdhttp.StatusNoContent)
+}
+
+func certificateDomainNames(item *domain.Certificate) []string {
+	names := make([]string, 0, len(item.SANs)+1)
+	if primary := strings.TrimSpace(item.PrimaryDomain); primary != "" {
+		names = append(names, primary)
+	} else if strings.TrimSpace(item.Domain.Name) != "" {
+		names = append(names, strings.TrimSpace(item.Domain.Name))
+	}
+	for _, san := range item.SANs {
+		if name := strings.TrimSpace(san.DomainName); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func (s *Server) handleListServices(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -645,7 +670,12 @@ func (s *Server) evaluateServiceHealth(ctx context.Context, item domain.Service)
 	}
 
 	probeURL := item.TargetURL
-	client := &stdhttp.Client{Timeout: 1500 * time.Millisecond}
+	noRedirect := func(_ *stdhttp.Request, _ []*stdhttp.Request) error { return stdhttp.ErrUseLastResponse }
+	transport := &stdhttp.Transport{}
+	if item.UpstreamSkipVerify {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	client := &stdhttp.Client{Timeout: 1500 * time.Millisecond, CheckRedirect: noRedirect, Transport: transport}
 	if item.NodeID != nil && item.Node != nil && s.tunnel != nil {
 		tunnelIP := strings.TrimSpace(item.Node.WGTunnelIP)
 		if srv := s.tunnel.Server(); tunnelIP != "" && srv != nil && srv.Started() {
@@ -657,18 +687,24 @@ func (s *Server) evaluateServiceHealth(ctx context.Context, item domain.Service)
 				}
 				probeURL = u.String()
 			}
-			client = &stdhttp.Client{
-				Timeout:   1500 * time.Millisecond,
-				Transport: &stdhttp.Transport{DialContext: srv.DialContext},
+			tunnelTransport := &stdhttp.Transport{DialContext: srv.DialContext}
+			if item.UpstreamSkipVerify {
+				tunnelTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 			}
+			client = &stdhttp.Client{Timeout: 1500 * time.Millisecond, CheckRedirect: noRedirect, Transport: tunnelTransport}
 		}
 	}
 
+	probeHost := ""
+	if item.PassHostHeader {
+		probeHost = domain.ServiceHost(item)
+	}
 	probeCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
 	defer cancel()
 	err := probeHTTPHealthTarget(probeCtx, client, HTTPHealthTarget{
 		Name: item.Name,
 		URL:  probeURL,
+		Host: probeHost,
 	})
 	if err != nil {
 		return serviceHealthInfo{
@@ -787,6 +823,8 @@ func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		Path:                 req.Path,
 		TargetURL:            req.TargetURL,
 		TLSMode:              req.TLSMode,
+		PassHostHeader:       req.PassHostHeader,
+		UpstreamSkipVerify:   req.UpstreamSkipVerify,
 		AuthPolicy:           req.AuthPolicy,
 		AccessMode:           req.AccessPolicy.AccessMode,
 		AllowedRoles:         normalizeStringList(req.AccessPolicy.AllowedRoles),
@@ -875,6 +913,12 @@ func (s *Server) handleUpdateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	}
 	if req.TLSMode != nil {
 		item.TLSMode = *req.TLSMode
+	}
+	if req.PassHostHeader != nil {
+		item.PassHostHeader = *req.PassHostHeader
+	}
+	if req.UpstreamSkipVerify != nil {
+		item.UpstreamSkipVerify = *req.UpstreamSkipVerify
 	}
 	if req.AuthPolicy != nil {
 		item.AuthPolicy = *req.AuthPolicy

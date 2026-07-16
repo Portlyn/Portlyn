@@ -408,6 +408,8 @@ type Service struct {
 	Path                 string           `gorm:"size:255;not null;default:/" json:"path"`
 	TargetURL            string           `gorm:"size:512;not null" json:"target_url"`
 	TLSMode              string           `gorm:"size:64;not null" json:"tls_mode"`
+	PassHostHeader       bool             `gorm:"not null;default:false" json:"pass_host_header"`
+	UpstreamSkipVerify   bool             `gorm:"not null;default:false" json:"upstream_skip_verify"`
 	AuthPolicy           string           `gorm:"size:64;not null;default:authenticated" json:"auth_policy"`
 	AccessMode           string           `gorm:"size:64;not null;default:authenticated" json:"access_mode"`
 	AllowedRoles         JSONStringSlice  `gorm:"type:text;not null;default:'[]'" json:"allowed_roles"`
@@ -576,6 +578,7 @@ type AppSettings struct {
 	OIDCProviderLabel         string          `gorm:"size:255" json:"oidc_provider_label"`
 	OIDCAllowEmailLinking     bool            `gorm:"not null;default:false" json:"oidc_allow_email_linking"`
 	OIDCRequireVerifiedEmail  bool            `gorm:"not null;default:true" json:"oidc_require_verified_email"`
+	LocalLoginDisabled        bool            `gorm:"not null;default:false" json:"local_login_disabled"`
 	OTPEnabled                bool            `gorm:"not null;default:true" json:"otp_enabled"`
 	OTPTokenTTLSeconds        int             `gorm:"not null;default:600" json:"otp_token_ttl_seconds"`
 	OTPRequestLimit           int             `gorm:"not null;default:5" json:"otp_request_limit"`

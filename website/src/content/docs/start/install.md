@@ -16,6 +16,12 @@ curl -fsSL https://get.portlyn.dev \
 
 Leave the env vars off to install the binary and unit only, then configure it yourself.
 
+On a stripped-down box without `curl` or `sudo` (a minimal LXC, say), install the prerequisites first (`apt-get install -y curl ca-certificates`), or fetch the script with `wget` and run it as root:
+
+```bash
+wget -qO- https://get.portlyn.dev | sh
+```
+
 Signature checking needs no extra tools. If `cosign` is on the box it uses that; otherwise the downloaded binary (already checksum-verified) checks its own release signature against a Sigstore trust root baked into it. Set `ALLOW_UNSIGNED=1` to skip the signature and settle for the checksum.
 
 ## Manual binary

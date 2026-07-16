@@ -75,6 +75,7 @@ type namedCheck struct {
 type HTTPHealthTarget struct {
 	Name string
 	URL  string
+	Host string
 }
 
 type httpTargetsHealthCheck struct {
@@ -126,6 +127,13 @@ func (c httpTargetsHealthCheck) Check(ctx context.Context) error {
 	return nil
 }
 
+func applyProbeHeaders(req *http.Request, target HTTPHealthTarget) {
+	if host := strings.TrimSpace(target.Host); host != "" {
+		req.Host = host
+	}
+	req.Header.Set("X-Forwarded-Proto", "https")
+}
+
 func probeHTTPHealthTarget(ctx context.Context, client *http.Client, target HTTPHealthTarget) error {
 	if strings.TrimSpace(target.URL) == "" {
 		return errors.New("target url is empty")
@@ -137,6 +145,7 @@ func probeHTTPHealthTarget(ctx context.Context, client *http.Client, target HTTP
 	if err != nil {
 		return err
 	}
+	applyProbeHeaders(req, target)
 	resp, err := client.Do(req)
 	if err == nil {
 		defer resp.Body.Close()
@@ -152,6 +161,7 @@ func probeHTTPHealthTarget(ctx context.Context, client *http.Client, target HTTP
 	if err != nil {
 		return err
 	}
+	applyProbeHeaders(req, target)
 	resp, err = client.Do(req)
 	if err != nil {
 		return err

@@ -102,6 +102,36 @@ func (s *CertMagicStorage) Delete(ctx context.Context, key string) error {
 		Delete(&domain.DistributedKV{}).Error
 }
 
+func safeCertFolder(name string) string {
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(name)), "*", "wildcard_")
+}
+
+func (s *CertMagicStorage) DeleteCertificatesForDomain(ctx context.Context, domainName string) error {
+	folder := safeCertFolder(domainName)
+	if folder == "" {
+		return nil
+	}
+	keys, err := s.List(ctx, "certificates", true)
+	if err != nil {
+		return err
+	}
+	prefixes := make(map[string]struct{})
+	for _, key := range keys {
+		parts := strings.Split(key, "/")
+		for i, part := range parts {
+			if strings.ToLower(part) == folder {
+				prefixes[strings.Join(parts[:i+1], "/")] = struct{}{}
+			}
+		}
+	}
+	for prefix := range prefixes {
+		if err := s.Delete(ctx, prefix); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *CertMagicStorage) Exists(ctx context.Context, key string) bool {
 	var count int64
 	_ = s.db.WithContext(ctx).

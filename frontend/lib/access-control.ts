@@ -35,6 +35,8 @@ export function defaultServicePayload(service?: Partial<Service>): ServicePayloa
     path: service?.path || "/",
     target_url: service?.target_url || "",
     tls_mode: service?.tls_mode || "offload",
+    pass_host_header: Boolean(service?.pass_host_header),
+    upstream_skip_verify: Boolean(service?.upstream_skip_verify),
     auth_policy: service?.auth_policy || legacyAuthPolicyFromAccessMode(accessPolicy),
     access_policy: accessPolicy,
     use_group_policy: Boolean(service?.use_group_policy),

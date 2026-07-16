@@ -7,6 +7,7 @@ var (
 	ErrInvalidCredentials  = errors.New("invalid credentials")
 	ErrInvalidToken        = errors.New("invalid token")
 	ErrOIDCDisabled        = errors.New("oidc disabled")
+	ErrLocalLoginDisabled  = errors.New("local login disabled")
 	ErrOTPDisabled         = errors.New("otp disabled")
 	ErrRateLimited         = errors.New("rate limited")
 	ErrOTPExpired          = errors.New("otp expired")

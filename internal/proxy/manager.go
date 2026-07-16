@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -197,14 +198,14 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 		adminUIHandler = withStaticSecurityHeaders(options.EmbeddedAdminUI)
 	} else if strings.TrimSpace(options.AdminUITargetURL) != "" {
 		if target, err := url.Parse(strings.TrimSpace(options.AdminUITargetURL)); err == nil {
-			adminUIHandler = reverseProxyForTarget(target, transport, "/", directProto, nil)
+			adminUIHandler = reverseProxyForTarget(target, transport, "/", directProto, nil, false)
 		}
 	}
 
 	var adminAPIHandler http.Handler
 	if strings.TrimSpace(options.AdminAPITargetURL) != "" {
 		if target, err := url.Parse(strings.TrimSpace(options.AdminAPITargetURL)); err == nil {
-			adminAPIHandler = reverseProxyForTarget(target, transport, "/", directProto, nil)
+			adminAPIHandler = reverseProxyForTarget(target, transport, "/", directProto, nil, false)
 		}
 	}
 
@@ -654,7 +655,10 @@ func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
 	if viaNode && m.tunnelTransport != nil && m.tunnelDialer != nil && m.tunnelDialer.Started() {
 		chosenTransport = m.tunnelTransport
 	}
-	proxy := reverseProxyForTarget(target, chosenTransport, routePath, m.forwardedProto, m.authoritativeClientIP)
+	if config.Service.UpstreamSkipVerify {
+		chosenTransport = insecureUpstreamTransport(chosenTransport)
+	}
+	proxy := reverseProxyForTarget(target, chosenTransport, routePath, m.forwardedProto, m.authoritativeClientIP, config.Service.PassHostHeader)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		m.recordTargetFailure(config.TargetURL, err)
 		writeProxyError(w, http.StatusBadGateway, "upstream_unavailable", "upstream target request failed")
@@ -690,7 +694,18 @@ func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
 	}, nil
 }
 
-func reverseProxyForTarget(target *url.URL, transport *http.Transport, routePath string, protoForRequest func(*http.Request) string, clientIPForRequest func(*http.Request) string) *httputil.ReverseProxy {
+func insecureUpstreamTransport(base *http.Transport) *http.Transport {
+	transport := base.Clone()
+	if transport.TLSClientConfig != nil {
+		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	} else {
+		transport.TLSClientConfig = &tls.Config{}
+	}
+	transport.TLSClientConfig.InsecureSkipVerify = true
+	return transport
+}
+
+func reverseProxyForTarget(target *url.URL, transport *http.Transport, routePath string, protoForRequest func(*http.Request) string, clientIPForRequest func(*http.Request) string, passHostHeader bool) *httputil.ReverseProxy {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Transport = &retryTransport{base: transport, retries: 1, backoff: 100 * time.Millisecond}
 	originalDirector := proxy.Director
@@ -717,7 +732,11 @@ func reverseProxyForTarget(target *url.URL, transport *http.Transport, routePath
 			req.Header.Del("X-Forwarded-For")
 		}
 		originalDirector(req)
-		req.Host = target.Host
+		if passHostHeader {
+			req.Host = incomingHost
+		} else {
+			req.Host = target.Host
+		}
 		if authoritativeClientIP != "" {
 			req.Header.Set("X-Real-Ip", authoritativeClientIP)
 		} else {

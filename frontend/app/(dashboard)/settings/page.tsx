@@ -62,6 +62,7 @@ type AuthSettingsForm = {
   oidc_provider_label: string;
   oidc_allow_email_linking: boolean;
   oidc_require_verified_email: boolean;
+  local_login_disabled: boolean;
   otp_enabled: boolean;
   otp_token_ttl_seconds: number;
   otp_request_limit: number;
@@ -116,6 +117,7 @@ function toForm(settings: AuthSettings): AuthSettingsForm {
     oidc_provider_label: settings.oidc_provider_label || "SSO",
     oidc_allow_email_linking: settings.oidc_allow_email_linking,
     oidc_require_verified_email: settings.oidc_require_verified_email,
+    local_login_disabled: settings.local_login_disabled,
     otp_enabled: settings.otp_enabled,
     otp_token_ttl_seconds: settings.otp_token_ttl_seconds || 600,
     otp_request_limit: settings.otp_request_limit || 5,
@@ -440,6 +442,7 @@ export default function SettingsPage() {
                 <TextInput label="Provider label" value={form.oidc_provider_label} onChange={(event) => update("oidc_provider_label", event.currentTarget.value)} />
                 <Checkbox checked={form.oidc_allow_email_linking} onChange={(event) => update("oidc_allow_email_linking", event.currentTarget.checked)} label="Allow email linking" />
                 <Checkbox checked={form.oidc_require_verified_email} onChange={(event) => update("oidc_require_verified_email", event.currentTarget.checked)} label="Require verified email" />
+                <Checkbox checked={form.local_login_disabled} onChange={(event) => update("local_login_disabled", event.currentTarget.checked)} label="Disable local password login (SSO only)" description="Only works with OIDC enabled. Break-glass login stays available." />
               </Stack>
             </Card>
             ) : null}

@@ -52,6 +52,11 @@ func NewDatabase(cfg config.Config) (*gorm.DB, error) {
 		maxIdleConns = 2
 	}
 
+	if cfg.DatabaseDriver == "sqlite" {
+		maxOpenConns = 1
+		maxIdleConns = 1
+	}
+
 	sqlDB.SetMaxOpenConns(maxOpenConns)
 	sqlDB.SetMaxIdleConns(maxIdleConns)
 	sqlDB.SetConnMaxIdleTime(5 * time.Minute)

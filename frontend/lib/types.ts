@@ -284,6 +284,8 @@ export interface Service {
   path: string;
   target_url: string;
   tls_mode: TLSMode;
+  pass_host_header: boolean;
+  upstream_skip_verify: boolean;
   auth_policy: AuthPolicy;
   access_mode: AccessMode;
   allowed_roles: UserRole[];
@@ -474,6 +476,7 @@ export interface AuthConfigResponse {
   oidc_enabled: boolean;
   oidc_label: string;
   otp_enabled: boolean;
+  local_login_disabled: boolean;
   ui: AuthUISettings;
 }
 
@@ -542,6 +545,7 @@ export interface AuthSettings {
   oidc_provider_label: string;
   oidc_allow_email_linking: boolean;
   oidc_require_verified_email: boolean;
+  local_login_disabled: boolean;
   otp_enabled: boolean;
   otp_token_ttl_seconds: number;
   otp_request_limit: number;
@@ -615,6 +619,8 @@ export interface ServicePayload {
   path: string;
   target_url: string;
   tls_mode: TLSMode;
+  pass_host_header: boolean;
+  upstream_skip_verify: boolean;
   auth_policy: AuthPolicy;
   access_policy: AccessPolicy;
   use_group_policy: boolean;

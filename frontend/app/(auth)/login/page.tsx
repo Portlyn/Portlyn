@@ -55,6 +55,7 @@ function LoginContent() {
     oidc_enabled: false,
     oidc_label: "SSO",
     otp_enabled: true,
+    local_login_disabled: false,
     ui: mergeAuthUI()
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -233,7 +234,7 @@ function LoginContent() {
                 {useRecoveryCode ? "Use authenticator code instead" : "Use a recovery code instead"}
               </Button>
             </Stack>
-          ) : (
+          ) : authConfig.local_login_disabled ? null : (
           <Stack gap="sm">
             <TextInput label="Email" value={email} onChange={(event) => setEmail(event.currentTarget.value)} styles={fields} />
             <PasswordInput label="Password" value={password} onChange={(event) => setPassword(event.currentTarget.value)} styles={fields} />
@@ -248,14 +249,14 @@ function LoginContent() {
 
           {authConfig.oidc_enabled && !mfaToken ? (
             <>
-              <Divider label="or" labelPosition="center" />
+              {!authConfig.local_login_disabled ? <Divider label="or" labelPosition="center" /> : null}
               <Button loading={isOIDCSubmitting} onClick={handleOIDC} style={buttonStyle(ui)}>
                 {ui.login_oidc_label || `Continue with ${authConfig.oidc_label || "SSO"}`}
               </Button>
             </>
           ) : null}
 
-          {authConfig.otp_enabled && !mfaToken ? (
+          {authConfig.otp_enabled && !authConfig.local_login_disabled && !mfaToken ? (
             <>
               <Divider label="One-time code" labelPosition="center" />
               <Stack gap="sm">

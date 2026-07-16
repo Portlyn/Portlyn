@@ -380,6 +380,10 @@ func (s *Server) handleLogin(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 			writeErrorRequest(w, r, stdhttp.StatusUnauthorized, "invalid_credentials", "invalid email or password")
 			return
 		}
+		if errors.Is(err, auth.ErrLocalLoginDisabled) {
+			writeErrorRequest(w, r, stdhttp.StatusForbidden, "local_login_disabled", "password login is disabled; sign in with SSO")
+			return
+		}
 		if errors.Is(err, auth.ErrRateLimited) {
 			writeErrorRequest(w, r, stdhttp.StatusTooManyRequests, "rate_limited", "too many login attempts")
 			return
@@ -449,7 +453,7 @@ func (s *Server) handleDismissBootstrap(w stdhttp.ResponseWriter, r *stdhttp.Req
 
 func (s *Server) decodeAndValidate(w stdhttp.ResponseWriter, r *stdhttp.Request, target any) bool {
 	if err := decodeStrictJSON(r, target); err != nil {
-		writeErrorRequest(w, r, stdhttp.StatusBadRequest, "invalid_json", "request body is not valid JSON")
+		writeErrorRequest(w, r, stdhttp.StatusBadRequest, "invalid_json", describeJSONError(err))
 		return false
 	}
 	if err := s.validate.Struct(target); err != nil {

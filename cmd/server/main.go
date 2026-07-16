@@ -57,6 +57,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "token":
+			if err := runTokenSubcommand(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "token:", err)
+				os.Exit(1)
+			}
+			return
 		case "config":
 			if len(os.Args) > 2 && os.Args[2] == "check" {
 				if err := runDoctor(os.Args[3:]); err != nil {
@@ -248,6 +254,7 @@ func main() {
 		)
 	}
 	bootstrapAdminCertificate(context.Background(), cfg, domainStore, certificateStore, dnsProviderStore, logger)
+	ensureServiceCertificates(context.Background(), cfg, serviceStore, certificateStore, dnsProviderStore, logger)
 	auditSink := audit.NewAsyncSink(auditStore, cfg.AuditBufferSize, cfg.AuditBatchSize, cfg.AuditFlushInterval, cfg.AuditDropPolicy, logger)
 	auditLogger := audit.NewLogger(auditSink)
 	auditWebhookStore := store.NewAuditWebhookStore(db)
@@ -530,6 +537,7 @@ Usage:
   portlyn doctor        validate the full environment and list every issue with a fix hint
   portlyn config check  alias for 'portlyn doctor'
   portlyn settings sync apply env values for env-controlled settings to the database
+  portlyn token create  create an API token from the CLI (flags: --name, --role, --expires-days)
   portlyn update        download, verify and install the latest release (flags: --check, --version, --no-restart, --unit)
   portlyn verify-release verify a release signature in-process (--checksums, --bundle, --asset, --asset-name)
   portlyn version       print version and exit

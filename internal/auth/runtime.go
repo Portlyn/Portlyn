@@ -124,10 +124,11 @@ func (s *Service) CurrentAuthConfig(ctx context.Context) map[string]any {
 	oidcCfg := s.currentOIDCConfig(ctx)
 	otpCfg := s.currentOTPConfig(ctx)
 	return map[string]any{
-		"oidc_enabled": oidcCfg.Enabled,
-		"oidc_label":   oidcCfg.DefaultProviderLabel,
-		"otp_enabled":  otpCfg.Enabled,
-		"ui":           s.currentAuthUI(ctx),
+		"oidc_enabled":         oidcCfg.Enabled,
+		"oidc_label":           oidcCfg.DefaultProviderLabel,
+		"otp_enabled":          otpCfg.Enabled,
+		"local_login_disabled": s.localLoginDisabled(ctx),
+		"ui":                   s.currentAuthUI(ctx),
 	}
 }
 

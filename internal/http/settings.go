@@ -138,6 +138,9 @@ func (s *Server) handleUpdateAuthSettings(w stdhttp.ResponseWriter, r *stdhttp.R
 	if req.OIDCRequireVerifiedEmail != nil {
 		item.OIDCRequireVerifiedEmail = *req.OIDCRequireVerifiedEmail
 	}
+	if req.LocalLoginDisabled != nil {
+		item.LocalLoginDisabled = *req.LocalLoginDisabled
+	}
 	if req.OTPEnabled != nil {
 		item.OTPEnabled = *req.OTPEnabled
 	}
@@ -251,6 +254,7 @@ func (s *Server) authSettingsResponse(item *domain.AppSettings) map[string]any {
 		"oidc_provider_label":            item.OIDCProviderLabel,
 		"oidc_allow_email_linking":       item.OIDCAllowEmailLinking,
 		"oidc_require_verified_email":    item.OIDCRequireVerifiedEmail,
+		"local_login_disabled":           item.LocalLoginDisabled,
 		"otp_enabled":                    item.OTPEnabled,
 		"otp_token_ttl_seconds":          item.OTPTokenTTLSeconds,
 		"otp_request_limit":              item.OTPRequestLimit,
@@ -308,10 +312,24 @@ func authUIResponse(item *domain.AppSettings) map[string]any {
 	}
 }
 
+func oidcCallbackSuggestion(frontendBase string) string {
+	base := strings.TrimRight(strings.TrimSpace(frontendBase), "/")
+	if base == "" {
+		return "https://your-domain/oidc/callback"
+	}
+	return base + "/oidc/callback"
+}
+
 func (s *Server) validateAuthSettings(item *domain.AppSettings) string {
+	if item.LocalLoginDisabled && !item.OIDCEnabled {
+		return "local login can only be disabled while OIDC is enabled, otherwise nobody could sign in (break-glass still works)"
+	}
 	if item.OIDCEnabled {
 		if strings.TrimSpace(item.OIDCIssuerURL) == "" || strings.TrimSpace(item.OIDCClientID) == "" || strings.TrimSpace(item.OIDCClientSecret) == "" || strings.TrimSpace(item.OIDCRedirectURL) == "" {
 			return "enabled oidc requires issuer url, client id, client secret and redirect url"
+		}
+		if strings.Contains(strings.ToLower(item.OIDCRedirectURL), "/api/") {
+			return "oidc redirect url points at an API path; use the dashboard callback instead, e.g. " + oidcCallbackSuggestion(s.cfg.FrontendBaseURL)
 		}
 		if !s.cfg.AllowInsecureDevMode {
 			if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(item.OIDCIssuerURL)), "https://") {

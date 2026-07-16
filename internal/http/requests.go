@@ -162,6 +162,8 @@ type createServiceRequest struct {
 	Path               string                    `json:"path" validate:"required,max=255"`
 	TargetURL          string                    `json:"target_url" validate:"required,url"`
 	TLSMode            string                    `json:"tls_mode" validate:"required,oneof=offload passthrough none"`
+	PassHostHeader     bool                      `json:"pass_host_header"`
+	UpstreamSkipVerify bool                      `json:"upstream_skip_verify"`
 	AuthPolicy         string                    `json:"auth_policy" validate:"omitempty,oneof=public authenticated admin_only"`
 	AccessPolicy       accessPolicyRequest       `json:"access_policy" validate:"required"`
 	UseGroupPolicy     bool                      `json:"use_group_policy"`
@@ -185,6 +187,8 @@ type updateServiceRequest struct {
 	Path               *string                    `json:"path" validate:"omitempty,max=255"`
 	TargetURL          *string                    `json:"target_url" validate:"omitempty,url"`
 	TLSMode            *string                    `json:"tls_mode" validate:"omitempty,oneof=offload passthrough none"`
+	PassHostHeader     *bool                      `json:"pass_host_header"`
+	UpstreamSkipVerify *bool                      `json:"upstream_skip_verify"`
 	AuthPolicy         *string                    `json:"auth_policy" validate:"omitempty,oneof=public authenticated admin_only"`
 	AccessPolicy       *accessPolicyRequest       `json:"access_policy"`
 	UseGroupPolicy     *bool                      `json:"use_group_policy"`
@@ -318,6 +322,7 @@ type updateAuthSettingsRequest struct {
 	OIDCProviderLabel         *string   `json:"oidc_provider_label" validate:"omitempty,max=255"`
 	OIDCAllowEmailLinking     *bool     `json:"oidc_allow_email_linking"`
 	OIDCRequireVerifiedEmail  *bool     `json:"oidc_require_verified_email"`
+	LocalLoginDisabled        *bool     `json:"local_login_disabled"`
 	OTPEnabled                *bool     `json:"otp_enabled"`
 	OTPTokenTTLSeconds        *int      `json:"otp_token_ttl_seconds" validate:"omitempty,gte=60,lte=86400"`
 	OTPRequestLimit           *int      `json:"otp_request_limit" validate:"omitempty,gte=1,lte=100"`

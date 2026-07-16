@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -175,4 +176,22 @@ func decodeStrictJSON(r *http.Request, target any) error {
 		return fmt.Errorf("request body must contain a single json document")
 	}
 	return nil
+}
+
+func describeJSONError(err error) string {
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		if typeErr.Field != "" {
+			return fmt.Sprintf("field %q must be a valid %s", typeErr.Field, typeErr.Type.String())
+		}
+		return fmt.Sprintf("a value has the wrong type (want %s)", typeErr.Type.String())
+	}
+	msg := err.Error()
+	if rest, ok := strings.CutPrefix(msg, "json: unknown field "); ok {
+		return "unknown field " + rest
+	}
+	if msg == "request body must contain a single json document" {
+		return msg
+	}
+	return "request body is not valid JSON"
 }

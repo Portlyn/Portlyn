@@ -182,6 +182,22 @@ export function ServiceForm({
                   onChange={(value) => update("tls_mode", (value || "offload") as TLSMode)}
                 />
               </Grid.Col>
+              <Grid.Col span={12}>
+                <Switch
+                  label="Pass Host header to the upstream"
+                  description="Send the request's Host (the public hostname) instead of the target's host. Needed for name-based virtual host backends."
+                  checked={values.pass_host_header}
+                  onChange={(event) => update("pass_host_header", event.currentTarget.checked)}
+                />
+              </Grid.Col>
+              <Grid.Col span={12}>
+                <Switch
+                  label="Skip upstream TLS verification"
+                  description="Do not verify the backend's TLS certificate. Use only for a backend with a self-signed or otherwise untrusted cert on your own network."
+                  checked={values.upstream_skip_verify}
+                  onChange={(event) => update("upstream_skip_verify", event.currentTarget.checked)}
+                />
+              </Grid.Col>
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <MultiSelect
                   label="Service groups"
