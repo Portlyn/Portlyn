@@ -85,6 +85,7 @@ func (s *Service) currentOIDCConfig(ctx context.Context) config.OIDCConfig {
 		AllowEmailLinking:    settings.OIDCAllowEmailLinking,
 		RequireVerifiedEmail: settings.OIDCRequireVerifiedEmail,
 		ManageRoles:          s.fallbackOIDC.ManageRoles,
+		AllowPrivateIssuer:   s.fallbackOIDC.AllowPrivateIssuer,
 	}
 }
 
