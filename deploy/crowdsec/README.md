@@ -4,8 +4,8 @@ Portlyn has a built-in CrowdSec bouncer (the `portlyn-crowdsec` local API client
 
 ## What's here
 
-- `acquis.yaml` — tells CrowdSec where Portlyn's logs are. Reads structured journald, so there's no syslog prefix to strip.
-- `parsers/s01-parse/portlyn-logs.yaml` — pulls `source_ip`, `status`, `path`, `outcome` out of Portlyn's JSON.
+- `acquis.yaml` — tells CrowdSec where Portlyn's logs are (journald by default).
+- `parsers/s01-parse/portlyn-logs.yaml` — strips the syslog prefix the journalctl datasource adds, then pulls `source_ip`, `status`, `path`, `outcome` out of the JSON.
 - `scenarios/portlyn-http-404-scan.yaml` — bans an IP that walks a lot of distinct 404s. Ignores blocked requests so a ban can't feed itself.
 
 ## Install
@@ -23,6 +23,19 @@ Check it sees the logs and the scenario loads:
 sudo cscli metrics          # acquisition + parser + scenario counts
 sudo cscli scenarios list | grep portlyn
 ```
+
+Verify parsing against a **live** feed, not `cscli explain`. The journalctl
+datasource prepends a syslog prefix that `cscli explain --file` never sees, so
+explain can pass while the live parser extracts nothing. Generate a 404 against a
+service and watch the parser bucket fill:
+
+```bash
+curl -s -o /dev/null https://yourservice.example.com/this-does-not-exist
+sudo cscli metrics | grep -A2 portlyn/proxy-logs   # parsed count should climb
+```
+
+If parsed stays at zero but acquisition is reading lines, the prefix strip is the
+first thing to check.
 
 ## Real client IPs
 

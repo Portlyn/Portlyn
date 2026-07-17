@@ -1,9 +1,9 @@
 # CrowdSec acquisition for Portlyn.
 #
-# Reads Portlyn's structured JSON straight from journald. The journal's MESSAGE
-# field is the raw stdout line, i.e. clean JSON with no "Jul 16 host portlyn[pid]:"
-# syslog prefix. That prefix only shows up in `journalctl`'s text formatting, not
-# in the structured field CrowdSec reads here, so the parser stays simple.
+# Heads up: the journalctl datasource hands the parser a line WITH the syslog
+# prefix ("Jul 16 host portlyn[pid]: {json}"), not the bare JSON. The Portlyn
+# parser strips that back to valid JSON, so this works, but `cscli explain`
+# feeds clean JSON and won't show the prefix. Test against a live feed.
 #
 # Copy to /etc/crowdsec/acquis.d/portlyn.yaml and restart crowdsec.
 source: journalctl
@@ -12,8 +12,8 @@ journalctl_filter:
 labels:
   type: portlyn
 ---
-# Alternative: if you run Portlyn in Docker or point it at a log file, read the
-# file instead and drop the journald block above. The JSON is already clean.
+# Alternative: read a plain-JSON file instead (Docker, or Portlyn pointed at a
+# log file). No syslog prefix, so the parser's strip is simply a no-op.
 # source: file
 # filenames:
 #   - /var/log/portlyn/portlyn.log

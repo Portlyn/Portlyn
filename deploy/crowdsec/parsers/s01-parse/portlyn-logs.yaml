@@ -2,23 +2,33 @@ onsuccess: next_stage
 filter: "evt.Line.Labels.type == 'portlyn' && evt.Line.Raw contains '\"kind\":\"proxy_access\"'"
 name: portlyn/proxy-logs
 description: "Parse Portlyn JSON proxy access logs"
+# CrowdSec's journalctl datasource prepends the syslog prefix to the raw line:
+#   "Jul 16 22:47:55 host portlyn[1348]: {\"time\":...}"
+# so evt.Line.Raw is NOT valid JSON and JsonExtract(evt.Line.Raw, ...) returns "".
+# `cscli explain --file` feeds clean JSON and hides this, hence the trap. The
+# sub-node below rebuilds the JSON body from the first '{' to the end. That also
+# survives a '{' inside a string value (e.g. user_agent) and is a no-op when the
+# line is already clean JSON. The parent statics then extract from json_body.
+# NOTE: verify against a live journald feed, not only `cscli explain`.
+nodes:
+  - filter: "true"
+    statics:
+      - meta: json_body
+        expression: '"{" + join(Split(evt.Line.Raw, "{")[1:], "{")'
 statics:
   - meta: service
     value: portlyn
   - meta: log_type
     value: portlyn_proxy_access
   - meta: source_ip
-    expression: JsonExtract(evt.Line.Raw, "remote_addr")
+    expression: JsonExtract(evt.Meta.json_body, "remote_addr")
   - meta: http_status
-    expression: JsonExtract(evt.Line.Raw, "status")
+    expression: JsonExtract(evt.Meta.json_body, "status")
   - meta: http_path
-    expression: JsonExtract(evt.Line.Raw, "path")
+    expression: JsonExtract(evt.Meta.json_body, "path")
   - meta: http_host
-    expression: JsonExtract(evt.Line.Raw, "host")
+    expression: JsonExtract(evt.Meta.json_body, "host")
   - meta: proxy_outcome
-    expression: JsonExtract(evt.Line.Raw, "outcome")
+    expression: JsonExtract(evt.Meta.json_body, "outcome")
   - meta: proxy_reason
-    expression: JsonExtract(evt.Line.Raw, "reason")
-# Strip a leading syslog prefix if the line ever arrives pre-formatted
-# (e.g. read via `journalctl -o short` instead of the structured MESSAGE).
-# Falls back cleanly when the line already starts with '{'.
+    expression: JsonExtract(evt.Meta.json_body, "reason")
