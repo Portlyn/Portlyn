@@ -1027,6 +1027,9 @@ func (m *Manager) enforceNetworkRules(w http.ResponseWriter, r *http.Request, ro
 			}
 		}
 		if blocked, reason := m.reputation.IsBlocked(net.IP(clientIP.AsSlice())); blocked {
+			if m.metrics != nil {
+				m.metrics.ObserveReputationBlock()
+			}
 			writeProxyError(w, http.StatusForbidden, "forbidden", "reputation block: "+reason)
 			return false
 		}

@@ -182,6 +182,10 @@ func (m *Metrics) ObserveRateLimit(keyspace string) {
 	m.registry.IncCounter("portlyn_rate_limit_hits_total", "Rate limit hits by keyspace.", map[string]string{"keyspace": defaultLabel(keyspace, "unknown")}, 1)
 }
 
+func (m *Metrics) ObserveReputationBlock() {
+	m.registry.IncCounter("portlyn_reputation_blocked_total", "Requests blocked by the reputation (CrowdSec) engine.", map[string]string{}, 1)
+}
+
 func (m *Metrics) ObserveAuthAttempt(method, outcome string) {
 	labels := map[string]string{"method": defaultLabel(method, "unknown"), "outcome": defaultLabel(outcome, "unknown")}
 	m.registry.IncCounter("portlyn_auth_attempts_total", "Authentication attempts by method and outcome.", labels, 1)
