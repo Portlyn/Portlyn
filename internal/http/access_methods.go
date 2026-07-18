@@ -1,8 +1,10 @@
 package http
 
 import (
+	"fmt"
 	"strings"
 
+	"portlyn/internal/acme"
 	"portlyn/internal/auth"
 	"portlyn/internal/domain"
 	"portlyn/internal/proxy"
@@ -119,9 +121,10 @@ func publicAccessMethodConfig(method string, value domain.JSONObject) domain.JSO
 	return out
 }
 
-func serviceResponse(item domain.Service, health serviceHealthInfo) map[string]any {
+func serviceResponse(item domain.Service, health serviceHealthInfo, cert acme.CertInfo) map[string]any {
 	policy, method, effectiveConfig, inheritedFrom := proxy.EffectiveAccessForService(item)
 	riskScore, riskReasons := serviceRiskAssessment(item, policy.AccessMode, method, effectiveConfig, nil)
+	riskScore, riskReasons = applyCertRisk(riskScore, riskReasons, cert)
 	return map[string]any{
 		"id":                             item.ID,
 		"name":                           item.Name,
@@ -151,6 +154,11 @@ func serviceResponse(item domain.Service, health serviceHealthInfo) map[string]a
 		"service_overrides_group":        strings.TrimSpace(item.AccessMethod) != "",
 		"risk_score":                     riskScore,
 		"risk_reasons":                   riskReasons,
+		"active_cert_source":             cert.Source,
+		"active_cert_issuer":             cert.Issuer,
+		"active_cert_expires":            cert.ExpiresAt,
+		"active_cert_is_bootstrap":       cert.IsBootstrap,
+		"active_cert_days_remaining":     cert.DaysRemaining,
 		"ip_allowlist":                   item.IPAllowlist,
 		"ip_blocklist":                   item.IPBlocklist,
 		"allowed_countries":              item.AllowedCountries,
@@ -258,6 +266,36 @@ func serviceRiskAssessment(item domain.Service, accessMode, method string, confi
 		return "medium", reasons
 	default:
 		return "low", reasons
+	}
+}
+
+func escalateRisk(label string) string {
+	switch label {
+	case "low":
+		return "medium"
+	case "medium":
+		return "high"
+	default:
+		return "high"
+	}
+}
+
+func applyCertRisk(label string, reasons []string, cert acme.CertInfo) (string, []string) {
+	switch {
+	case cert.IsBootstrap || cert.Source == acme.CertSourceBootstrap:
+		reasons = append(reasons, "edge serving self-signed bootstrap certificate")
+		return escalateRisk(label), reasons
+	case cert.Source == acme.CertSourceNone:
+		reasons = append(reasons, "no edge certificate available")
+		return escalateRisk(label), reasons
+	case cert.ExpiresAt != nil && cert.DaysRemaining <= 14:
+		reasons = append(reasons, fmt.Sprintf("edge certificate expires in %dd", cert.DaysRemaining))
+		if cert.DaysRemaining <= 7 {
+			return escalateRisk(label), reasons
+		}
+		return label, reasons
+	default:
+		return label, reasons
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"portlyn/internal/acme"
 	"portlyn/internal/auth"
 	"portlyn/internal/domain"
 	"portlyn/internal/geoip"
@@ -332,6 +333,16 @@ func (s *Server) handleCreateDomain(w stdhttp.ResponseWriter, r *stdhttp.Request
 		return
 	}
 	_ = s.audit.Log(r.Context(), s.currentUserID(r), "create", "domain", &item.ID, item)
+
+	autoCert := req.AutoCertificate == nil || *req.AutoCertificate
+	if cert := s.autoIssueCertificateForDomain(r.Context(), item, req.DNSProviderID, autoCert); cert != nil {
+		_ = s.audit.Log(r.Context(), s.currentUserID(r), "auto_create", "certificate", &cert.ID, map[string]any{
+			"certificate_id": cert.ID,
+			"domain":         item.Name,
+			"trigger":        "domain_create",
+		})
+		w.Header().Set("X-Portlyn-Auto-Certificate-Id", strconv.FormatUint(uint64(cert.ID), 10))
+	}
 	writeJSON(w, stdhttp.StatusCreated, item)
 }
 
@@ -472,6 +483,12 @@ func (s *Server) handleCreateCertificate(w stdhttp.ResponseWriter, r *stdhttp.Re
 	if err := s.certificates.Update(r.Context(), item); err != nil {
 		s.internalError(w, err)
 		return
+	}
+	if parseBoolQuery(r, "sync") {
+		if _, err := s.acme.SyncCertificate(r.Context(), item); err != nil {
+			s.internalError(w, err)
+			return
+		}
 	}
 	item, _ = s.certificates.GetByID(r.Context(), item.ID)
 	if item != nil {
@@ -619,10 +636,11 @@ func (s *Server) handleListServices(w stdhttp.ResponseWriter, r *stdhttp.Request
 	healthByServiceID := s.evaluateServicesHealth(r.Context(), visible)
 	response := make([]map[string]any, 0, len(visible))
 	for _, item := range visible {
+		cert := s.certInfoForService(r.Context(), item)
 		if isViewer {
-			response = append(response, viewerServiceResponse(item, healthByServiceID[item.ID]))
+			response = append(response, viewerServiceResponse(item, healthByServiceID[item.ID], cert))
 		} else {
-			response = append(response, serviceResponse(item, healthByServiceID[item.ID]))
+			response = append(response, serviceResponse(item, healthByServiceID[item.ID], cert))
 		}
 	}
 	writeJSON(w, stdhttp.StatusOK, response)
@@ -653,6 +671,13 @@ func (s *Server) evaluateServicesHealth(ctx context.Context, items []domain.Serv
 	}
 	wg.Wait()
 	return results
+}
+
+func (s *Server) certInfoForService(ctx context.Context, item domain.Service) acme.CertInfo {
+	if s.acme == nil {
+		return acme.CertInfo{Source: acme.CertSourceNone, Issuer: "none"}
+	}
+	return s.acme.ActiveCertInfo(ctx, domain.ServiceHost(item))
 }
 
 func (s *Server) evaluateServiceHealth(ctx context.Context, item domain.Service) serviceHealthInfo {
@@ -759,9 +784,10 @@ func restrictedPolicyAllowsUser(user *domain.User, groupIDs []uint, policy domai
 	return len(policy.AllowedRoles) == 0 && len(policy.AllowedGroups) == 0
 }
 
-func viewerServiceResponse(item domain.Service, health serviceHealthInfo) map[string]any {
+func viewerServiceResponse(item domain.Service, health serviceHealthInfo, cert acme.CertInfo) map[string]any {
 	policy, method, effectiveConfig, inheritedFrom := proxy.EffectiveAccessForService(item)
 	riskScore, riskReasons := serviceRiskAssessment(item, policy.AccessMode, method, effectiveConfig, nil)
+	riskScore, riskReasons = applyCertRisk(riskScore, riskReasons, cert)
 	return map[string]any{
 		"id":                             item.ID,
 		"name":                           item.Name,
@@ -787,6 +813,11 @@ func viewerServiceResponse(item domain.Service, health serviceHealthInfo) map[st
 		"service_overrides_group":        strings.TrimSpace(item.AccessMethod) != "",
 		"risk_score":                     riskScore,
 		"risk_reasons":                   riskReasons,
+		"active_cert_source":             cert.Source,
+		"active_cert_issuer":             cert.Issuer,
+		"active_cert_expires":            cert.ExpiresAt,
+		"active_cert_is_bootstrap":       cert.IsBootstrap,
+		"active_cert_days_remaining":     cert.DaysRemaining,
 		"ip_allowlist":                   []string{},
 		"ip_blocklist":                   []string{},
 		"access_windows":                 []domain.AccessWindow{},
@@ -861,7 +892,7 @@ func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	}
 	_ = s.audit.Log(r.Context(), s.currentUserID(r), "create", "service", &deployed.ID, deployed)
 
-	writeJSON(w, stdhttp.StatusCreated, serviceResponse(*deployed, s.evaluateServiceHealth(r.Context(), *deployed)))
+	writeJSON(w, stdhttp.StatusCreated, serviceResponse(*deployed, s.evaluateServiceHealth(r.Context(), *deployed), s.certInfoForService(r.Context(), *deployed)))
 }
 
 func (s *Server) handleGetService(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -869,7 +900,7 @@ func (s *Server) handleGetService(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 	if !ok {
 		return
 	}
-	writeJSON(w, stdhttp.StatusOK, serviceResponse(*item, s.evaluateServiceHealth(r.Context(), *item)))
+	writeJSON(w, stdhttp.StatusOK, serviceResponse(*item, s.evaluateServiceHealth(r.Context(), *item), s.certInfoForService(r.Context(), *item)))
 }
 
 func (s *Server) handleUpdateService(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -991,7 +1022,7 @@ func (s *Server) handleUpdateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	}
 	_ = s.audit.Log(r.Context(), s.currentUserID(r), "update", "service", &deployed.ID, deployed)
 
-	writeJSON(w, stdhttp.StatusOK, serviceResponse(*deployed, s.evaluateServiceHealth(r.Context(), *deployed)))
+	writeJSON(w, stdhttp.StatusOK, serviceResponse(*deployed, s.evaluateServiceHealth(r.Context(), *deployed), s.certInfoForService(r.Context(), *deployed)))
 }
 
 var targetHostResolver func(host string) ([]netip.Addr, error)
@@ -1246,6 +1277,15 @@ func parseIntQuery(r *stdhttp.Request, key string, fallback int) int {
 		return fallback
 	}
 	return value
+}
+
+func parseBoolQuery(r *stdhttp.Request, key string) bool {
+	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get(key))) {
+	case "1", "true", "yes", "wait":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeStringList(values []string) domain.JSONStringSlice {

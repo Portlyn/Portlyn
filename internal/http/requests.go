@@ -68,12 +68,14 @@ type heartbeatNodeRequest struct {
 }
 
 type createDomainRequest struct {
-	Name        string   `json:"name" validate:"required,hostname_rfc1123"`
-	Type        string   `json:"type" validate:"required,oneof=root subdomain"`
-	Provider    string   `json:"provider" validate:"max=255"`
-	Notes       string   `json:"notes"`
-	IPAllowlist []string `json:"ip_allowlist"`
-	IPBlocklist []string `json:"ip_blocklist"`
+	Name            string   `json:"name" validate:"required,hostname_rfc1123"`
+	Type            string   `json:"type" validate:"required,oneof=root subdomain"`
+	Provider        string   `json:"provider" validate:"max=255"`
+	Notes           string   `json:"notes"`
+	IPAllowlist     []string `json:"ip_allowlist"`
+	IPBlocklist     []string `json:"ip_blocklist"`
+	AutoCertificate *bool    `json:"auto_certificate"`
+	DNSProviderID   *uint    `json:"dns_provider_id" validate:"omitempty,gt=0"`
 }
 
 type updateDomainRequest struct {

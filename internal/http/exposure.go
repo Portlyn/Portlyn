@@ -15,7 +15,7 @@ func (s *Server) handleRedeployService(w stdhttp.ResponseWriter, r *stdhttp.Requ
 		return
 	}
 	_ = s.audit.LogRequest(r.Context(), r, s.currentUserID(r), "redeploy", "service", &id, nil)
-	writeJSON(w, stdhttp.StatusOK, serviceResponse(*deployed, s.evaluateServiceHealth(r.Context(), *deployed)))
+	writeJSON(w, stdhttp.StatusOK, serviceResponse(*deployed, s.evaluateServiceHealth(r.Context(), *deployed), s.certInfoForService(r.Context(), *deployed)))
 }
 
 func (s *Server) handleListExposureReports(w stdhttp.ResponseWriter, r *stdhttp.Request) {
