@@ -190,7 +190,7 @@ func (s *Server) Router() stdhttp.Handler {
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   s.cfg.AllowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Refresh-Token"},
 		AllowCredentials: true,
 		MaxAge:           300,
@@ -316,6 +316,7 @@ func (s *Server) Router() stdhttp.Handler {
 				r.Delete("/nodes/{id}", s.handleDeleteNode)
 
 				r.Post("/domains", s.handleCreateDomain)
+				r.Put("/domains", s.handleUpsertDomain)
 				r.Patch("/domains/{id}", s.handleUpdateDomain)
 				r.Delete("/domains/{id}", s.handleDeleteDomain)
 
@@ -332,6 +333,7 @@ func (s *Server) Router() stdhttp.Handler {
 				r.Post("/dns-providers/{id}/test", s.handleTestDNSProvider)
 
 				r.Post("/services", s.handleCreateService)
+				r.Put("/services", s.handleUpsertService)
 				r.Patch("/services/{id}", s.handleUpdateService)
 				r.Delete("/services/{id}", s.handleDeleteService)
 				r.Get("/node-enrollment-tokens", s.handleListNodeEnrollmentTokens)

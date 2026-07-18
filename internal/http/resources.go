@@ -881,32 +881,7 @@ func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		return
 	}
 
-	item := &domain.Service{
-		Name:                 req.Name,
-		DomainID:             req.DomainID,
-		Subdomain:            subdomain,
-		Path:                 req.Path,
-		TargetURL:            req.TargetURL,
-		TLSMode:              req.TLSMode,
-		PassHostHeader:       req.PassHostHeader,
-		UpstreamSkipVerify:   req.UpstreamSkipVerify,
-		UpstreamCAPEM:        strings.TrimSpace(req.UpstreamCAPEM),
-		AuthPolicy:           req.AuthPolicy,
-		AccessMode:           req.AccessPolicy.AccessMode,
-		AllowedRoles:         normalizeStringList(req.AccessPolicy.AllowedRoles),
-		AllowedGroups:        domain.JSONUintSlice(req.AccessPolicy.AllowedGroups),
-		AllowedServiceGroups: domain.JSONUintSlice(req.AccessPolicy.AllowedServiceGroups),
-		UseGroupPolicy:       req.UseGroupPolicy,
-		AccessMethod:         normalizeOptionalAccessMethod(req.AccessMethod),
-		AccessMethodConfig:   buildAccessMethodConfig(req.AccessMethod, req.AccessMethodConfig, nil),
-		AccessMessage:        strings.TrimSpace(req.AccessMessage),
-		IPAllowlist:          normalizeStringList(req.IPAllowlist),
-		IPBlocklist:          normalizeStringList(req.IPBlocklist),
-		AllowedCountries:     normalizeCountryList(req.AllowedCountries),
-		BlockedCountries:     normalizeCountryList(req.BlockedCountries),
-		AccessWindows:        toAccessWindows(req.AccessWindows),
-		NodeID:               req.NodeID,
-	}
+	item := buildServiceFromCreateRequest(req, subdomain, nil)
 	if err := validateServiceTargetURL(item.TargetURL); err != nil {
 		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
 		return
@@ -932,6 +907,35 @@ func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	_ = s.audit.Log(r.Context(), s.currentUserID(r), "create", "service", &deployed.ID, deployed)
 
 	writeJSON(w, stdhttp.StatusCreated, serviceResponse(*deployed, s.evaluateServiceHealth(r.Context(), *deployed), s.certInfoForService(r.Context(), *deployed)))
+}
+
+func buildServiceFromCreateRequest(req createServiceRequest, subdomain string, existingConfig domain.JSONObject) *domain.Service {
+	return &domain.Service{
+		Name:                 req.Name,
+		DomainID:             req.DomainID,
+		Subdomain:            subdomain,
+		Path:                 req.Path,
+		TargetURL:            req.TargetURL,
+		TLSMode:              req.TLSMode,
+		PassHostHeader:       req.PassHostHeader,
+		UpstreamSkipVerify:   req.UpstreamSkipVerify,
+		UpstreamCAPEM:        strings.TrimSpace(req.UpstreamCAPEM),
+		AuthPolicy:           req.AuthPolicy,
+		AccessMode:           req.AccessPolicy.AccessMode,
+		AllowedRoles:         normalizeStringList(req.AccessPolicy.AllowedRoles),
+		AllowedGroups:        domain.JSONUintSlice(req.AccessPolicy.AllowedGroups),
+		AllowedServiceGroups: domain.JSONUintSlice(req.AccessPolicy.AllowedServiceGroups),
+		UseGroupPolicy:       req.UseGroupPolicy,
+		AccessMethod:         normalizeOptionalAccessMethod(req.AccessMethod),
+		AccessMethodConfig:   buildAccessMethodConfig(req.AccessMethod, req.AccessMethodConfig, existingConfig),
+		AccessMessage:        strings.TrimSpace(req.AccessMessage),
+		IPAllowlist:          normalizeStringList(req.IPAllowlist),
+		IPBlocklist:          normalizeStringList(req.IPBlocklist),
+		AllowedCountries:     normalizeCountryList(req.AllowedCountries),
+		BlockedCountries:     normalizeCountryList(req.BlockedCountries),
+		AccessWindows:        toAccessWindows(req.AccessWindows),
+		NodeID:               req.NodeID,
+	}
 }
 
 func (s *Server) handleGetService(w stdhttp.ResponseWriter, r *stdhttp.Request) {

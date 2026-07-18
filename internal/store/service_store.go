@@ -69,6 +69,25 @@ func (s *ServiceStore) ReplaceServiceGroups(ctx context.Context, serviceID uint,
 	return s.db.WithContext(ctx).Model(service).Association("ServiceGroups").Replace(groups)
 }
 
+// FindByRoute resolves a service by its logical identity: the domain it belongs
+// to, its subdomain, and its path. Used for idempotent upserts by FQDN.
+func (s *ServiceStore) FindByRoute(ctx context.Context, domainID uint, subdomain, path string) (*domain.Service, error) {
+	var item domain.Service
+	err := s.db.WithContext(ctx).
+		Preload("Domain").
+		Preload("ServiceGroups").
+		Preload("Node").
+		Where("domain_id = ? AND subdomain = ? AND path = ?", domainID, subdomain, path).
+		First(&item).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (s *ServiceStore) ListByDomainID(ctx context.Context, domainID uint) ([]domain.Service, error) {
 	var items []domain.Service
 	err := s.db.WithContext(ctx).
