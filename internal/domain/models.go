@@ -411,6 +411,7 @@ type Service struct {
 	PassHostHeader       bool             `gorm:"not null;default:false" json:"pass_host_header"`
 	UpstreamSkipVerify   bool             `gorm:"not null;default:false" json:"upstream_skip_verify"`
 	UpstreamCAPEM        string           `gorm:"type:text" json:"upstream_ca_pem,omitempty"`
+	UpstreamServerName   string           `gorm:"size:255" json:"upstream_server_name,omitempty"`
 	AuthPolicy           string           `gorm:"size:64;not null;default:authenticated" json:"auth_policy"`
 	AccessMode           string           `gorm:"size:64;not null;default:authenticated" json:"access_mode"`
 	AllowedRoles         JSONStringSlice  `gorm:"type:text;not null;default:'[]'" json:"allowed_roles"`

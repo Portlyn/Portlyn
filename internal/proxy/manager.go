@@ -656,12 +656,16 @@ func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
 	if viaNode && m.tunnelTransport != nil && m.tunnelDialer != nil && m.tunnelDialer.Started() {
 		chosenTransport = m.tunnelTransport
 	}
-	if ca := strings.TrimSpace(config.Service.UpstreamCAPEM); ca != "" {
-		if pinned := pinnedUpstreamTransport(chosenTransport, ca); pinned != nil {
+	upstreamServerName := upstreamTLSServerName(config.Service, config.TargetURL)
+	switch {
+	case strings.TrimSpace(config.Service.UpstreamCAPEM) != "":
+		if pinned := pinnedUpstreamTransport(chosenTransport, strings.TrimSpace(config.Service.UpstreamCAPEM), upstreamServerName); pinned != nil {
 			chosenTransport = pinned
 		}
-	} else if config.Service.UpstreamSkipVerify {
+	case config.Service.UpstreamSkipVerify:
 		chosenTransport = insecureUpstreamTransport(chosenTransport)
+	case viaNode && upstreamServerName != "" && target.Scheme == "https":
+		chosenTransport = serverNameUpstreamTransport(chosenTransport, upstreamServerName)
 	}
 	proxy := reverseProxyForTarget(target, chosenTransport, routePath, m.forwardedProto, m.authoritativeClientIP, config.Service.PassHostHeader)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
@@ -710,20 +714,44 @@ func insecureUpstreamTransport(base *http.Transport) *http.Transport {
 	return transport
 }
 
-func pinnedUpstreamTransport(base *http.Transport, caPEM string) *http.Transport {
+func pinnedUpstreamTransport(base *http.Transport, caPEM, serverName string) *http.Transport {
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM([]byte(caPEM)) {
 		return nil
 	}
+	transport := cloneTransportTLS(base)
+	transport.TLSClientConfig.RootCAs = pool
+	transport.TLSClientConfig.InsecureSkipVerify = false
+	if serverName != "" {
+		transport.TLSClientConfig.ServerName = serverName
+	}
+	return transport
+}
+
+func serverNameUpstreamTransport(base *http.Transport, serverName string) *http.Transport {
+	transport := cloneTransportTLS(base)
+	transport.TLSClientConfig.ServerName = serverName
+	return transport
+}
+
+func cloneTransportTLS(base *http.Transport) *http.Transport {
 	transport := base.Clone()
 	if transport.TLSClientConfig != nil {
 		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
 	} else {
 		transport.TLSClientConfig = &tls.Config{}
 	}
-	transport.TLSClientConfig.RootCAs = pool
-	transport.TLSClientConfig.InsecureSkipVerify = false
 	return transport
+}
+
+func upstreamTLSServerName(svc domain.Service, originalTargetURL string) string {
+	if override := strings.TrimSpace(svc.UpstreamServerName); override != "" {
+		return override
+	}
+	if u, err := url.Parse(strings.TrimSpace(originalTargetURL)); err == nil {
+		return u.Hostname()
+	}
+	return ""
 }
 
 func reverseProxyForTarget(target *url.URL, transport *http.Transport, routePath string, protoForRequest func(*http.Request) string, clientIPForRequest func(*http.Request) string, passHostHeader bool) *httputil.ReverseProxy {

@@ -144,9 +144,6 @@ func (m *Manager) PurgeCertificateData(ctx context.Context, names []string) erro
 	return firstErr
 }
 
-// SetStatusChangeHook registers a callback fired whenever SyncCertificate moves a
-// certificate to a different status (e.g. pending -> issued / failed). It powers
-// status-change events without coupling the manager to the audit/webhook layer.
 func (m *Manager) SetStatusChangeHook(hook func(ctx context.Context, cert *domain.Certificate, previousStatus string)) {
 	m.statusHook = hook
 }

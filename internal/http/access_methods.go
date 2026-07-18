@@ -178,10 +178,6 @@ func serviceResponse(item domain.Service, health serviceHealthInfo, cert acme.Ce
 	}
 }
 
-// accessPolicyResponse mirrors the nested access_policy object accepted on
-// create/update so a response can be round-tripped back into a request without
-// reshaping. The flat access_mode/allowed_* fields are kept alongside it for
-// backward compatibility.
 func accessPolicyResponse(accessMode string, roles domain.JSONStringSlice, groups, serviceGroups domain.JSONUintSlice) map[string]any {
 	return map[string]any{
 		"access_mode":            accessMode,
@@ -191,9 +187,6 @@ func accessPolicyResponse(accessMode string, roles domain.JSONStringSlice, group
 	}
 }
 
-// serviceTLSResponse disambiguates the two independent TLS legs the flat
-// tls_mode/upstream_skip_verify fields conflate: "edge" is the listener side
-// (what browsers connect to), "upstream" is the connection to target_url.
 func serviceTLSResponse(item domain.Service) map[string]any {
 	return map[string]any{
 		"edge": item.TLSMode,
@@ -201,6 +194,7 @@ func serviceTLSResponse(item domain.Service) map[string]any {
 			"scheme":      upstreamScheme(item.TargetURL),
 			"skip_verify": item.UpstreamSkipVerify,
 			"ca_pinned":   strings.TrimSpace(item.UpstreamCAPEM) != "",
+			"server_name": upstreamServerName(item),
 		},
 	}
 }

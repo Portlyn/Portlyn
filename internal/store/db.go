@@ -2,20 +2,42 @@ package store
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"runtime"
 	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 
 	"portlyn/internal/config"
 	"portlyn/internal/domain"
 )
 
+func gormLogLevel(value string) gormlogger.LogLevel {
+	switch value {
+	case "silent", "off", "none":
+		return gormlogger.Silent
+	case "error":
+		return gormlogger.Error
+	case "info", "debug":
+		return gormlogger.Info
+	default:
+		return gormlogger.Warn
+	}
+}
+
 func NewDatabase(cfg config.Config) (*gorm.DB, error) {
+	dbLogger := gormlogger.New(log.New(os.Stderr, "", log.LstdFlags), gormlogger.Config{
+		SlowThreshold:             time.Second,
+		LogLevel:                  gormLogLevel(cfg.DatabaseLogLevel),
+		IgnoreRecordNotFoundError: true,
+	})
 	gormConfig := &gorm.Config{
 		PrepareStmt: true,
+		Logger:      dbLogger,
 	}
 
 	var (
