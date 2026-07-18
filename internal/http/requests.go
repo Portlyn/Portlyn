@@ -68,12 +68,14 @@ type heartbeatNodeRequest struct {
 }
 
 type createDomainRequest struct {
-	Name        string   `json:"name" validate:"required,hostname_rfc1123"`
-	Type        string   `json:"type" validate:"required,oneof=root subdomain"`
-	Provider    string   `json:"provider" validate:"max=255"`
-	Notes       string   `json:"notes"`
-	IPAllowlist []string `json:"ip_allowlist"`
-	IPBlocklist []string `json:"ip_blocklist"`
+	Name            string   `json:"name" validate:"required,hostname_rfc1123"`
+	Type            string   `json:"type" validate:"required,oneof=root subdomain"`
+	Provider        string   `json:"provider" validate:"max=255"`
+	Notes           string   `json:"notes"`
+	IPAllowlist     []string `json:"ip_allowlist"`
+	IPBlocklist     []string `json:"ip_blocklist"`
+	AutoCertificate *bool    `json:"auto_certificate"`
+	DNSProviderID   *uint    `json:"dns_provider_id" validate:"omitempty,gt=0"`
 }
 
 type updateDomainRequest struct {
@@ -164,6 +166,7 @@ type createServiceRequest struct {
 	TLSMode            string                    `json:"tls_mode" validate:"required,oneof=offload passthrough none"`
 	PassHostHeader     bool                      `json:"pass_host_header"`
 	UpstreamSkipVerify bool                      `json:"upstream_skip_verify"`
+	UpstreamCAPEM      string                    `json:"upstream_ca_pem" validate:"omitempty,max=32768"`
 	AuthPolicy         string                    `json:"auth_policy" validate:"omitempty,oneof=public authenticated admin_only"`
 	AccessPolicy       accessPolicyRequest       `json:"access_policy" validate:"required"`
 	UseGroupPolicy     bool                      `json:"use_group_policy"`
@@ -177,6 +180,7 @@ type createServiceRequest struct {
 	BlockedCountries   []string                  `json:"blocked_countries"`
 	AccessWindows      []accessWindowRequest     `json:"access_windows"`
 	NodeID             *uint                     `json:"node_id"`
+	Node               string                    `json:"node" validate:"omitempty,max=255"`
 	ClearNodeID        *bool                     `json:"clear_node_id"`
 }
 
@@ -189,6 +193,7 @@ type updateServiceRequest struct {
 	TLSMode            *string                    `json:"tls_mode" validate:"omitempty,oneof=offload passthrough none"`
 	PassHostHeader     *bool                      `json:"pass_host_header"`
 	UpstreamSkipVerify *bool                      `json:"upstream_skip_verify"`
+	UpstreamCAPEM      *string                    `json:"upstream_ca_pem" validate:"omitempty,max=32768"`
 	AuthPolicy         *string                    `json:"auth_policy" validate:"omitempty,oneof=public authenticated admin_only"`
 	AccessPolicy       *accessPolicyRequest       `json:"access_policy"`
 	UseGroupPolicy     *bool                      `json:"use_group_policy"`
@@ -202,6 +207,7 @@ type updateServiceRequest struct {
 	BlockedCountries   *[]string                  `json:"blocked_countries"`
 	AccessWindows      *[]accessWindowRequest     `json:"access_windows"`
 	NodeID             *uint                      `json:"node_id"`
+	Node               *string                    `json:"node" validate:"omitempty,max=255"`
 	ClearNodeID        *bool                      `json:"clear_node_id"`
 }
 

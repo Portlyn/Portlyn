@@ -44,6 +44,7 @@ type Manager struct {
 	metrics    *observability.Metrics
 	lastError  string
 	lastSyncAt time.Time
+	statusHook func(ctx context.Context, cert *domain.Certificate, previousStatus string)
 
 	selfSignedMu    sync.RWMutex
 	selfSignedCache map[string]*tls.Certificate
@@ -143,9 +144,24 @@ func (m *Manager) PurgeCertificateData(ctx context.Context, names []string) erro
 	return firstErr
 }
 
+// SetStatusChangeHook registers a callback fired whenever SyncCertificate moves a
+// certificate to a different status (e.g. pending -> issued / failed). It powers
+// status-change events without coupling the manager to the audit/webhook layer.
+func (m *Manager) SetStatusChangeHook(hook func(ctx context.Context, cert *domain.Certificate, previousStatus string)) {
+	m.statusHook = hook
+}
+
 func (m *Manager) SyncCertificate(ctx context.Context, item *domain.Certificate) (*domain.Certificate, error) {
 	started := time.Now()
 	now := time.Now().UTC()
+	previousStatus := item.Status
+	if m.statusHook != nil {
+		defer func() {
+			if item.Status != previousStatus {
+				m.statusHook(ctx, item, previousStatus)
+			}
+		}()
+	}
 	item.LastCheckedAt = &now
 	if item.Domain.Name == "" {
 		loaded, err := m.domains.GetByID(ctx, item.DomainID)

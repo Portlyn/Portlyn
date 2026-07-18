@@ -20,6 +20,7 @@ import (
 	"portlyn/internal/audit"
 	"portlyn/internal/auth"
 	"portlyn/internal/config"
+	"portlyn/internal/domain"
 	"portlyn/internal/geoip"
 	apihttp "portlyn/internal/http"
 	"portlyn/internal/observability"
@@ -261,6 +262,16 @@ func main() {
 	auditWebhookStore.SetDataEncryptionSecrets(cfg.DataEncryptionSecrets())
 	webhookDispatcher := audit.NewWebhookDispatcher(auditWebhookStore, cfg.AuditWebhookAllowPrivateTargets)
 	auditLogger.SetWebhookDispatcher(webhookDispatcher)
+	acmeManager.SetStatusChangeHook(func(ctx context.Context, cert *domain.Certificate, previousStatus string) {
+		certID := cert.ID
+		_ = auditLogger.Log(ctx, nil, "certificate_status_changed", "certificate", &certID, map[string]any{
+			"certificate_id":  cert.ID,
+			"primary_domain":  cert.PrimaryDomain,
+			"previous_status": previousStatus,
+			"status":          cert.Status,
+			"last_error":      cert.LastError,
+		})
+	})
 	exposureReportStore := store.NewExposureReportStore(db)
 	exposureScanner := scanner.NewScanner(serviceStore, exposureReportStore, logger)
 

@@ -1,8 +1,10 @@
 package http
 
 import (
+	"fmt"
 	"strings"
 
+	"portlyn/internal/acme"
 	"portlyn/internal/auth"
 	"portlyn/internal/domain"
 	"portlyn/internal/proxy"
@@ -119,9 +121,10 @@ func publicAccessMethodConfig(method string, value domain.JSONObject) domain.JSO
 	return out
 }
 
-func serviceResponse(item domain.Service, health serviceHealthInfo) map[string]any {
+func serviceResponse(item domain.Service, health serviceHealthInfo, cert acme.CertInfo) map[string]any {
 	policy, method, effectiveConfig, inheritedFrom := proxy.EffectiveAccessForService(item)
 	riskScore, riskReasons := serviceRiskAssessment(item, policy.AccessMode, method, effectiveConfig, nil)
+	riskScore, riskReasons = applyCertRisk(riskScore, riskReasons, cert)
 	return map[string]any{
 		"id":                             item.ID,
 		"name":                           item.Name,
@@ -132,13 +135,16 @@ func serviceResponse(item domain.Service, health serviceHealthInfo) map[string]a
 		"path":                           item.Path,
 		"target_url":                     item.TargetURL,
 		"tls_mode":                       item.TLSMode,
+		"tls":                            serviceTLSResponse(item),
 		"pass_host_header":               item.PassHostHeader,
 		"upstream_skip_verify":           item.UpstreamSkipVerify,
+		"upstream_ca_configured":         strings.TrimSpace(item.UpstreamCAPEM) != "",
 		"auth_policy":                    item.AuthPolicy,
 		"access_mode":                    item.AccessMode,
 		"allowed_roles":                  item.AllowedRoles,
 		"allowed_groups":                 item.AllowedGroups,
 		"allowed_service_groups":         item.AllowedServiceGroups,
+		"access_policy":                  accessPolicyResponse(item.AccessMode, item.AllowedRoles, item.AllowedGroups, item.AllowedServiceGroups),
 		"use_group_policy":               item.UseGroupPolicy,
 		"access_method":                  normalizeOptionalAccessMethod(item.AccessMethod),
 		"access_method_config":           sanitizeAccessMethodConfig(item.AccessMethod, item.AccessMethodConfig),
@@ -151,6 +157,11 @@ func serviceResponse(item domain.Service, health serviceHealthInfo) map[string]a
 		"service_overrides_group":        strings.TrimSpace(item.AccessMethod) != "",
 		"risk_score":                     riskScore,
 		"risk_reasons":                   riskReasons,
+		"active_cert_source":             cert.Source,
+		"active_cert_issuer":             cert.Issuer,
+		"active_cert_expires":            cert.ExpiresAt,
+		"active_cert_is_bootstrap":       cert.IsBootstrap,
+		"active_cert_days_remaining":     cert.DaysRemaining,
 		"ip_allowlist":                   item.IPAllowlist,
 		"ip_blocklist":                   item.IPBlocklist,
 		"allowed_countries":              item.AllowedCountries,
@@ -165,6 +176,41 @@ func serviceResponse(item domain.Service, health serviceHealthInfo) map[string]a
 		"created_at":                     item.CreatedAt,
 		"updated_at":                     item.UpdatedAt,
 	}
+}
+
+// accessPolicyResponse mirrors the nested access_policy object accepted on
+// create/update so a response can be round-tripped back into a request without
+// reshaping. The flat access_mode/allowed_* fields are kept alongside it for
+// backward compatibility.
+func accessPolicyResponse(accessMode string, roles domain.JSONStringSlice, groups, serviceGroups domain.JSONUintSlice) map[string]any {
+	return map[string]any{
+		"access_mode":            accessMode,
+		"allowed_roles":          roles,
+		"allowed_groups":         groups,
+		"allowed_service_groups": serviceGroups,
+	}
+}
+
+// serviceTLSResponse disambiguates the two independent TLS legs the flat
+// tls_mode/upstream_skip_verify fields conflate: "edge" is the listener side
+// (what browsers connect to), "upstream" is the connection to target_url.
+func serviceTLSResponse(item domain.Service) map[string]any {
+	return map[string]any{
+		"edge": item.TLSMode,
+		"upstream": map[string]any{
+			"scheme":      upstreamScheme(item.TargetURL),
+			"skip_verify": item.UpstreamSkipVerify,
+			"ca_pinned":   strings.TrimSpace(item.UpstreamCAPEM) != "",
+		},
+	}
+}
+
+func upstreamScheme(targetURL string) string {
+	raw := strings.TrimSpace(targetURL)
+	if i := strings.Index(raw, "://"); i > 0 {
+		return strings.ToLower(raw[:i])
+	}
+	return ""
 }
 
 func serviceGroupsResponse(items []domain.ServiceGroup) []map[string]any {
@@ -258,6 +304,36 @@ func serviceRiskAssessment(item domain.Service, accessMode, method string, confi
 		return "medium", reasons
 	default:
 		return "low", reasons
+	}
+}
+
+func escalateRisk(label string) string {
+	switch label {
+	case "low":
+		return "medium"
+	case "medium":
+		return "high"
+	default:
+		return "high"
+	}
+}
+
+func applyCertRisk(label string, reasons []string, cert acme.CertInfo) (string, []string) {
+	switch {
+	case cert.IsBootstrap || cert.Source == acme.CertSourceBootstrap:
+		reasons = append(reasons, "edge serving self-signed bootstrap certificate")
+		return escalateRisk(label), reasons
+	case cert.Source == acme.CertSourceNone:
+		reasons = append(reasons, "no edge certificate available")
+		return escalateRisk(label), reasons
+	case cert.ExpiresAt != nil && cert.DaysRemaining <= 14:
+		reasons = append(reasons, fmt.Sprintf("edge certificate expires in %dd", cert.DaysRemaining))
+		if cert.DaysRemaining <= 7 {
+			return escalateRisk(label), reasons
+		}
+		return label, reasons
+	default:
+		return label, reasons
 	}
 }
 
