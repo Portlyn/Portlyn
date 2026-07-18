@@ -882,6 +882,13 @@ func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	}
 
 	item := buildServiceFromCreateRequest(req, subdomain, nil)
+	if item.NodeID == nil && strings.TrimSpace(req.Node) != "" {
+		nodeID, ok := s.resolveNodeName(w, r.Context(), req.Node)
+		if !ok {
+			return
+		}
+		item.NodeID = nodeID
+	}
 	if err := validateServiceTargetURL(item.TargetURL); err != nil {
 		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
 		return
@@ -1047,6 +1054,12 @@ func (s *Server) handleUpdateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	} else if req.NodeID != nil {
 		nodeIDCopy := *req.NodeID
 		item.NodeID = &nodeIDCopy
+	} else if req.Node != nil {
+		nodeID, ok := s.resolveNodeName(w, r.Context(), *req.Node)
+		if !ok {
+			return
+		}
+		item.NodeID = nodeID
 	}
 
 	if err := s.services.Update(r.Context(), item); err != nil {

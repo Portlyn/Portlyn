@@ -1,13 +1,40 @@
 package http
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	stdhttp "net/http"
 	"strconv"
+	"strings"
 
 	"portlyn/internal/domain"
 	"portlyn/internal/store"
 )
+
+// resolveNodeName maps a node name to its id so services can target a site by
+// name (e.g. node: "vps01") instead of a numeric node_id. Writes the error
+// response and returns ok=false on failure; an empty name resolves to (nil, true).
+func (s *Server) resolveNodeName(w stdhttp.ResponseWriter, ctx context.Context, name string) (*uint, bool) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return nil, true
+	}
+	node, err := s.nodes.FindByName(ctx, trimmed)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			writeError(w, stdhttp.StatusBadRequest, "validation_error", fmt.Sprintf("node %q not found", trimmed))
+		case errors.Is(err, store.ErrConflict):
+			writeError(w, stdhttp.StatusBadRequest, "validation_error", fmt.Sprintf("node name %q is ambiguous; use node_id", trimmed))
+		default:
+			s.internalError(w, err)
+		}
+		return nil, false
+	}
+	id := node.ID
+	return &id, true
+}
 
 // handleUpsertDomain upserts a domain by its FQDN (name). A repeated apply of the
 // same desired state is a no-op update rather than a conflict, which makes
@@ -103,6 +130,13 @@ func (s *Server) handleUpsertService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		existingConfig = existing.AccessMethodConfig
 	}
 	item := buildServiceFromCreateRequest(req, subdomain, existingConfig)
+	if item.NodeID == nil && strings.TrimSpace(req.Node) != "" {
+		nodeID, ok := s.resolveNodeName(w, r.Context(), req.Node)
+		if !ok {
+			return
+		}
+		item.NodeID = nodeID
+	}
 	if err := validateServiceTargetURL(item.TargetURL); err != nil {
 		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
 		return

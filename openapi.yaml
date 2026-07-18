@@ -93,6 +93,9 @@ components:
           type: string
           enum: ["", session, oidc_only, pin, email_code]
         node_id: { type: integer, nullable: true }
+        node:
+          type: string
+          description: Reference a site/node by name instead of node_id (resolved server-side). Ignored if node_id is set.
     Service:
       type: object
       description: Service response. Includes the nested access_policy (mirroring the request) plus flat fields for backward compatibility and read-only derived fields.

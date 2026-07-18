@@ -45,6 +45,24 @@ func (s *NodeStore) GetByID(ctx context.Context, id uint) (*domain.Node, error) 
 	return &node, nil
 }
 
+// FindByName resolves a node by its (non-unique) name so services can reference
+// a site by name instead of a numeric id. Returns ErrNotFound when no node
+// matches and ErrConflict when the name is ambiguous.
+func (s *NodeStore) FindByName(ctx context.Context, name string) (*domain.Node, error) {
+	var nodes []domain.Node
+	if err := s.db.WithContext(ctx).Where("name = ?", name).Limit(2).Find(&nodes).Error; err != nil {
+		return nil, err
+	}
+	switch len(nodes) {
+	case 0:
+		return nil, ErrNotFound
+	case 1:
+		return &nodes[0], nil
+	default:
+		return nil, ErrConflict
+	}
+}
+
 func (s *NodeStore) GetByHeartbeatTokenHash(ctx context.Context, tokenHash string) (*domain.Node, error) {
 	var node domain.Node
 	err := s.db.WithContext(ctx).Where("heartbeat_token_hash = ?", tokenHash).First(&node).Error
