@@ -67,10 +67,18 @@ func TestUpstreamTLSClientConfigPrefersCAPin(t *testing.T) {
 		t.Fatalf("skip_verify should produce InsecureSkipVerify config")
 	}
 
-	// An invalid CA falls through to skip_verify when set.
 	fallback := upstreamTLSClientConfig(domain.Service{UpstreamSkipVerify: true, UpstreamCAPEM: "not-a-pem"})
 	if fallback == nil || !fallback.InsecureSkipVerify {
 		t.Fatalf("invalid CA with skip_verify should fall back to InsecureSkipVerify")
+	}
+}
+
+func TestUpstreamServerName(t *testing.T) {
+	if got := upstreamServerName(domain.Service{TargetURL: "https://backend.internal:8443"}); got != "backend.internal" {
+		t.Fatalf("default ServerName should be target host, got %q", got)
+	}
+	if got := upstreamServerName(domain.Service{TargetURL: "https://10.0.0.5:8443", UpstreamServerName: "backend.example.com"}); got != "backend.example.com" {
+		t.Fatalf("override should win, got %q", got)
 	}
 }
 

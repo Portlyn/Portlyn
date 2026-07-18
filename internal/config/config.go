@@ -27,6 +27,7 @@ type Config struct {
 	DatabaseDriver                  string
 	DatabaseURL                     string
 	DatabasePath                    string
+	DatabaseLogLevel                string
 	JWTSecret                       string
 	JWTSigningSecret                string
 	SessionBridgeSecret             string
@@ -154,6 +155,7 @@ func Load() (Config, error) {
 		DatabaseDriver:                  strings.ToLower(getEnv("DATABASE_DRIVER", "")),
 		DatabaseURL:                     strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		DatabasePath:                    getEnv("DATABASE_PATH", "portlyn.db"),
+		DatabaseLogLevel:                strings.ToLower(getEnv("DB_LOG_LEVEL", "warn")),
 		JWTSecret:                       getSecretEnv("JWT_SECRET", secrets, allowInsecureDevMode),
 		JWTSigningSecret:                getSecretEnv("JWT_SIGNING_SECRET", secrets, allowInsecureDevMode),
 		SessionBridgeSecret:             getSecretEnv("SESSION_BRIDGE_SECRET", secrets, allowInsecureDevMode),

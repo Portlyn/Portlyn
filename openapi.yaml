@@ -88,6 +88,9 @@ components:
         upstream_ca_pem:
           type: string
           description: PEM CA bundle to verify the upstream against (safer than upstream_skip_verify).
+        upstream_server_name:
+          type: string
+          description: TLS ServerName to verify the upstream certificate against. Defaults to the target_url host; set this when the backend cert name differs from the dial host (e.g. when routing over the tunnel).
         access_policy: { $ref: "#/components/schemas/AccessPolicy" }
         access_method:
           type: string
@@ -119,6 +122,7 @@ components:
                 scheme: { type: string, enum: ["", http, https] }
                 skip_verify: { type: boolean }
                 ca_pinned: { type: boolean }
+                server_name: { type: string }
         pass_host_header: { type: boolean }
         upstream_skip_verify: { type: boolean }
         upstream_ca_configured: { type: boolean }

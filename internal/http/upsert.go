@@ -12,9 +12,6 @@ import (
 	"portlyn/internal/store"
 )
 
-// resolveNodeName maps a node name to its id so services can target a site by
-// name (e.g. node: "vps01") instead of a numeric node_id. Writes the error
-// response and returns ok=false on failure; an empty name resolves to (nil, true).
 func (s *Server) resolveNodeName(w stdhttp.ResponseWriter, ctx context.Context, name string) (*uint, bool) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
@@ -36,9 +33,6 @@ func (s *Server) resolveNodeName(w stdhttp.ResponseWriter, ctx context.Context, 
 	return &id, true
 }
 
-// handleUpsertDomain upserts a domain by its FQDN (name). A repeated apply of the
-// same desired state is a no-op update rather than a conflict, which makes
-// declarative automation robust. Returns 201 when created, 200 when updated.
 func (s *Server) handleUpsertDomain(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	var req createDomainRequest
 	if !s.decodeAndValidate(w, r, &req) {
@@ -100,10 +94,6 @@ func (s *Server) handleUpsertDomain(w stdhttp.ResponseWriter, r *stdhttp.Request
 	writeJSON(w, stdhttp.StatusCreated, item)
 }
 
-// handleUpsertService upserts a service by its route identity (domain + subdomain
-// + path). A repeated apply updates in place instead of erroring, enabling
-// declarative "apply desired state" automation. Returns 201 when created, 200
-// when updated.
 func (s *Server) handleUpsertService(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	var req createServiceRequest
 	if !s.decodeAndValidate(w, r, &req) {

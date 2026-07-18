@@ -7,12 +7,6 @@ import (
 	"portlyn/internal/domain"
 )
 
-// autoIssueCertificateForDomain implicitly requests a Let's Encrypt certificate
-// when a domain is created and a usable DNS provider is on file. dns-01 is used
-// because it does not require the domain's A/AAAA records to already point at the
-// edge, so issuance can complete before traffic is cut over. Returns the created
-// certificate (already persisted, issuance running asynchronously) or nil when
-// auto-issuance is disabled, ACME is unavailable, or no provider can be picked.
 func (s *Server) autoIssueCertificateForDomain(ctx context.Context, dom *domain.Domain, explicitProviderID *uint, enabled bool) *domain.Certificate {
 	if !enabled || dom == nil || s.acme == nil || !s.acme.ACMEReady() {
 		return nil
@@ -57,9 +51,6 @@ func (s *Server) autoIssueCertificateForDomain(ctx context.Context, dom *domain.
 	return cert
 }
 
-// pickAutoCertProvider resolves the DNS provider to use for auto-issuance. An
-// explicit id must exist and be active; otherwise exactly one active provider
-// must be on file, since guessing between several would bind the wrong zone.
 func (s *Server) pickAutoCertProvider(ctx context.Context, explicitProviderID *uint) *domain.DNSProvider {
 	providers, err := s.dnsProviders.List(ctx)
 	if err != nil {

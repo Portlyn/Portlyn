@@ -685,20 +685,31 @@ func validateUpstreamCAPEM(pemData string) error {
 	return nil
 }
 
-// upstreamTLSClientConfig builds the TLS config for connecting to a service's
-// target_url. A pinned CA (upstream_ca_pem) is preferred; skip_verify is the
-// blunt fallback. Returns nil when neither is set (default system trust).
 func upstreamTLSClientConfig(item domain.Service) *tls.Config {
+	serverName := upstreamServerName(item)
 	if ca := strings.TrimSpace(item.UpstreamCAPEM); ca != "" {
 		pool := x509.NewCertPool()
 		if pool.AppendCertsFromPEM([]byte(ca)) {
-			return &tls.Config{RootCAs: pool}
+			return &tls.Config{RootCAs: pool, ServerName: serverName}
 		}
 	}
 	if item.UpstreamSkipVerify {
 		return &tls.Config{InsecureSkipVerify: true}
 	}
+	if serverName != "" {
+		return &tls.Config{ServerName: serverName}
+	}
 	return nil
+}
+
+func upstreamServerName(item domain.Service) string {
+	if override := strings.TrimSpace(item.UpstreamServerName); override != "" {
+		return override
+	}
+	if u, err := url.Parse(strings.TrimSpace(item.TargetURL)); err == nil {
+		return u.Hostname()
+	}
+	return ""
 }
 
 func (s *Server) certInfoForService(ctx context.Context, item domain.Service) acme.CertInfo {
@@ -927,6 +938,7 @@ func buildServiceFromCreateRequest(req createServiceRequest, subdomain string, e
 		PassHostHeader:       req.PassHostHeader,
 		UpstreamSkipVerify:   req.UpstreamSkipVerify,
 		UpstreamCAPEM:        strings.TrimSpace(req.UpstreamCAPEM),
+		UpstreamServerName:   strings.TrimSpace(req.UpstreamServerName),
 		AuthPolicy:           req.AuthPolicy,
 		AccessMode:           req.AccessPolicy.AccessMode,
 		AllowedRoles:         normalizeStringList(req.AccessPolicy.AllowedRoles),
@@ -1008,6 +1020,9 @@ func (s *Server) handleUpdateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 			return
 		}
 		item.UpstreamCAPEM = trimmed
+	}
+	if req.UpstreamServerName != nil {
+		item.UpstreamServerName = strings.TrimSpace(*req.UpstreamServerName)
 	}
 	if req.AuthPolicy != nil {
 		item.AuthPolicy = *req.AuthPolicy

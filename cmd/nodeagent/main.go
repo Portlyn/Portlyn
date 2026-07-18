@@ -73,6 +73,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "verify-release":
+			if err := runVerifyRelease(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "verify-release:", err)
+				os.Exit(1)
+			}
+			return
 		case "version", "--version", "-v":
 			fmt.Println("portlyn-nodeagent", version)
 			return

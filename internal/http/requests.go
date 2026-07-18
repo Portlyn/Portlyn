@@ -167,6 +167,7 @@ type createServiceRequest struct {
 	PassHostHeader     bool                      `json:"pass_host_header"`
 	UpstreamSkipVerify bool                      `json:"upstream_skip_verify"`
 	UpstreamCAPEM      string                    `json:"upstream_ca_pem" validate:"omitempty,max=32768"`
+	UpstreamServerName string                    `json:"upstream_server_name" validate:"omitempty,hostname_rfc1123"`
 	AuthPolicy         string                    `json:"auth_policy" validate:"omitempty,oneof=public authenticated admin_only"`
 	AccessPolicy       accessPolicyRequest       `json:"access_policy" validate:"required"`
 	UseGroupPolicy     bool                      `json:"use_group_policy"`
@@ -194,6 +195,7 @@ type updateServiceRequest struct {
 	PassHostHeader     *bool                      `json:"pass_host_header"`
 	UpstreamSkipVerify *bool                      `json:"upstream_skip_verify"`
 	UpstreamCAPEM      *string                    `json:"upstream_ca_pem" validate:"omitempty,max=32768"`
+	UpstreamServerName *string                    `json:"upstream_server_name" validate:"omitempty,hostname_rfc1123"`
 	AuthPolicy         *string                    `json:"auth_policy" validate:"omitempty,oneof=public authenticated admin_only"`
 	AccessPolicy       *accessPolicyRequest       `json:"access_policy"`
 	UseGroupPolicy     *bool                      `json:"use_group_policy"`

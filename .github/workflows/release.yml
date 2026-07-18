@@ -90,6 +90,7 @@ jobs:
       - name: Publish release assets
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
+          generate_release_notes: true
           files: |
             dist/portlyn-linux-amd64
             dist/portlyn-linux-arm64

@@ -45,9 +45,6 @@ func (s *NodeStore) GetByID(ctx context.Context, id uint) (*domain.Node, error) 
 	return &node, nil
 }
 
-// FindByName resolves a node by its (non-unique) name so services can reference
-// a site by name instead of a numeric id. Returns ErrNotFound when no node
-// matches and ErrConflict when the name is ambiguous.
 func (s *NodeStore) FindByName(ctx context.Context, name string) (*domain.Node, error) {
 	var nodes []domain.Node
 	if err := s.db.WithContext(ctx).Where("name = ?", name).Limit(2).Find(&nodes).Error; err != nil {
