@@ -166,6 +166,7 @@ type createServiceRequest struct {
 	TLSMode            string                    `json:"tls_mode" validate:"required,oneof=offload passthrough none"`
 	PassHostHeader     bool                      `json:"pass_host_header"`
 	UpstreamSkipVerify bool                      `json:"upstream_skip_verify"`
+	UpstreamCAPEM      string                    `json:"upstream_ca_pem" validate:"omitempty,max=32768"`
 	AuthPolicy         string                    `json:"auth_policy" validate:"omitempty,oneof=public authenticated admin_only"`
 	AccessPolicy       accessPolicyRequest       `json:"access_policy" validate:"required"`
 	UseGroupPolicy     bool                      `json:"use_group_policy"`
@@ -191,6 +192,7 @@ type updateServiceRequest struct {
 	TLSMode            *string                    `json:"tls_mode" validate:"omitempty,oneof=offload passthrough none"`
 	PassHostHeader     *bool                      `json:"pass_host_header"`
 	UpstreamSkipVerify *bool                      `json:"upstream_skip_verify"`
+	UpstreamCAPEM      *string                    `json:"upstream_ca_pem" validate:"omitempty,max=32768"`
 	AuthPolicy         *string                    `json:"auth_policy" validate:"omitempty,oneof=public authenticated admin_only"`
 	AccessPolicy       *accessPolicyRequest       `json:"access_policy"`
 	UseGroupPolicy     *bool                      `json:"use_group_policy"`

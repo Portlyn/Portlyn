@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -655,7 +656,11 @@ func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
 	if viaNode && m.tunnelTransport != nil && m.tunnelDialer != nil && m.tunnelDialer.Started() {
 		chosenTransport = m.tunnelTransport
 	}
-	if config.Service.UpstreamSkipVerify {
+	if ca := strings.TrimSpace(config.Service.UpstreamCAPEM); ca != "" {
+		if pinned := pinnedUpstreamTransport(chosenTransport, ca); pinned != nil {
+			chosenTransport = pinned
+		}
+	} else if config.Service.UpstreamSkipVerify {
 		chosenTransport = insecureUpstreamTransport(chosenTransport)
 	}
 	proxy := reverseProxyForTarget(target, chosenTransport, routePath, m.forwardedProto, m.authoritativeClientIP, config.Service.PassHostHeader)
@@ -702,6 +707,22 @@ func insecureUpstreamTransport(base *http.Transport) *http.Transport {
 		transport.TLSClientConfig = &tls.Config{}
 	}
 	transport.TLSClientConfig.InsecureSkipVerify = true
+	return transport
+}
+
+func pinnedUpstreamTransport(base *http.Transport, caPEM string) *http.Transport {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM([]byte(caPEM)) {
+		return nil
+	}
+	transport := base.Clone()
+	if transport.TLSClientConfig != nil {
+		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	} else {
+		transport.TLSClientConfig = &tls.Config{}
+	}
+	transport.TLSClientConfig.RootCAs = pool
+	transport.TLSClientConfig.InsecureSkipVerify = false
 	return transport
 }
 

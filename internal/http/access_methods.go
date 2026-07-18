@@ -135,13 +135,16 @@ func serviceResponse(item domain.Service, health serviceHealthInfo, cert acme.Ce
 		"path":                           item.Path,
 		"target_url":                     item.TargetURL,
 		"tls_mode":                       item.TLSMode,
+		"tls":                            serviceTLSResponse(item),
 		"pass_host_header":               item.PassHostHeader,
 		"upstream_skip_verify":           item.UpstreamSkipVerify,
+		"upstream_ca_configured":         strings.TrimSpace(item.UpstreamCAPEM) != "",
 		"auth_policy":                    item.AuthPolicy,
 		"access_mode":                    item.AccessMode,
 		"allowed_roles":                  item.AllowedRoles,
 		"allowed_groups":                 item.AllowedGroups,
 		"allowed_service_groups":         item.AllowedServiceGroups,
+		"access_policy":                  accessPolicyResponse(item.AccessMode, item.AllowedRoles, item.AllowedGroups, item.AllowedServiceGroups),
 		"use_group_policy":               item.UseGroupPolicy,
 		"access_method":                  normalizeOptionalAccessMethod(item.AccessMethod),
 		"access_method_config":           sanitizeAccessMethodConfig(item.AccessMethod, item.AccessMethodConfig),
@@ -173,6 +176,41 @@ func serviceResponse(item domain.Service, health serviceHealthInfo, cert acme.Ce
 		"created_at":                     item.CreatedAt,
 		"updated_at":                     item.UpdatedAt,
 	}
+}
+
+// accessPolicyResponse mirrors the nested access_policy object accepted on
+// create/update so a response can be round-tripped back into a request without
+// reshaping. The flat access_mode/allowed_* fields are kept alongside it for
+// backward compatibility.
+func accessPolicyResponse(accessMode string, roles domain.JSONStringSlice, groups, serviceGroups domain.JSONUintSlice) map[string]any {
+	return map[string]any{
+		"access_mode":            accessMode,
+		"allowed_roles":          roles,
+		"allowed_groups":         groups,
+		"allowed_service_groups": serviceGroups,
+	}
+}
+
+// serviceTLSResponse disambiguates the two independent TLS legs the flat
+// tls_mode/upstream_skip_verify fields conflate: "edge" is the listener side
+// (what browsers connect to), "upstream" is the connection to target_url.
+func serviceTLSResponse(item domain.Service) map[string]any {
+	return map[string]any{
+		"edge": item.TLSMode,
+		"upstream": map[string]any{
+			"scheme":      upstreamScheme(item.TargetURL),
+			"skip_verify": item.UpstreamSkipVerify,
+			"ca_pinned":   strings.TrimSpace(item.UpstreamCAPEM) != "",
+		},
+	}
+}
+
+func upstreamScheme(targetURL string) string {
+	raw := strings.TrimSpace(targetURL)
+	if i := strings.Index(raw, "://"); i > 0 {
+		return strings.ToLower(raw[:i])
+	}
+	return ""
 }
 
 func serviceGroupsResponse(items []domain.ServiceGroup) []map[string]any {

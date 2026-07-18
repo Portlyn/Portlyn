@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -673,6 +674,33 @@ func (s *Server) evaluateServicesHealth(ctx context.Context, items []domain.Serv
 	return results
 }
 
+func validateUpstreamCAPEM(pemData string) error {
+	if strings.TrimSpace(pemData) == "" {
+		return nil
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM([]byte(pemData)) {
+		return fmt.Errorf("upstream_ca_pem must contain at least one valid PEM certificate")
+	}
+	return nil
+}
+
+// upstreamTLSClientConfig builds the TLS config for connecting to a service's
+// target_url. A pinned CA (upstream_ca_pem) is preferred; skip_verify is the
+// blunt fallback. Returns nil when neither is set (default system trust).
+func upstreamTLSClientConfig(item domain.Service) *tls.Config {
+	if ca := strings.TrimSpace(item.UpstreamCAPEM); ca != "" {
+		pool := x509.NewCertPool()
+		if pool.AppendCertsFromPEM([]byte(ca)) {
+			return &tls.Config{RootCAs: pool}
+		}
+	}
+	if item.UpstreamSkipVerify {
+		return &tls.Config{InsecureSkipVerify: true}
+	}
+	return nil
+}
+
 func (s *Server) certInfoForService(ctx context.Context, item domain.Service) acme.CertInfo {
 	if s.acme == nil {
 		return acme.CertInfo{Source: acme.CertSourceNone, Issuer: "none"}
@@ -697,8 +725,8 @@ func (s *Server) evaluateServiceHealth(ctx context.Context, item domain.Service)
 	probeURL := item.TargetURL
 	noRedirect := func(_ *stdhttp.Request, _ []*stdhttp.Request) error { return stdhttp.ErrUseLastResponse }
 	transport := &stdhttp.Transport{}
-	if item.UpstreamSkipVerify {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	if tlsConfig := upstreamTLSClientConfig(item); tlsConfig != nil {
+		transport.TLSClientConfig = tlsConfig
 	}
 	client := &stdhttp.Client{Timeout: 1500 * time.Millisecond, CheckRedirect: noRedirect, Transport: transport}
 	if item.NodeID != nil && item.Node != nil && s.tunnel != nil {
@@ -713,8 +741,8 @@ func (s *Server) evaluateServiceHealth(ctx context.Context, item domain.Service)
 				probeURL = u.String()
 			}
 			tunnelTransport := &stdhttp.Transport{DialContext: srv.DialContext}
-			if item.UpstreamSkipVerify {
-				tunnelTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+			if tlsConfig := upstreamTLSClientConfig(item); tlsConfig != nil {
+				tunnelTransport.TLSClientConfig = tlsConfig
 			}
 			client = &stdhttp.Client{Timeout: 1500 * time.Millisecond, CheckRedirect: noRedirect, Transport: tunnelTransport}
 		}
@@ -801,7 +829,13 @@ func viewerServiceResponse(item domain.Service, health serviceHealthInfo, cert a
 		"allowed_roles":                  []string{},
 		"allowed_groups":                 []uint{},
 		"allowed_service_groups":         []uint{},
-		"use_group_policy":               item.UseGroupPolicy,
+		"access_policy": map[string]any{
+			"access_mode":            policy.AccessMode,
+			"allowed_roles":          []string{},
+			"allowed_groups":         []uint{},
+			"allowed_service_groups": []uint{},
+		},
+		"use_group_policy": item.UseGroupPolicy,
 		"access_method":                  normalizeOptionalAccessMethod(item.AccessMethod),
 		"access_method_config":           sanitizeAccessMethodConfig(method, effectiveConfig),
 		"effective_access_mode":          policy.AccessMode,
@@ -856,6 +890,7 @@ func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		TLSMode:              req.TLSMode,
 		PassHostHeader:       req.PassHostHeader,
 		UpstreamSkipVerify:   req.UpstreamSkipVerify,
+		UpstreamCAPEM:        strings.TrimSpace(req.UpstreamCAPEM),
 		AuthPolicy:           req.AuthPolicy,
 		AccessMode:           req.AccessPolicy.AccessMode,
 		AllowedRoles:         normalizeStringList(req.AccessPolicy.AllowedRoles),
@@ -873,6 +908,10 @@ func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		NodeID:               req.NodeID,
 	}
 	if err := validateServiceTargetURL(item.TargetURL); err != nil {
+		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+	if err := validateUpstreamCAPEM(item.UpstreamCAPEM); err != nil {
 		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
@@ -950,6 +989,14 @@ func (s *Server) handleUpdateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	}
 	if req.UpstreamSkipVerify != nil {
 		item.UpstreamSkipVerify = *req.UpstreamSkipVerify
+	}
+	if req.UpstreamCAPEM != nil {
+		trimmed := strings.TrimSpace(*req.UpstreamCAPEM)
+		if err := validateUpstreamCAPEM(trimmed); err != nil {
+			writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
+			return
+		}
+		item.UpstreamCAPEM = trimmed
 	}
 	if req.AuthPolicy != nil {
 		item.AuthPolicy = *req.AuthPolicy
