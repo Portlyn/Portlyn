@@ -49,20 +49,94 @@ components:
         mfa_enabled: { type: boolean }
         auth_provider: { type: string, enum: [local, oidc] }
         created_at: { type: string, format: date-time }
+    AccessPolicy:
+      type: object
+      description: Nested access policy, identical shape on request and response.
+      required: [access_mode]
+      properties:
+        access_mode: { type: string, enum: [public, authenticated, restricted] }
+        allowed_roles:
+          type: array
+          items: { type: string }
+        allowed_groups:
+          type: array
+          items: { type: integer }
+        allowed_service_groups:
+          type: array
+          items: { type: integer }
+    ServiceCreate:
+      type: object
+      description: Request body for creating/updating/upserting a service.
+      required: [name, domain_id, path, target_url, tls_mode, access_policy]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 255 }
+        domain_id: { type: integer }
+        subdomain: { type: string }
+        path: { type: string }
+        target_url:
+          type: string
+          format: uri
+          description: Upstream target. The scheme (http/https) determines the upstream leg; tls_mode only controls the edge.
+        tls_mode:
+          type: string
+          enum: [offload, passthrough, none]
+          description: Edge TLS behavior (the browser-facing leg), NOT the upstream connection.
+        pass_host_header: { type: boolean }
+        upstream_skip_verify:
+          type: boolean
+          description: Disable upstream certificate verification. Prefer upstream_ca_pem for pinning.
+        upstream_ca_pem:
+          type: string
+          description: PEM CA bundle to verify the upstream against (safer than upstream_skip_verify).
+        access_policy: { $ref: "#/components/schemas/AccessPolicy" }
+        access_method:
+          type: string
+          enum: ["", session, oidc_only, pin, email_code]
+        node_id: { type: integer, nullable: true }
     Service:
       type: object
+      description: Service response. Includes the nested access_policy (mirroring the request) plus flat fields for backward compatibility and read-only derived fields.
       properties:
         id: { type: integer }
         name: { type: string }
         domain_id: { type: integer }
         subdomain: { type: string }
+        hostname: { type: string, description: Fully-qualified host the service is served on }
         path: { type: string }
         target_url: { type: string, format: uri }
         tls_mode: { type: string, enum: [offload, passthrough, none] }
+        tls:
+          type: object
+          description: Disambiguated TLS legs.
+          properties:
+            edge: { type: string, enum: [offload, passthrough, none] }
+            upstream:
+              type: object
+              properties:
+                scheme: { type: string, enum: ["", http, https] }
+                skip_verify: { type: boolean }
+                ca_pinned: { type: boolean }
+        pass_host_header: { type: boolean }
+        upstream_skip_verify: { type: boolean }
+        upstream_ca_configured: { type: boolean }
+        access_policy: { $ref: "#/components/schemas/AccessPolicy" }
         access_mode: { type: string, enum: [public, authenticated, restricted] }
         access_method:
           type: string
           enum: ["", session, oidc_only, pin, email_code]
+        risk_score: { type: string, enum: [low, medium, high] }
+        risk_reasons:
+          type: array
+          items: { type: string }
+        active_cert_source:
+          type: string
+          enum: [managed, static, bootstrap, none]
+          description: Which certificate the edge actually serves for this host. `bootstrap` means only the short-lived self-signed cert is present.
+        active_cert_issuer: { type: string }
+        active_cert_expires: { type: string, format: date-time, nullable: true }
+        active_cert_is_bootstrap: { type: boolean }
+        active_cert_days_remaining: { type: integer }
+        service_status: { type: string, enum: [pending, healthy, unhealthy] }
         node_id:
           type: integer
           nullable: true
@@ -79,6 +153,84 @@ components:
         ip_blocklist:
           type: array
           items: { type: string }
+    Domain:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string, description: FQDN; unique key used by PUT upsert }
+        type: { type: string, enum: [root, subdomain] }
+        provider: { type: string }
+        notes: { type: string }
+        ip_allowlist: { type: array, items: { type: string } }
+        ip_blocklist: { type: array, items: { type: string } }
+    DomainCreate:
+      type: object
+      required: [name, type]
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [root, subdomain] }
+        provider: { type: string }
+        notes: { type: string }
+        ip_allowlist: { type: array, items: { type: string } }
+        ip_blocklist: { type: array, items: { type: string } }
+        auto_certificate:
+          type: boolean
+          default: true
+          description: When true (default) and a single active DNS provider exists, a dns-01 Let's Encrypt certificate is requested automatically. The created certificate id is returned in the X-Portlyn-Auto-Certificate-Id response header.
+        dns_provider_id:
+          type: integer
+          description: Explicit DNS provider to use for auto-issuance instead of auto-selecting.
+    Certificate:
+      type: object
+      properties:
+        id: { type: integer }
+        domain_id: { type: integer }
+        primary_domain: { type: string }
+        type: { type: string, enum: [single, wildcard, multi_san] }
+        status: { type: string, enum: [pending, issued, failed, expiring_soon, renewing] }
+        last_error: { type: string }
+        challenge_type: { type: string, enum: [http-01, dns-01] }
+        issuer: { type: string, enum: [letsencrypt_prod, letsencrypt_staging] }
+        issued_at: { type: string, format: date-time, nullable: true }
+        expires_at: { type: string, format: date-time }
+        next_renewal_at: { type: string, format: date-time, nullable: true }
+        is_auto_renew: { type: boolean }
+        dns_provider_id: { type: integer, nullable: true }
+    CertificateCreate:
+      type: object
+      required: [domain_id, type, challenge_type, issuer]
+      properties:
+        domain_id: { type: integer }
+        type: { type: string, enum: [single, wildcard, multi_san] }
+        challenge_type: { type: string, enum: [http-01, dns-01] }
+        issuer: { type: string, enum: [letsencrypt_prod, letsencrypt_staging] }
+        primary_domain: { type: string }
+        sans: { type: array, items: { type: string } }
+        is_auto_renew: { type: boolean }
+        renewal_window_days: { type: integer, minimum: 7, maximum: 90 }
+        dns_provider_id: { type: integer }
+    DNSProvider:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string, enum: [cloudflare, hetzner, route53, digitalocean] }
+        is_active: { type: boolean }
+        config_hint: { type: string }
+        has_stored_secret: { type: boolean }
+        last_test_status: { type: string }
+        supported_challenges: { type: array, items: { type: string } }
+    DNSProviderCreate:
+      type: object
+      required: [name, type]
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [cloudflare, hetzner, route53, digitalocean] }
+        is_active: { type: boolean }
+        config:
+          type: object
+          additionalProperties: { type: string }
+          description: Provider credentials (e.g. api_token). Stored encrypted, never returned.
     Node:
       type: object
       properties:
@@ -248,11 +400,22 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/Service" }
+            schema: { $ref: "#/components/schemas/ServiceCreate" }
       responses:
         "201":
           description: Created
           content: { application/json: { schema: { $ref: "#/components/schemas/Service" } } }
+    put:
+      summary: Upsert service by route (admin only)
+      description: Idempotent apply keyed on (domain_id, subdomain, path). Creates when absent, updates in place when present — a repeated apply is a no-op update, not a conflict.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ServiceCreate" }
+      responses:
+        "200": { description: Updated existing service, content: { application/json: { schema: { $ref: "#/components/schemas/Service" } } } }
+        "201": { description: Created new service, content: { application/json: { schema: { $ref: "#/components/schemas/Service" } } } }
 
   /services/{id}:
     parameters:
@@ -446,3 +609,158 @@ paths:
       summary: System overview, health, counts and warnings
       responses:
         "200": { description: Overview }
+
+  /domains:
+    get:
+      summary: List domains (admin only)
+      responses:
+        "200": { description: List, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Domain" } } } } }
+    post:
+      summary: Create domain (admin only)
+      description: When auto_certificate is true (default) and a single active DNS provider exists, a dns-01 certificate is requested automatically; its id is returned in the X-Portlyn-Auto-Certificate-Id header.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DomainCreate" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Domain" } } } }
+    put:
+      summary: Upsert domain by FQDN (admin only)
+      description: Idempotent apply keyed on the domain name. Creates when absent, updates in place when present.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DomainCreate" } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/Domain" } } } }
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Domain" } } } }
+
+  /domains/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get domain
+      responses:
+        "200": { description: Domain, content: { application/json: { schema: { $ref: "#/components/schemas/Domain" } } } }
+    patch:
+      summary: Update domain
+      responses:
+        "200": { description: Updated }
+    delete:
+      summary: Delete domain
+      responses:
+        "204": { description: Deleted }
+
+  /certificates:
+    get:
+      summary: List certificates (admin only)
+      responses:
+        "200": { description: List, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Certificate" } } } } }
+    post:
+      summary: Create certificate (admin only)
+      parameters:
+        - in: query
+          name: sync
+          schema: { type: boolean }
+          description: When true, issue synchronously and return the terminal status instead of leaving it pending for the background worker.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CertificateCreate" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Certificate" } } } }
+
+  /certificates/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get certificate
+      responses:
+        "200": { description: Certificate, content: { application/json: { schema: { $ref: "#/components/schemas/Certificate" } } } }
+    patch:
+      summary: Update certificate
+      responses:
+        "200": { description: Updated }
+    delete:
+      summary: Delete certificate
+      responses:
+        "204": { description: Deleted }
+
+  /certificates/{id}/retry:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    post:
+      summary: Retry issuance for a failed certificate (synchronous)
+      responses:
+        "200": { description: Certificate, content: { application/json: { schema: { $ref: "#/components/schemas/Certificate" } } } }
+
+  /certificates/{id}/renew:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    post:
+      summary: Force renewal (synchronous)
+      responses:
+        "200": { description: Certificate, content: { application/json: { schema: { $ref: "#/components/schemas/Certificate" } } } }
+
+  /certificates/{id}/sync-status:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    post:
+      summary: Reconcile and return current certificate status
+      responses:
+        "200": { description: Certificate, content: { application/json: { schema: { $ref: "#/components/schemas/Certificate" } } } }
+
+  /dns-providers:
+    get:
+      summary: List DNS providers (admin only)
+      responses:
+        "200": { description: List, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/DNSProvider" } } } } }
+    post:
+      summary: Create DNS provider (admin only)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DNSProviderCreate" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/DNSProvider" } } } }
+
+  /dns-providers/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get DNS provider
+      responses:
+        "200": { description: DNS provider, content: { application/json: { schema: { $ref: "#/components/schemas/DNSProvider" } } } }
+    patch:
+      summary: Update DNS provider
+      responses:
+        "200": { description: Updated }
+    delete:
+      summary: Delete DNS provider
+      responses:
+        "204": { description: Deleted }
+
+  /dns-providers/{id}/test:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    post:
+      summary: Test DNS provider credentials
+      responses:
+        "200": { description: Test result }
