@@ -64,6 +64,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "audit":
+			if err := runAuditSubcommand(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "audit:", err)
+				os.Exit(1)
+			}
+			return
 		case "config":
 			if len(os.Args) > 2 && os.Args[2] == "check" {
 				if err := runDoctor(os.Args[3:]); err != nil {
@@ -549,6 +555,7 @@ Usage:
   portlyn config check  alias for 'portlyn doctor'
   portlyn settings sync apply env values for env-controlled settings to the database
   portlyn token create  create an API token from the CLI (flags: --name, --role, --expires-days)
+  portlyn audit compact prune high-volume access rows and re-chain security events (flags: --yes, --no-vacuum)
   portlyn update        download, verify and install the latest release (flags: --check, --version, --no-restart, --unit)
   portlyn verify-release verify a release signature in-process (--checksums, --bundle, --asset, --asset-name)
   portlyn version       print version and exit

@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
-	"portlyn/internal/audit"
 	"portlyn/internal/auth"
 )
 
@@ -42,9 +41,7 @@ func (s *Server) accessLogMiddleware(channel string) func(http.Handler) http.Han
 				"user_agent", r.UserAgent(),
 			}
 
-			var userID *uint
 			if user, ok := auth.UserFromContext(r.Context()); ok && user != nil {
-				userID = &user.ID
 				args = append(args, "user_id", user.ID, "user_role", user.Role)
 			}
 
@@ -52,25 +49,6 @@ func (s *Server) accessLogMiddleware(channel string) func(http.Handler) http.Han
 			if s.metrics != nil {
 				s.metrics.ObserveAPIRequest(r.URL.Path, statusCode, latency)
 			}
-
-			if s.audit == nil || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/livez" {
-				return
-			}
-
-			details := map[string]any{
-				"channel": channel,
-				"bytes":   writer.BytesWritten(),
-			}
-			_ = s.audit.LogHTTPAccess(r.Context(), audit.HTTPAccessEvent{
-				Request:      r,
-				UserID:       userID,
-				Action:       channel + "_access",
-				ResourceType: "http_request",
-				StatusCode:   statusCode,
-				Latency:      latency,
-				Details:      details,
-				RemoteAddr:   clientIP,
-			})
 		})
 	}
 }

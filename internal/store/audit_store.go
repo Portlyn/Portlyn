@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -189,6 +190,88 @@ type AuditChainResult struct {
 	Verified   int64  `json:"verified"`
 	LatestID   uint   `json:"latest_id"`
 	LatestHash string `json:"latest_hash"`
+}
+
+type AuditCompactionResult struct {
+	Scanned    int64  `json:"scanned"`
+	Removed    int64  `json:"removed"`
+	Kept       int64  `json:"kept"`
+	LatestHash string `json:"latest_hash"`
+}
+
+func auditRowIsAccessNoise(item *domain.AuditLog) bool {
+	if item.ResourceType == "http_request" {
+		return true
+	}
+	if item.Action == "proxy_access" {
+		return auditDetailOutcome(item.Details) != "denied"
+	}
+	return false
+}
+
+func auditDetailOutcome(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	var parsed struct {
+		Outcome string `json:"outcome"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return ""
+	}
+	return parsed.Outcome
+}
+
+func (s *AuditStore) Compact(ctx context.Context) (AuditCompactionResult, error) {
+	const batchSize = 500
+	result := AuditCompactionResult{}
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		prevHash := ""
+		var lastID uint
+		for {
+			var batch []domain.AuditLog
+			if err := tx.Where("id > ?", lastID).Order("id asc").Limit(batchSize).Find(&batch).Error; err != nil {
+				return err
+			}
+			if len(batch) == 0 {
+				break
+			}
+			for i := range batch {
+				row := &batch[i]
+				lastID = row.ID
+				result.Scanned++
+				if auditRowIsAccessNoise(row) {
+					if err := tx.Delete(&domain.AuditLog{}, row.ID).Error; err != nil {
+						return err
+					}
+					result.Removed++
+					continue
+				}
+				newHash := computeAuditHash(s.hmacKey, prevHash, row)
+				if row.PrevHash != prevHash || row.Hash != newHash {
+					if err := tx.Model(&domain.AuditLog{}).Where("id = ?", row.ID).
+						Updates(map[string]any{"prev_hash": prevHash, "hash": newHash}).Error; err != nil {
+						return err
+					}
+				}
+				prevHash = newHash
+				result.Kept++
+			}
+			if len(batch) < batchSize {
+				break
+			}
+		}
+		result.LatestHash = prevHash
+		return nil
+	})
+	if err != nil {
+		return AuditCompactionResult{}, err
+	}
+	return result, nil
+}
+
+func (s *AuditStore) Vacuum(ctx context.Context) error {
+	return s.db.WithContext(ctx).Exec("VACUUM").Error
 }
 
 func (s *AuditStore) VerifyChain(ctx context.Context) (AuditChainResult, error) {

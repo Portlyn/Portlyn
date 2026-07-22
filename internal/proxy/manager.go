@@ -886,7 +886,7 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 		}
 		m.metrics.ObserveProxyRequest(serviceName, outcome, statusCode, latency)
 	}
-	if m.audit != nil {
+	if m.audit != nil && outcome == "denied" {
 		_ = m.audit.LogHTTPAccess(r.Context(), audit.HTTPAccessEvent{
 			Request:      r,
 			UserID:       userID,
