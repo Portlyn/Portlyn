@@ -15,6 +15,7 @@ func TestNormalizePath(t *testing.T) {
 		{"app", "/app"},
 		{"/app/", "/app"},
 		{"/app///", "/app"},
+		{"/app//sub", "/app/sub"},
 		{"//evil.example", "/evil.example"},
 		{"////evil.example", "/evil.example"},
 		{"/" + backslash + "evil.example", "/evil.example"},

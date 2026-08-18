@@ -656,23 +656,19 @@ func isLocalRequestSource(r *http.Request) bool {
 	return false
 }
 
+// Rebuilt from its segments rather than patched, so the result cannot come out
+// protocol-relative and end up pointing at another host in a Location header.
 func normalizePath(value string) string {
-	path := strings.TrimSpace(value)
-	if path == "" {
+	segments := make([]string, 0, 8)
+	for _, segment := range strings.Split(strings.ReplaceAll(strings.TrimSpace(value), `\`, "/"), "/") {
+		if segment != "" {
+			segments = append(segments, segment)
+		}
+	}
+	if len(segments) == 0 {
 		return "/"
 	}
-	path = strings.ReplaceAll(path, "\\", "/")
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	// A leading "//" reads as a protocol-relative URL in a Location header.
-	for strings.HasPrefix(path, "//") {
-		path = path[1:]
-	}
-	if len(path) > 1 {
-		path = strings.TrimRight(path, "/")
-	}
-	return path
+	return "/" + strings.Join(segments, "/")
 }
 
 func (m *Manager) forwardedProto(r *http.Request) string {
