@@ -661,8 +661,13 @@ func normalizePath(value string) string {
 	if path == "" {
 		return "/"
 	}
+	path = strings.ReplaceAll(path, "\\", "/")
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
+	}
+	// A leading "//" reads as a protocol-relative URL in a Location header.
+	for strings.HasPrefix(path, "//") {
+		path = path[1:]
 	}
 	if len(path) > 1 {
 		path = strings.TrimRight(path, "/")
