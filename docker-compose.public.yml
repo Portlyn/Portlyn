@@ -3,8 +3,3 @@ services:
     image: ghcr.io/portlyn/portlyn:${PORTLYN_IMAGE_TAG:-v1.1.0}
     pull_policy: always
     build: null
-
-  frontend:
-    image: ghcr.io/portlyn/portlyn-frontend:${PORTLYN_IMAGE_TAG:-v1.1.0}
-    pull_policy: always
-    build: null

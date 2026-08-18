@@ -81,7 +81,7 @@ cp .env.docker.example .env.docker
 docker compose --env-file .env.docker up -d
 ```
 
-The stack pulls `ghcr.io/portlyn/portlyn:latest`. Pin a tag with `PORTLYN_IMAGE_TAG=v1.2.3`. If the pull is denied the packages are private for that build, so either `docker login ghcr.io` or build locally:
+The stack pulls a pinned `ghcr.io/portlyn/portlyn` tag. Override it with `PORTLYN_IMAGE_TAG=v1.2.3`. The admin UI is served by that same container. If the pull is denied the packages are private for that build, so either `docker login ghcr.io` or build locally:
 
 ```bash
 docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.dev.yml up -d --build

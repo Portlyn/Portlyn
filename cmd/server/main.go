@@ -347,7 +347,6 @@ func main() {
 			TrustedProxyCIDRs:           cfg.TrustedProxyCIDRs,
 			BootstrapAdminEnabled:       cfg.BootstrapAdminEnabled,
 			BootstrapAdminAllowRemote:   cfg.BootstrapAdminAllowRemote,
-			AdminUITargetURL:            "http://frontend:3000",
 			AdminAPITargetURL:           "http://127.0.0.1:8080",
 			EmbeddedAdminUI:             embeddedFrontendHandler(),
 			EmbeddedAdminUIScriptHashes: embeddedScriptHashes(),
