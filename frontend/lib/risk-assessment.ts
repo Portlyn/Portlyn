@@ -178,7 +178,6 @@ export function riskLevelColor(level: RiskLevel): string {
       return "orange";
     case "low":
       return "yellow";
-    case "none":
     default:
       return "gray";
   }
@@ -192,7 +191,6 @@ export function riskLevelLabel(level: RiskLevel): string {
       return "Medium risk";
     case "low":
       return "Low risk";
-    case "none":
     default:
       return "No risk";
   }

@@ -85,7 +85,7 @@ export function BootstrapWizard({ user, onComplete }: BootstrapWizardProps) {
     if (!recoveryCodes || recoveryCodes.length === 0) {
       return "";
     }
-    const blob = new Blob([recoveryCodes.join("\n") + "\n"], { type: "text/plain" });
+    const blob = new Blob([`${recoveryCodes.join("\n")}\n`], { type: "text/plain" });
     return URL.createObjectURL(blob);
   }, [recoveryCodes]);
 

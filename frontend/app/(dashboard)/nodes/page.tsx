@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Badge, Button, Card, CopyButton, Divider, Drawer, Group, Loader, Paper, Skeleton, Stack, Switch, Table, Tabs, Text, TextInput, Textarea } from "@mantine/core";
+import { Alert, Badge, Button, Card, CopyButton, Divider, Drawer, Group, Loader, Skeleton, Stack, Switch, Table, Tabs, Text, TextInput, Textarea } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useDisclosure } from "@mantine/hooks";
 import { IconCheck, IconCopy, IconPlugConnected, IconRefresh } from "@tabler/icons-react";
@@ -20,7 +20,7 @@ import type { Node, NodeEnrollmentToken, NodeEnrollmentTokenCreateResponse, Node
 type InstallPlatform = "linux" | "macos" | "windows";
 
 function shellEscape(value: string) {
-  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
 function powerShellEscape(value: string) {

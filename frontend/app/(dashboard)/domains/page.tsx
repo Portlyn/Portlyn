@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Drawer, Group, Paper, Skeleton, Stack, TextInput } from "@mantine/core";
+import { Button, Drawer, Paper, Skeleton, Stack, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useState } from "react";

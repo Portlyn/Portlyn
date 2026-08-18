@@ -6,7 +6,7 @@ import { IconShieldLock } from "@tabler/icons-react";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 
-import { apiFetch, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { beginMFASetup, disableMFA, enableMFA, getMyMFAStatus, regenerateRecoveryCodes } from "@/lib/auth";
 import type { MFASetup, MFAStatus } from "@/lib/types";
 
