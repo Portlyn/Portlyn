@@ -7,6 +7,7 @@ on:
   pull_request:
   schedule:
     - cron: "0 5 * * 3"
+  workflow_call:
 
 jobs:
   scan:
@@ -50,7 +51,8 @@ jobs:
           artifact-name: sbom-frontend.spdx.json
           format: spdx-json
 
-      - name: Run Trivy for backend image
+      # Never fails, so the SARIF always reaches the security tab.
+      - name: Run Trivy for backend image (report)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: portlyn-backend:scan
@@ -59,7 +61,7 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "0"
 
-      - name: Run Trivy for frontend image
+      - name: Run Trivy for frontend image (report)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: portlyn-frontend:scan
@@ -69,15 +71,34 @@ jobs:
           exit-code: "0"
 
       - name: Upload backend Trivy results
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-backend.sarif
           category: trivy-backend
 
       - name: Upload frontend Trivy results
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-frontend.sarif
           category: trivy-frontend
+
+      - name: Gate backend image on fixable CRITICAL/HIGH
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: portlyn-backend:scan
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Gate frontend image on fixable CRITICAL/HIGH
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: portlyn-frontend:scan
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"

@@ -6,7 +6,31 @@ on:
       - "v*.*.*"
 
 jobs:
+  # Nothing is published until every gate passes on the commit being tagged.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  security:
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/security.yml
+
+  codeql:
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/codeql.yml
+
+  container-security:
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/container-security.yml
+
   build-release:
+    needs: [ci, security, codeql, container-security]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -67,15 +91,24 @@ jobs:
             GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/portlyn-nodeagent-$os-$arch$ext" ./cmd/nodeagent
           done
 
+      - name: Generate source SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .
+          artifact-name: sbom-source.spdx.json
+          format: spdx-json
+          output-file: dist/sbom-source.spdx.json
+
       - name: Create checksums
         run: |
           cd dist
           sha256sum -- * > checksums.txt
 
+      # Keep in sync with the pinned cosign in scripts/install-hub.sh.
       - name: Install cosign
         uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
         with:
-          cosign-release: v2.5.0
+          cosign-release: v2.6.5
 
       - name: Sign checksums (keyless)
         env:
@@ -99,6 +132,7 @@ jobs:
             dist/portlyn-windows-amd64.exe
             dist/portlyn-windows-arm64.exe
             dist/portlyn-nodeagent-*
+            dist/sbom-source.spdx.json
             dist/checksums.txt
             dist/checksums.txt.sig
             dist/checksums.txt.pem
