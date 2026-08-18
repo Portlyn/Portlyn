@@ -22,7 +22,7 @@ On a stripped-down box without `curl` or `sudo` (a minimal LXC, say), install th
 wget -qO- https://get.portlyn.dev | sh
 ```
 
-Signature checking needs no extra tools. If `cosign` is on the box it uses that; otherwise the downloaded binary (already checksum-verified) checks its own release signature against a Sigstore trust root baked into it. Set `ALLOW_UNSIGNED=1` to skip the signature and settle for the checksum.
+Signature checking uses `cosign` if it is on the box. If it isn't, the script fetches the pinned cosign build and checks it against a SHA-256 digest written into the script itself, then verifies the release with that. If neither path works the install stops. A binary you just downloaded is not allowed to vouch for itself. Set `ALLOW_UNSIGNED=1` to skip the signature and settle for the checksum.
 
 ## Manual binary
 
@@ -38,13 +38,15 @@ The systemd unit lives at [`scripts/portlyn.service`](https://github.com/portlyn
 
 ## Verify a release
 
-Every tag is signed with keyless Cosign through Sigstore. For a production box, check it before you run anything. Either point the binary at the release files:
+Every tag is signed with keyless Cosign through Sigstore. For a production box, check it before you run anything.
+
+For a first install, use `cosign`. An already installed `portlyn` you trust can check a new download for you:
 
 ```bash
 portlyn verify-release --checksums checksums.txt --bundle checksums.txt.bundle.json
 ```
 
-or do it by hand with `cosign`:
+but a binary you just downloaded must not verify itself, it would simply report success. By hand with `cosign`:
 
 ```bash
 cosign verify-blob \

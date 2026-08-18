@@ -21,6 +21,11 @@ ALLOW_UNSIGNED="${ALLOW_UNSIGNED:-0}"
 SAN_REGEXP='^https://github\.com/[Pp]ortlyn/[Pp]ortlyn/'
 OIDC_ISSUER="https://token.actions.githubusercontent.com"
 
+# The digests below are pinned here, so a bootstrapped cosign is checked against
+# a value that does not come from the release channel it is about to verify.
+COSIGN_VERSION="v2.6.5"
+COSIGN_BASE="https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}"
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --token) TOKEN="$2"; shift 2 ;;
@@ -88,8 +93,8 @@ tmp="$(mktemp)"
 sums="$(mktemp)"
 sig="$(mktemp)"
 cert="$(mktemp)"
-bundle="$(mktemp)"
-trap 'rm -f "$tmp" "$sums" "$sig" "$cert" "$bundle"' EXIT
+cosign_bin="$(mktemp)"
+trap 'rm -f "$tmp" "$sums" "$sig" "$cert" "$cosign_bin"' EXIT
 echo "Downloading ${asset} ..."
 $DL "$tmp" "$url" || err "download failed: $url"
 
@@ -110,29 +115,59 @@ if [ "$ALLOW_UNSIGNED" = "1" ]; then
   REQUIRE_SIGNATURE="0"
 fi
 
-chmod +x "$tmp"
+pinned_cosign_sha() {
+  case "$1" in
+    linux-amd64)  echo "c3b4f5410e608af03a5eb0aaac84a4313d8da131248e08ff1759ac70c79d1644" ;;
+    linux-arm64)  echo "426193b4c5da4d4d643e822f48fe0cc8a476ca1782a272704831f5a0cef716d7" ;;
+    darwin-amd64) echo "0f8a1a70c81de9740a2b62e91307ff396ce54e7dd80568d42411bb2d9d44269c" ;;
+    darwin-arm64) echo "4d41cc18f0563907c0c785b51db76e1d1af10db4422b605ba876b1758e1771ab" ;;
+    *) echo "" ;;
+  esac
+}
 
+bootstrap_cosign() {
+  expected_cosign="$(pinned_cosign_sha "${os}-${arch}")"
+  [ -n "$expected_cosign" ] || return 1
+  $DL "$cosign_bin" "${COSIGN_BASE}/cosign-${os}-${arch}" >/dev/null 2>&1 || return 1
+  actual_cosign="$($SHA "$cosign_bin" | awk '{print $1}')"
+  [ "$expected_cosign" = "$actual_cosign" ] || return 1
+  chmod +x "$cosign_bin"
+  COSIGN="$cosign_bin"
+  return 0
+}
+
+COSIGN=""
 if command -v cosign >/dev/null 2>&1; then
+  COSIGN="cosign"
+elif [ "$REQUIRE_SIGNATURE" = "1" ]; then
+  echo "cosign not found; fetching pinned cosign ${COSIGN_VERSION} ..."
+  if bootstrap_cosign; then
+    echo "cosign ${COSIGN_VERSION} verified against pinned digest."
+  else
+    err "no trustworthy verifier available.
+Install cosign (https://docs.sigstore.dev/cosign/installation) or your distribution's
+package, then re-run this installer. Verification must not depend on the binary
+being installed, so there is no fallback."
+  fi
+fi
+
+if [ -n "$COSIGN" ]; then
   echo "Verifying signature (cosign) ..."
   $DL "$sig" "${release_base}/checksums.txt.sig" || err "could not fetch checksums.txt.sig for signature verification"
   $DL "$cert" "${release_base}/checksums.txt.pem" || err "could not fetch checksums.txt.pem for signature verification"
-  cosign verify-blob \
+  "$COSIGN" verify-blob \
     --certificate "$cert" \
     --signature "$sig" \
     --certificate-identity-regexp "$SAN_REGEXP" \
     --certificate-oidc-issuer "$OIDC_ISSUER" \
     "$sums" >/dev/null 2>&1 || err "cosign signature verification failed for checksums.txt"
   echo "Signature OK."
-elif [ "$REQUIRE_SIGNATURE" = "1" ]; then
-  echo "cosign not found; verifying signature in-process with the downloaded binary ..."
-  $DL "$bundle" "${release_base}/checksums.txt.bundle.json" || err "could not fetch checksums.txt.bundle.json for in-process verification"
-  "$tmp" verify-release --checksums "$sums" --bundle "$bundle" --asset "$tmp" --asset-name "$asset" \
-    || err "in-process signature verification failed for checksums.txt"
-  echo "Signature OK (verified in-process via embedded Sigstore trust root)."
 else
-  echo "WARNING: --allow-unsigned set; cosign not found. Verified checksum only." >&2
+  echo "WARNING: --allow-unsigned set. Verified checksum only." >&2
   echo "WARNING: the download's authenticity is NOT verified. Install cosign for full Sigstore verification." >&2
 fi
+
+chmod +x "$tmp"
 
 SUDO=""
 if [ "$(id -u)" -ne 0 ]; then

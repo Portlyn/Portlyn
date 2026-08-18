@@ -44,7 +44,9 @@ curl -fsSL https://raw.githubusercontent.com/portlyn/Portlyn/main/scripts/instal
   | sudo PORTLYN_DOMAIN=portlyn.example.com PORTLYN_ADMIN_EMAIL=admin@example.com sh
 ```
 
-Run without the environment variables to install the binary and unit only, then configure interactively. Signature verification needs no external tools: if `cosign` is present it is used, otherwise the freshly downloaded (and checksum-verified) binary verifies the release signature itself via the embedded Sigstore trust root (`portlyn verify-release`). Pass `ALLOW_UNSIGNED=1` to skip signature verification (checksum only).
+Run without the environment variables to install the binary and unit only, then configure interactively.
+
+Signature verification always runs against a verifier the installer did not just download from the Portlyn release channel. If `cosign` is on the machine it is used. If not, the script pulls the pinned cosign build from the Sigstore releases and checks it against a SHA-256 digest hard-coded in the script before using it. If neither works the install aborts. The downloaded Portlyn binary never verifies itself. Pass `ALLOW_UNSIGNED=1` to drop to checksum-only verification.
 
 ## Single binary (manual)
 
@@ -92,7 +94,7 @@ cp .env.docker.example .env.docker
 docker compose --env-file .env.docker up -d
 ```
 
-The default `docker-compose.yml` pulls `ghcr.io/portlyn/portlyn:latest`. Pin a specific tag with `PORTLYN_IMAGE_TAG=v1.2.3`.
+The default `docker-compose.yml` pulls a pinned `ghcr.io/portlyn/portlyn` tag. Override it with `PORTLYN_IMAGE_TAG=v1.2.3`.
 
 If the pull fails with `denied` / `unauthorized`, the GHCR packages are private for that build. Either authenticate (`docker login ghcr.io`) or build the images locally with the dev overlay instead of pulling them:
 
