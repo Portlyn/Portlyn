@@ -1,0 +1,36 @@
+name: Refresh lockfile
+
+# npm on Windows drops the optional platform packages that linux needs, which
+# leaves package-lock.json out of sync and breaks npm ci on the runner. Run this
+# after changing frontend dependencies and commit the artifact.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Resolve the dependency tree
+        run: npm install --package-lock-only --no-audit --no-fund
+
+      - name: Verify the lockfile installs cleanly
+        run: npm ci --no-audit --no-fund
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-lock
+          path: frontend/package-lock.json
+          retention-days: 7
