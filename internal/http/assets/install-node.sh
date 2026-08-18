@@ -179,6 +179,16 @@ $SUDO mv "$tmp" "${INSTALL_DIR}/${BIN_NAME}"
 echo "Installed ${INSTALL_DIR}/${BIN_NAME}"
 
 if command -v systemctl >/dev/null 2>&1; then
+  # The token goes into a 0600 file that systemd passes as a credential, so it
+  # stays out of the unit file and out of the process list.
+  cred_dir="/etc/portlyn-nodeagent"
+  cred_file="${cred_dir}/enrollment-token"
+  $SUDO mkdir -p "$cred_dir"
+  $SUDO chmod 0700 "$cred_dir"
+  umask 077
+  printf '%s' "$TOKEN" | $SUDO tee "$cred_file" >/dev/null
+  $SUDO chmod 0600 "$cred_file"
+
   unit="/etc/systemd/system/${SERVICE_NAME}.service"
   echo "Installing systemd service ${SERVICE_NAME} ..."
   $SUDO sh -c "cat > '$unit'" <<EOF
@@ -188,11 +198,16 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=${INSTALL_DIR}/${BIN_NAME} --api "${API_BASE}" --token "${TOKEN}" --name "${NAME}" --state "${STATE_DIR}/state.json"
+ExecStart=${INSTALL_DIR}/${BIN_NAME} --api "${API_BASE}" --name "${NAME}" --state "${STATE_DIR}/state.json"
+LoadCredential=enrollment-token:${cred_file}
 Restart=always
 RestartSec=5
 DynamicUser=yes
 StateDirectory=portlyn-nodeagent
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
@@ -200,8 +215,13 @@ EOF
   $SUDO systemctl daemon-reload
   $SUDO systemctl enable --now "${SERVICE_NAME}.service"
   echo "Service started. Check status with: systemctl status ${SERVICE_NAME}"
+  echo "The enrollment token is in ${cred_file} (0600). Delete it once the node is enrolled."
 else
   $SUDO mkdir -p "$STATE_DIR"
+  cred_file="${STATE_DIR}/enrollment-token"
+  umask 077
+  printf '%s' "$TOKEN" | $SUDO tee "$cred_file" >/dev/null
+  $SUDO chmod 0600 "$cred_file"
   echo "systemd not found. Start the agent manually (or add it to your init system):"
-  echo "  ${INSTALL_DIR}/${BIN_NAME} --api \"${API_BASE}\" --token \"${TOKEN}\" --name \"${NAME}\" --state \"${STATE_DIR}/state.json\""
+  echo "  ${INSTALL_DIR}/${BIN_NAME} --api \"${API_BASE}\" --name \"${NAME}\" --state \"${STATE_DIR}/state.json\" --token-file \"${cred_file}\""
 fi
