@@ -100,4 +100,3 @@ func NewDatabase(cfg config.Config) (*gorm.DB, error) {
 
 	return db, nil
 }
-
