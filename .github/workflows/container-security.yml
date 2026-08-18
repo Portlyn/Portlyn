@@ -35,6 +35,7 @@ jobs:
         run: docker build --build-arg TARGETARCH=amd64 -t portlyn-backend:scan .
 
       - name: Build frontend image
+        id: build_frontend
         run: docker build -t portlyn-frontend:scan ./frontend
 
       - name: Generate backend SBOM
@@ -94,7 +95,7 @@ jobs:
           exit-code: "1"
 
       - name: Gate frontend image on fixable CRITICAL/HIGH
-        if: always()
+        if: always() && steps.build_frontend.outcome == 'success'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: portlyn-frontend:scan
