@@ -1,4 +1,4 @@
-FROM node:24-alpine AS frontend
+FROM node:24.19.0-alpine AS frontend
 WORKDIR /src
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -6,7 +6,7 @@ COPY frontend/ ./
 ENV PORTLYN_STATIC_EXPORT=1
 RUN npm run build
 
-FROM golang:1.26-alpine AS backend
+FROM golang:1.26.6-alpine AS backend
 RUN apk add --no-cache git
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -15,7 +15,7 @@ COPY . .
 COPY --from=frontend /src/out/ ./cmd/server/frontend_dist/
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/portlyn ./cmd/server
 
-FROM alpine:3.20
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata wireguard-tools iproute2 && \
     addgroup -S app && \
     adduser -S app -G app && \
