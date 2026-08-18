@@ -14,7 +14,7 @@ export default defineConfig({
       },
       plugins: [
         starlightOpenAPI([
-          { base: "api", label: "API reference", schema: "../docs/openapi.yaml" },
+          { base: "api", label: "API reference", schema: "../openapi.yaml" },
         ]),
       ],
       sidebar: [

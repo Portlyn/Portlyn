@@ -3,7 +3,7 @@ info:
   title: Portlyn Admin API
   version: "1.0.0"
   description: |
-    Administrative and operational API for Portlyn — a self-hosted reverse proxy
+    Administrative and operational API for Portlyn, a self-hosted reverse proxy
     and zero-trust control plane. All endpoints under `/api/v1` require a valid
     session cookie or `Authorization: Bearer <token>` header unless documented
     as public.
@@ -314,6 +314,64 @@ components:
         token: { type: string }
         expires_at: { type: string, format: date-time }
 
+    Group:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+    ServiceGroup:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        default_access_policy: { $ref: "#/components/schemas/AccessPolicy" }
+        access_method: { type: string, enum: [session, oidc_only, pin, email_code] }
+        service_ids:
+          type: array
+          items: { type: integer }
+    APIToken:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        prefix: { type: string }
+        role: { type: string, enum: [admin, viewer] }
+        status: { type: string }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+    Client:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        wg_public_key: { type: string }
+        wg_tunnel_ip: { type: string }
+        created_at: { type: string, format: date-time }
+    ClientConfig:
+      type: object
+      properties:
+        client: { $ref: "#/components/schemas/Client" }
+        config_text: { type: string, description: Ready-to-paste wg-quick config }
+        address: { type: string }
+        allowed_ips:
+          type: array
+          items: { type: string }
+    Session:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        ip: { type: string }
+        user_agent: { type: string }
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+
 paths:
   /auth/login:
     post:
@@ -335,6 +393,158 @@ paths:
         "401": { description: Invalid credentials, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "429": { description: Rate limited }
 
+  /auth/config:
+    get:
+      summary: Public auth configuration for the login page
+      security: []
+      responses:
+        "200":
+          description: Which login methods are enabled, plus branding
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  oidc_enabled: { type: boolean }
+                  oidc_label: { type: string }
+                  otp_enabled: { type: boolean }
+                  local_login_disabled: { type: boolean }
+                  ui: { type: object }
+
+  /auth/logout:
+    post:
+      summary: End the current session
+      responses:
+        "200": { description: Session revoked }
+
+  /auth/refresh:
+    post:
+      summary: Exchange a refresh cookie for a new access token
+      security: []
+      responses:
+        "200": { description: New token issued }
+        "401": { description: Refresh token missing, expired or revoked, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /auth/verify-mfa:
+    post:
+      summary: Complete a login that asked for a second factor
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mfa_token, code]
+              properties:
+                mfa_token: { type: string, description: Short lived token from the login response }
+                code: { type: string, description: TOTP code or recovery code }
+      responses:
+        "200": { description: Session issued }
+        "401": { description: Invalid or replayed code, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { description: Rate limited }
+
+  /auth/request-otp:
+    post:
+      summary: Email a one-time login code
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200": { description: Code sent if the account exists }
+        "429": { description: Rate limited }
+
+  /auth/verify-otp:
+    post:
+      summary: Redeem a one-time login code
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, token]
+              properties:
+                email: { type: string, format: email }
+                token: { type: string }
+      responses:
+        "200": { description: Session issued }
+        "401": { description: Invalid or expired code, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /auth/passkey/begin-login:
+    post:
+      summary: Start a WebAuthn login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200":
+          description: Assertion challenge
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id: { type: string }
+                  options: { type: object }
+                  expires_at: { type: string, format: date-time }
+
+  /auth/passkey/finish-login:
+    post:
+      summary: Finish a WebAuthn login
+      security: []
+      parameters:
+        - in: query
+          name: session_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Assertion from navigator.credentials.get()
+      responses:
+        "200": { description: Session issued }
+        "401": { description: Assertion rejected, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /auth/break-glass/login:
+    post:
+      summary: Loopback-only recovery login
+      description: |
+        Accepts the break-glass token from the server configuration. Only served
+        for requests originating on the machine itself, so an SSO outage or a lost
+        authenticator cannot lock an operator out permanently.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        "200": { description: Session issued }
+        "403": { description: Not a loopback request or break-glass disabled }
+
   /auth/oidc/start:
     get:
       summary: Begin OIDC login redirect
@@ -342,11 +552,157 @@ paths:
       responses:
         "302": { description: Redirect to identity provider }
 
+  /auth/oidc/callback:
+    get:
+      summary: OIDC redirect target
+      security: []
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema: { type: string }
+        - in: query
+          name: state
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Session issued }
+        "401": { description: State mismatch or provider rejected the code }
+
   /me:
     get:
       summary: Current user profile
       responses:
         "200": { description: Profile, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+
+  /me/password:
+    post:
+      summary: Change the current user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 8 }
+      responses:
+        "200": { description: Password changed }
+        "401": { description: Current password is wrong, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /me/account-setup:
+    post:
+      summary: Finish first-login setup by setting a real email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200": { description: Account updated, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+
+  /me/bootstrap/dismiss:
+    post:
+      summary: Stop showing the setup wizard for this account
+      responses:
+        "200":
+          description: Dismissed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bootstrap_dismissed: { type: boolean }
+
+  /me/mfa:
+    get:
+      summary: TOTP status for the current user
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+                  required_for_current_user: { type: boolean }
+                  recovery_code_count: { type: integer }
+
+  /me/mfa/setup:
+    post:
+      summary: Start TOTP enrolment
+      responses:
+        "200":
+          description: Secret and provisioning URI. Not active until confirmed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret: { type: string }
+                  otpauth_url: { type: string }
+
+  /me/mfa/enable:
+    post:
+      summary: Confirm TOTP enrolment with a current code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "200": { description: Enabled, recovery codes returned once }
+        "401": { description: Wrong code, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /me/mfa/disable:
+    post:
+      summary: Turn TOTP off
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, description: Current TOTP or recovery code }
+      responses:
+        "200": { description: Disabled }
+        "401": { description: Wrong code }
+
+  /me/mfa/recovery-codes:
+    post:
+      summary: Replace the recovery codes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "200":
+          description: New codes, shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recovery_codes: { type: array, items: { type: string } }
 
   /me/passkeys:
     get:
@@ -355,6 +711,42 @@ paths:
         "200":
           description: List
           content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/UserCredential" } } } }
+
+  /me/passkeys/{id}:
+    delete:
+      summary: Remove a passkey
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Removed }
+        "404": { description: Not found }
+
+  /sessions:
+    get:
+      summary: List the current user's active sessions
+      responses:
+        "200": { description: List }
+
+  /sessions/{id}:
+    delete:
+      summary: Revoke one session
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Revoked }
+        "404": { description: Not found }
+
+  /sessions/revoke-all:
+    post:
+      summary: Revoke every session of the current user except this one
+      responses:
+        "200": { description: Revoked }
 
   /me/passkeys/begin-registration:
     post:
@@ -414,7 +806,7 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Service" } } }
     put:
       summary: Upsert service by route (admin only)
-      description: Idempotent apply keyed on (domain_id, subdomain, path). Creates when absent, updates in place when present — a repeated apply is a no-op update, not a conflict.
+      description: Idempotent apply keyed on (domain_id, subdomain, path). Creates when absent, updates in place when present. A repeated apply is a no-op update, not a conflict.
       requestBody:
         required: true
         content:
@@ -771,3 +1163,934 @@ paths:
       summary: Test DNS provider credentials
       responses:
         "200": { description: Test result }
+
+  /users:
+    get:
+      summary: List users
+      responses:
+        "200":
+          description: List
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/User" } } } }
+    post:
+      summary: Create a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, role]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                role: { type: string, enum: [admin, viewer] }
+                active: { type: boolean }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "409": { description: Email already taken }
+
+  /users/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get a user
+      responses:
+        "200": { description: User, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "404": { description: Not found }
+    patch:
+      summary: Update a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                role: { type: string, enum: [admin, viewer] }
+                active: { type: boolean }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "404": { description: Not found }
+    delete:
+      summary: Delete a user
+      responses:
+        "204": { description: Deleted }
+        "404": { description: Not found }
+
+  /users/{id}/mfa/reset:
+    post:
+      summary: Clear a user's TOTP enrolment
+      description: Admin recovery for a lost authenticator. The user has to enrol again on next login.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: Reset }
+        "404": { description: Not found }
+
+  /users/{id}/sessions:
+    get:
+      summary: List a user's sessions
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: List
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Session" } } } }
+
+  /users/{id}/sessions/{sessionId}:
+    delete:
+      summary: Revoke one session of a user
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+        - in: path
+          name: sessionId
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Revoked }
+        "404": { description: Not found }
+
+  /users/{id}/sessions/revoke-all:
+    post:
+      summary: Revoke every session of a user
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: Revoked }
+
+  /groups:
+    get:
+      summary: List groups
+      responses:
+        "200":
+          description: List
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Group" } } } }
+    post:
+      summary: Create a group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 255 }
+                description: { type: string }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Group" } } } }
+
+  /groups/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get a group with its members
+      responses:
+        "200": { description: Group, content: { application/json: { schema: { $ref: "#/components/schemas/Group" } } } }
+        "404": { description: Not found }
+    patch:
+      summary: Update a group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 2, maxLength: 255 }
+                description: { type: string }
+      responses:
+        "200": { description: Updated }
+        "404": { description: Not found }
+    delete:
+      summary: Delete a group
+      responses:
+        "204": { description: Deleted }
+        "404": { description: Not found }
+
+  /groups/{id}/members:
+    post:
+      summary: Add a user to a group
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: { type: integer }
+      responses:
+        "201": { description: Added }
+        "404": { description: Group or user not found }
+
+  /groups/{id}/members/{userId}:
+    delete:
+      summary: Remove a user from a group
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Removed }
+        "404": { description: Not found }
+
+  /service-groups:
+    get:
+      summary: List service groups
+      responses:
+        "200":
+          description: List
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ServiceGroup" } } } }
+    post:
+      summary: Create a service group
+      description: A service group carries a default access policy that its member services inherit unless they override it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, default_access_policy]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 255 }
+                description: { type: string }
+                default_access_policy: { $ref: "#/components/schemas/AccessPolicy" }
+                access_method: { type: string, enum: [session, oidc_only, pin, email_code] }
+                access_method_config: { type: object }
+                service_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ServiceGroup" } } } }
+
+  /service-groups/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get a service group
+      responses:
+        "200": { description: Service group, content: { application/json: { schema: { $ref: "#/components/schemas/ServiceGroup" } } } }
+        "404": { description: Not found }
+    patch:
+      summary: Update a service group
+      description: Changing the default policy re-deploys every member service that inherits it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                default_access_policy: { $ref: "#/components/schemas/AccessPolicy" }
+                access_method: { type: string, enum: [session, oidc_only, pin, email_code] }
+                access_method_config: { type: object }
+                service_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "200": { description: Updated }
+        "404": { description: Not found }
+    delete:
+      summary: Delete a service group
+      responses:
+        "204": { description: Deleted }
+        "404": { description: Not found }
+
+  /service-groups/{id}/services:
+    post:
+      summary: Add a service to a service group
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [service_id]
+              properties:
+                service_id: { type: integer }
+      responses:
+        "201": { description: Added }
+        "404": { description: Not found }
+
+  /service-groups/{id}/services/{serviceId}:
+    delete:
+      summary: Remove a service from a service group
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+        - in: path
+          name: serviceId
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Removed }
+        "404": { description: Not found }
+
+  /services/{id}/redeploy:
+    post:
+      summary: Push the current service config to the proxy again
+      description: Recomputes the effective route and bumps the deployment revision. Useful after an upstream change that Portlyn cannot observe.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: Redeployed }
+        "404": { description: Not found }
+
+  /api-tokens:
+    get:
+      summary: List API tokens
+      responses:
+        "200":
+          description: List. The token value itself is never returned again.
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/APIToken" } } } }
+    post:
+      summary: Create an API token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                role: { type: string, enum: [admin, viewer] }
+                expires_in_days: { type: integer, minimum: 1, maximum: 3650 }
+      responses:
+        "201":
+          description: Created. The plaintext token is in the response and is not recoverable later.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIToken"
+                  - type: object
+                    properties:
+                      token: { type: string }
+
+  /api-tokens/{id}:
+    delete:
+      summary: Revoke an API token
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Revoked }
+        "404": { description: Not found }
+
+  /clients:
+    get:
+      summary: List WireGuard clients
+      responses:
+        "200":
+          description: List
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Client" } } } }
+    post:
+      summary: Create a WireGuard client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 255 }
+                description: { type: string, maxLength: 1024 }
+                allowed_node_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "201":
+          description: Created. The private key is in the config text and shown only once.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ClientConfig" } } }
+
+  /clients/{id}:
+    delete:
+      summary: Delete a client
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Deleted }
+        "404": { description: Not found }
+
+  /clients/{id}/rotate:
+    post:
+      summary: Issue a new key pair for a client
+      description: The old key stops working immediately. The new config is returned once.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: Rotated, content: { application/json: { schema: { $ref: "#/components/schemas/ClientConfig" } } } }
+        "404": { description: Not found }
+
+  /nodes:
+    get:
+      summary: List nodes
+      responses:
+        "200":
+          description: List
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Node" } } } }
+    post:
+      summary: Register a node by hand
+      description: Normal installs use the enrolment flow instead.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, status]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 255 }
+                description: { type: string }
+                version: { type: string, maxLength: 64 }
+                status: { type: string, maxLength: 64 }
+                heartbeat_auth_mode: { type: string, enum: [token, mtls] }
+                mtls_cert_sha256: { type: string, description: Hex SHA-256 of the client certificate, required for mtls mode }
+                advertised_subnets: { type: string }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Node" } } } }
+
+  /nodes/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get a node
+      responses:
+        "200": { description: Node, content: { application/json: { schema: { $ref: "#/components/schemas/Node" } } } }
+        "404": { description: Not found }
+    patch:
+      summary: Update a node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 2, maxLength: 255 }
+                description: { type: string }
+                version: { type: string, maxLength: 64 }
+                status: { type: string, maxLength: 64 }
+                heartbeat_auth_mode: { type: string, enum: [token, mtls] }
+                mtls_cert_sha256: { type: string }
+                advertised_subnets: { type: string }
+      responses:
+        "200": { description: Updated }
+        "404": { description: Not found }
+    delete:
+      summary: Delete a node
+      responses:
+        "204": { description: Deleted }
+        "404": { description: Not found }
+
+  /nodes/enroll:
+    post:
+      summary: Enrol a node agent with an enrolment token
+      description: |
+        Called by the agent, not by an operator. The token and the node are handled
+        in one transaction, so a failure leaves a single-use token usable. The
+        heartbeat token in the response is shown once.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, name]
+              properties:
+                token: { type: string, minLength: 8, maxLength: 255 }
+                name: { type: string, minLength: 2, maxLength: 255 }
+                description: { type: string }
+                version: { type: string, maxLength: 64 }
+      responses:
+        "201":
+          description: Node created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  node: { $ref: "#/components/schemas/Node" }
+                  heartbeat_token: { type: string }
+                  heartbeat_url: { type: string }
+        "401": { description: Invalid, expired or already used token }
+        "429": { description: Rate limited }
+
+  /nodes/{id}/heartbeat:
+    post:
+      summary: Node agent heartbeat
+      description: Authenticated with the heartbeat token from enrolment, or with a client certificate in mtls mode.
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version: { type: string, maxLength: 64 }
+                status: { type: string, maxLength: 64 }
+                load: { type: number }
+                bandwidth_in_kbps: { type: number }
+                bandwidth_out_kbps: { type: number }
+                wg_last_handshake: { type: string, format: date-time }
+                wg_rx_bytes: { type: integer }
+                wg_tx_bytes: { type: integer }
+                tunnel_status: { type: string, enum: [inactive, provisioned, connected, stale] }
+      responses:
+        "200": { description: Accepted }
+        "401": { description: Heartbeat token or certificate rejected }
+
+  /nodes/{id}/tunnel-targets:
+    get:
+      summary: Services the node should forward to
+      description: Read by the agent to know which upstreams to expose through the tunnel.
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: Target list }
+        "401": { description: Heartbeat token or certificate rejected }
+
+  /node-enrollment-tokens:
+    get:
+      summary: List enrolment tokens
+      responses:
+        "200": { description: List }
+    post:
+      summary: Create an enrolment token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 255 }
+                description: { type: string }
+                ttl_seconds: { type: integer, minimum: 60, maximum: 2592000 }
+                single_use: { type: boolean, default: true }
+      responses:
+        "201":
+          description: Created. The token and a ready-to-run install command are returned once.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+                  single_use: { type: boolean }
+                  expires_at: { type: string, format: date-time, nullable: true }
+                  token: { type: string }
+                  setup_command: { type: string }
+
+  /node-enrollment-tokens/{id}:
+    delete:
+      summary: Delete an enrolment token
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Deleted }
+        "404": { description: Not found }
+
+  /route-auth/service/{id}:
+    get:
+      summary: Public login metadata for a protected route
+      description: Drives the route login page. Says which method the service uses and what to show the visitor.
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Route auth info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service_id: { type: integer }
+                  service_name: { type: string }
+                  access_method: { type: string, enum: [session, oidc_only, pin, email_code] }
+                  hint: { type: string }
+                  message: { type: string }
+        "404": { description: No such service }
+
+  /route-auth/pin:
+    post:
+      summary: Redeem a route PIN
+      security: []
+      parameters:
+        - in: query
+          name: returnTo
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [service_id, pin]
+              properties:
+                service_id: { type: integer }
+                pin: { type: string, minLength: 3, maxLength: 64 }
+      responses:
+        "200":
+          description: Route cookie issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  bridge_url: { type: string }
+        "401": { description: Wrong PIN }
+        "429": { description: Rate limited }
+
+  /route-auth/request-email-code:
+    post:
+      summary: Email a one-time code for a protected route
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [service_id, email]
+              properties:
+                service_id: { type: integer }
+                email: { type: string, format: email }
+      responses:
+        "200": { description: Sent if the address is allowed for that route }
+        "429": { description: Rate limited }
+
+  /route-auth/verify-email-code:
+    post:
+      summary: Redeem a route email code
+      security: []
+      parameters:
+        - in: query
+          name: returnTo
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [service_id, email, code]
+              properties:
+                service_id: { type: integer }
+                email: { type: string, format: email }
+                code: { type: string, minLength: 6, maxLength: 16 }
+      responses:
+        "200":
+          description: Route cookie issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  bridge_url: { type: string }
+        "401": { description: Wrong or expired code }
+
+  /route-auth/session-bridge-token:
+    post:
+      summary: Mint a short-lived token that carries the session to a service host
+      description: Used to hand an authenticated session from the admin host to a service hostname on a different origin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host]
+              properties:
+                host: { type: string, maxLength: 255 }
+      responses:
+        "200":
+          description: Bridge token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+        "403": { description: Host is not a route this session may reach }
+
+  /settings/auth:
+    get:
+      summary: Auth and branding settings
+      responses:
+        "200": { description: Settings }
+    patch:
+      summary: Update auth and branding settings
+      description: Values stored here win over the equivalent environment variables. `portlyn settings sync` pushes env values back in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                frontend_base_url: { type: string, format: uri }
+                auth_brand_name: { type: string, maxLength: 255 }
+                auth_logo_url: { type: string, maxLength: 1024 }
+                auth_login_title: { type: string, maxLength: 255 }
+                require_mfa_for_admins: { type: boolean }
+                local_login_disabled: { type: boolean }
+                oidc_enabled: { type: boolean }
+                otp_enabled: { type: boolean }
+      responses:
+        "200": { description: Updated }
+        "400": { description: Rejected, for example disabling the last remaining login method }
+
+  /settings/auth/test-email:
+    post:
+      summary: Send a test email with the configured SMTP settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200": { description: Sent }
+        "502": { description: SMTP rejected the message }
+
+  /settings/network:
+    get:
+      summary: GeoIP and CrowdSec settings
+      responses:
+        "200": { description: Settings }
+    patch:
+      summary: Update GeoIP and CrowdSec settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                geoip_db_path: { type: string }
+                crowdsec_enabled: { type: boolean }
+                crowdsec_api_url: { type: string }
+                crowdsec_api_key: { type: string, description: Write-only. Stored encrypted and never returned. }
+                crowdsec_poll_interval_secs: { type: integer, minimum: 10, maximum: 3600 }
+      responses:
+        "200": { description: Updated }
+
+  /security/rotation/status:
+    get:
+      summary: Data key rotation status
+      description: Shows how many stored secrets still use a legacy data encryption key.
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_key_id: { type: string }
+                  legacy_key_ids:
+                    type: array
+                    items: { type: string }
+                  pending_records: { type: integer }
+
+  /security/rotation/data-key/reencrypt:
+    post:
+      summary: Re-encrypt stored secrets with the current data key
+      description: Run after adding a new DATA_ENCRYPTION_SECRET and moving the old one to DATA_ENCRYPTION_LEGACY_SECRETS. Use dry_run first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dry_run: { type: boolean }
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dry_run: { type: boolean }
+                  rewrapped: { type: integer }
+                  failed: { type: integer }
+
+  /system/security-alerts:
+    get:
+      summary: Current security alerts
+      description: Login failure spikes, node heartbeat failures and audit anomalies over the configured alert window.
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    kind: { type: string }
+                    level: { type: string, enum: [info, warn, critical] }
+                    summary: { type: string }
+                    count: { type: integer }
+                    since: { type: string, format: date-time }
+
+  /audit-logs/verify:
+    get:
+      summary: Verify the audit hash chain
+      description: Recomputes the HMAC chain from genesis. A break means rows were altered or removed outside Portlyn.
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  verified: { type: integer }
+                  latest_id: { type: integer }
+                  broken_at: { type: integer, nullable: true }
+
+  /audit-webhooks/{id}/test:
+    post:
+      summary: Send a test event to a webhook
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: Delivered, with the status the endpoint returned }
+        "404": { description: Not found }
+
+  /audit-webhooks/{id}/rotate-secret:
+    post:
+      summary: Issue a new signing secret for a webhook
+      description: The new secret is returned once. Receivers verifying the signature have to be updated.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Rotated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret: { type: string }
+        "404": { description: Not found }
+
+  /certificates/{id}/import-pem:
+    post:
+      summary: Import an externally issued certificate
+      description: For certificates Portlyn did not obtain itself. The key is stored encrypted.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [certificate_pem, private_key_pem]
+              properties:
+                certificate_pem: { type: string }
+                private_key_pem: { type: string }
+                issuer_key: { type: string, maxLength: 255 }
+      responses:
+        "200": { description: Imported }
+        "400": { description: PEM did not parse, or the key does not match the certificate }

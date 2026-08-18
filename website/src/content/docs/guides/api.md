@@ -31,4 +31,4 @@ Browser clients get an `HttpOnly` session cookie instead of a token in the respo
 
 ## Reference
 
-The [API reference](/api/) is generated from [`docs/openapi.yaml`](https://github.com/portlyn/Portlyn/blob/main/docs/openapi.yaml). It's not complete yet, it covers auth, nodes, certificates, DNS providers, and API tokens so far. The rest of the endpoints exist in the code under `internal/http` and get added to the spec over time.
+The [API reference](/api/) is generated from [`openapi.yaml`](https://github.com/portlyn/Portlyn/blob/main/openapi.yaml). It covers every endpoint the server registers. A test walks the router and compares it against the spec, so an undocumented new endpoint fails the build, and so does a documented one that no longer exists.
