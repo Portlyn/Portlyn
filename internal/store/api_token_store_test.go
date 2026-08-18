@@ -21,8 +21,8 @@ func newAPITokenTestStore(t *testing.T) *APITokenStore {
 	if err != nil {
 		t.Fatalf("new database: %v", err)
 	}
-	if err := AutoMigrate(db); err != nil {
-		t.Fatalf("auto migrate: %v", err)
+	if err := Migrate(context.Background(), db); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
 	t.Cleanup(func() {
 		if sqlDB, err := db.DB(); err == nil {

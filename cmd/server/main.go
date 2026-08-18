@@ -70,6 +70,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "migrate":
+			if err := runMigrateSubcommand(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "migrate:", err)
+				os.Exit(1)
+			}
+			return
 		case "config":
 			if len(os.Args) > 2 && os.Args[2] == "check" {
 				if err := runDoctor(os.Args[3:]); err != nil {
@@ -121,7 +127,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := store.AutoMigrate(db); err != nil {
+	if err := store.Migrate(context.Background(), db); err != nil {
 		logger.Error("failed to migrate database", "error", err)
 		os.Exit(1)
 	}
@@ -556,6 +562,7 @@ Usage:
   portlyn settings sync apply env values for env-controlled settings to the database
   portlyn token create  create an API token from the CLI (flags: --name, --role, --expires-days)
   portlyn audit compact prune high-volume access rows and re-chain security events (flags: --yes, --no-vacuum)
+  portlyn migrate       apply pending schema migrations ('status' to list, 'down <id>' to roll one back)
   portlyn update        download, verify and install the latest release (flags: --check, --version, --no-restart, --unit)
   portlyn verify-release verify a release signature in-process (--checksums, --bundle, --asset, --asset-name)
   portlyn version       print version and exit

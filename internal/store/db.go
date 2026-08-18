@@ -13,7 +13,6 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 
 	"portlyn/internal/config"
-	"portlyn/internal/domain"
 )
 
 func gormLogLevel(value string) gormlogger.LogLevel {
@@ -102,31 +101,3 @@ func NewDatabase(cfg config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
-		&domain.User{},
-		&domain.APIToken{},
-		&domain.Group{},
-		&domain.GroupMembership{},
-		&domain.Node{},
-		&domain.NodeEnrollmentToken{},
-		&domain.Client{},
-		&domain.Domain{},
-		&domain.Certificate{},
-		&domain.CertificateSAN{},
-		&domain.DNSProvider{},
-		&domain.ServiceGroup{},
-		&domain.ServiceGroupMembership{},
-		&domain.Service{},
-		&domain.LoginToken{},
-		&domain.Session{},
-		&domain.AuditLog{},
-		&domain.AppSettings{},
-		&domain.StoredTLSCertificate{},
-		&domain.DistributedKV{},
-		&domain.DistributedLock{},
-		&domain.AuditWebhook{},
-		&domain.UserCredential{},
-		&domain.ServiceExposureReport{},
-	)
-}

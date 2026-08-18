@@ -39,7 +39,7 @@ func runTokenSubcommand(args []string) error {
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	if err := store.AutoMigrate(db); err != nil {
+	if err := store.Migrate(context.Background(), db); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
 	}
 

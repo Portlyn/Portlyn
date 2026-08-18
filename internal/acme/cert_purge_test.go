@@ -19,7 +19,7 @@ func TestDeleteCertificatesForDomain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new database: %v", err)
 	}
-	if err := store.AutoMigrate(db); err != nil {
+	if err := store.Migrate(context.Background(), db); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	t.Cleanup(func() {
