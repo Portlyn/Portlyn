@@ -3,8 +3,8 @@ module portlyn
 go 1.26.6
 
 require (
-	github.com/caddyserver/certmagic v0.25.3
-	github.com/coreos/go-oidc/v3 v3.18.0
+	github.com/caddyserver/certmagic v0.25.4
+	github.com/coreos/go-oidc/v3 v3.19.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/go-chi/cors v1.2.2
@@ -16,8 +16,9 @@ require (
 	github.com/libdns/libdns v1.1.1
 	github.com/libdns/route53 v1.6.2
 	github.com/oschwald/geoip2-golang v1.13.0
-	github.com/redis/go-redis/v9 v9.20.1
+	github.com/redis/go-redis/v9 v9.21.0
 	github.com/sigstore/sigstore-go v1.2.2
+	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/crypto v0.55.0
 	golang.org/x/oauth2 v0.36.0
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
@@ -135,7 +136,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
 	go.uber.org/zap/exp v0.3.0 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
