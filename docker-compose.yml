@@ -18,7 +18,7 @@ services:
       start_period: 20s
 
   portlyn:
-    image: ghcr.io/portlyn/portlyn:${PORTLYN_IMAGE_TAG:-latest}
+    image: ghcr.io/portlyn/portlyn:${PORTLYN_IMAGE_TAG:-v1.1.0}
     pull_policy: always
     restart: unless-stopped
     init: true
@@ -122,7 +122,7 @@ services:
       service: "portlyn"
 
   frontend:
-    image: ghcr.io/portlyn/portlyn-frontend:${PORTLYN_IMAGE_TAG:-latest}
+    image: ghcr.io/portlyn/portlyn-frontend:${PORTLYN_IMAGE_TAG:-v1.1.0}
     pull_policy: always
     restart: unless-stopped
     init: true
@@ -154,6 +154,40 @@ services:
       - ./deploy/loki/config.yml:/etc/loki/config.yml:ro
       - portlyn_loki_data:/loki
 
+  # Alloy needs the Docker API to discover containers and read their logs. A
+  # read-only bind mount does not stop API calls, so it gets a filtered proxy
+  # instead of the socket.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    restart: unless-stopped
+    init: true
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      CONTAINERS: "1"
+      POST: "0"
+      EXEC: "0"
+      IMAGES: "0"
+      VOLUMES: "0"
+      NETWORKS: "0"
+      SERVICES: "0"
+      TASKS: "0"
+      SECRETS: "0"
+      CONFIGS: "0"
+      NODES: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      INFO: "0"
+      AUTH: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      DISTRIBUTION: "0"
+      PLUGINS: "0"
+      SESSION: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    expose:
+      - "2375"
+
   alloy:
     image: grafana/alloy:v1.12.1
     restart: unless-stopped
@@ -162,9 +196,9 @@ services:
     command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
     depends_on:
       - loki
+      - docker-socket-proxy
     volumes:
       - ./deploy/alloy/config.alloy:/etc/alloy/config.alloy:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - portlyn_alloy_data:/var/lib/alloy/data
 
   grafana:
