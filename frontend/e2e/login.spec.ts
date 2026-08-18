@@ -1,37 +1,55 @@
 import { expect, test } from "@playwright/test";
 
-const ADMIN_EMAIL = process.env.PORTLYN_TEST_ADMIN_EMAIL || "admin@example.test";
-const ADMIN_PASSWORD = process.env.PORTLYN_TEST_ADMIN_PASSWORD || "ChangeMeStrongerPasswordPlease!";
+import { ADMIN_EMAIL, liveOnly, liveReason, signIn, signInExpectingSuccess } from "./helpers";
 
-test.describe("portlyn smoke", () => {
-  test("login form is reachable and rejects empty submissions", async ({ page }) => {
+test.describe("login page", () => {
+  test("renders the password form", async ({ page }) => {
     await page.goto("/login");
-    await expect(page.getByRole("heading", { name: /portlyn/i })).toBeVisible();
-    await page.getByRole("button", { name: /sign in|login/i }).click();
-    // empty form should not redirect off /login
+    await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Login", exact: true })).toBeVisible();
+  });
+
+  test("stays on /login when the form is empty", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByRole("button", { name: "Login", exact: true }).click();
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("admin can sign in and reach the services list", async ({ page }) => {
-    test.skip(!process.env.PORTLYN_E2E_LIVE, "set PORTLYN_E2E_LIVE=1 to run against a live instance");
-
+  test("offers passkey sign in", async ({ page }) => {
     await page.goto("/login");
-    await page.getByLabel(/email/i).fill(ADMIN_EMAIL);
-    await page.getByLabel(/password/i).fill(ADMIN_PASSWORD);
-    await page.getByRole("button", { name: /sign in|login/i }).click();
-    await expect(page).toHaveURL(/\/services/);
-    await expect(page.getByRole("heading", { name: /services/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: /sign in with passkey/i })).toBeVisible();
+  });
+});
+
+test.describe("authentication", () => {
+  test.skip(liveOnly, liveReason);
+
+  test("admin can sign in and lands on the services page", async ({ page }) => {
+    await signInExpectingSuccess(page);
+    await expect(page.getByRole("button", { name: "New Service" })).toBeVisible();
   });
 
-  test("admin sees passkeys page", async ({ page }) => {
-    test.skip(!process.env.PORTLYN_E2E_LIVE, "set PORTLYN_E2E_LIVE=1 to run against a live instance");
+  test("rejects a wrong password without leaving the login page", async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, "definitely-not-the-password");
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.getByRole("button", { name: "New Service" })).toHaveCount(0);
+  });
 
-    await page.goto("/login");
-    await page.getByLabel(/email/i).fill(ADMIN_EMAIL);
-    await page.getByLabel(/password/i).fill(ADMIN_PASSWORD);
-    await page.getByRole("button", { name: /sign in|login/i }).click();
-    await page.goto("/passkeys");
-    await expect(page.getByRole("heading", { name: /passkeys/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /register passkey/i })).toBeVisible();
+  test("rejects an unknown account", async ({ page }) => {
+    await signIn(page, "nobody@example.test", "definitely-not-the-password");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("keeps the session across a reload", async ({ page }) => {
+    await signInExpectingSuccess(page);
+    await page.reload();
+    await expect(page).toHaveURL(/\/services/);
+    await expect(page.getByRole("button", { name: "New Service" })).toBeVisible();
+  });
+
+  test("sends an unauthenticated visitor to the login page", async ({ page }) => {
+    await page.goto("/services");
+    await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
   });
 });

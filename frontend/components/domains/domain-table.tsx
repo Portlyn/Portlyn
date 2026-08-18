@@ -38,10 +38,10 @@ export function DomainTable({
               {canManage ? (
                 <Table.Td>
                   <Group justify="flex-end" gap="xs">
-                    <ActionIcon variant="subtle" color="gray" onClick={() => onEdit?.(domain)}>
+                    <ActionIcon variant="subtle" color="gray" aria-label={`Edit ${domain.name}`} onClick={() => onEdit?.(domain)}>
                       <IconEdit size={16} />
                     </ActionIcon>
-                    <ActionIcon variant="subtle" color="gray" onClick={() => onDelete?.(domain)}>
+                    <ActionIcon variant="subtle" color="gray" aria-label={`Delete ${domain.name}`} onClick={() => onDelete?.(domain)}>
                       <IconTrash size={16} />
                     </ActionIcon>
                   </Group>

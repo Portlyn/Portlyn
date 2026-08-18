@@ -34,4 +34,11 @@ coverage/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+frontend/test-results/
+frontend/playwright-report/
+frontend/tsconfig.tsbuildinfo
+
+# Embedded frontend build output
+cmd/server/frontend_dist/*
+!cmd/server/frontend_dist/.gitkeep
 
