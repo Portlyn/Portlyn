@@ -48,3 +48,28 @@ func TestNormalizePathIsNeverProtocolRelative(t *testing.T) {
 		}
 	}
 }
+
+func TestSafeRedirectPath(t *testing.T) {
+	backslash := string(rune(92))
+
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", "/"},
+		{"/", "/"},
+		{"/app", "/app"},
+		{"/app/sub", "/app/sub"},
+		{"//evil.example", "/"},
+		{"/" + backslash + "evil.example", "/"},
+		{"https://evil.example", "/"},
+		{"app", "/"},
+		{"  /app  ", "/app"},
+	}
+
+	for _, tc := range cases {
+		if got := safeRedirectPath(tc.in); got != tc.want {
+			t.Errorf("safeRedirectPath(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

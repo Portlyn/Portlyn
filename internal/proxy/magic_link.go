@@ -40,12 +40,16 @@ func (m *Manager) handleMagicLink(w http.ResponseWriter, r *http.Request) bool {
 		writeProxyError(w, http.StatusInternalServerError, "cookie_error", "could not establish route access")
 		return true
 	}
-	target := route.Path
-	if target == "" {
-		target = "/"
-	}
-	http.Redirect(w, r, target, http.StatusFound)
+	http.Redirect(w, r, safeRedirectPath(route.Path), http.StatusFound)
 	return true
+}
+
+func safeRedirectPath(value string) string {
+	path := strings.TrimSpace(value)
+	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.HasPrefix(path, `/\`) {
+		return "/"
+	}
+	return path
 }
 
 func magicLinkMethod(route Route) string {
