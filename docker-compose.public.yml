@@ -1,5 +1,5 @@
 services:
   portlyn:
-    image: ghcr.io/portlyn/portlyn:${PORTLYN_IMAGE_TAG:-v1.1.0}
+    image: ghcr.io/portlyn/portlyn:${PORTLYN_IMAGE_TAG:-v1.2.0}
     pull_policy: always
     build: null
