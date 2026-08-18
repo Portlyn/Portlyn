@@ -30,10 +30,14 @@ func newPostgresTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+// One statement per Exec: the pool runs with PrepareStmt, which rejects
+// multi-statement commands. Migrations have to respect the same limit.
 func dropEverything(t *testing.T, db *gorm.DB) {
 	t.Helper()
-	if err := db.Exec("DROP SCHEMA public CASCADE; CREATE SCHEMA public;").Error; err != nil {
-		t.Fatalf("reset schema: %v", err)
+	for _, stmt := range []string{"DROP SCHEMA public CASCADE", "CREATE SCHEMA public"} {
+		if err := db.Exec(stmt).Error; err != nil {
+			t.Fatalf("reset schema (%s): %v", stmt, err)
+		}
 	}
 }
 
