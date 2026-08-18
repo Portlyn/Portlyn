@@ -2,6 +2,11 @@
 
 This guide defines the currently supported high-availability mode for Portlyn.
 
+Read this first: the cluster path is implemented and documented, but it is not
+covered by automated failover tests. Losing an instance, promoting a new ACME
+leader and rolling an upgrade across the cluster have been reasoned through, not
+proven in CI. A single hub is the safer default until that changes.
+
 ## Supported cluster mode
 
 - Multiple Portlyn instances behind a load balancer

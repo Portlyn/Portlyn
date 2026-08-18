@@ -4,18 +4,35 @@ All notable changes to this project should be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning for tagged releases.
 
-## [Unreleased]
+## [1.1.0] - 2026-08-18
 
-### Changed
+### Security
 
-- README rewritten with an honest scope statement, threat model summary, and explicit Cosign verify instructions. The phrase "zero trust" was replaced with "identity aware reverse proxy".
-- `SECURITY.md` expanded with a detailed threat model (in scope, out of scope, trust boundaries) and supply chain section.
-- `docker-compose.yml` defaults to the published image at `ghcr.io/portlyn/portlyn`. A fresh clone now runs without a build step.
+- The installers no longer let the freshly downloaded binary verify its own release signature. `install-hub.sh` and `install-node.sh` use `cosign` if it is present, otherwise they fetch a pinned cosign build and check it against a SHA-256 digest hard-coded in the script. Without a trustworthy verifier the install aborts.
+- Alloy talks to a filtered Docker socket proxy instead of a bind-mounted `/var/run/docker.sock`. A read-only mount does not stop API calls.
+- The bundled admin UI is served with a `script-src` built from the SHA-256 hashes of its inline scripts, so the single binary no longer needs `unsafe-inline`.
+- Node enrolment claims the single-use token and creates the node in one transaction. A failure no longer burns the token or leaves a half-created node.
+- Dependency updates: Go 1.26.6, gRPC 1.83.0, `golang.org/x/net` 0.58.0, plus overrides for nanoid, postcss and undici. `npm audit` and `govulncheck` are clean.
 
 ### Added
 
+- Playwright suite covering login, wrong credentials, session persistence, TOTP enrolment and login, passkey registration and login through a virtual authenticator, and domain policy edits. It runs in CI against a throwaway hub started by `scripts/e2e-hub.sh`.
+- Frontend unit tests for the API client, the auth flows, the WebAuthn encoding and the open redirect guard.
+- `portlyn migrate` with `status` and `down`.
 - `Dockerfile.dev` that builds the backend image from source inline (no prebuilt binary in `dist/` required).
 - `docker-compose.dev.yml` overlay that switches the stack to local builds via `pull_policy: build`.
+
+### Changed
+
+- Database schema changes run as versioned migrations recorded in `schema_migrations`, with a Postgres advisory lock so several hubs can start at once.
+- Tags no longer build a release on their own. `release.yml` now requires CI, the security workflow, CodeQL and the container scan to pass on the tagged commit first, and ships a source SBOM.
+- Trivy fails the run on fixable CRITICAL or HIGH findings instead of only reporting them.
+- Compose files pin the Portlyn image tag instead of defaulting to `latest`.
+- `openapi.yaml` documents every endpoint the router registers, up from 48 of them. A test walks the router and compares both directions, so an undocumented endpoint fails the build and so does a documented one that no longer exists. The stale `docs/openapi.yaml` was removed and the docs site builds from the live spec.
+- The README and the HA guide now say the same thing about multi-instance mode: it is implemented, but not covered by failover tests.
+- `internal/proxy/manager.go`, `internal/http/resources.go` and `internal/auth/service.go` split into smaller files along their existing seams. No behaviour change.
+- README rewritten with an honest scope statement, threat model summary, and explicit Cosign verify instructions. The phrase "zero trust" was replaced with "identity aware reverse proxy".
+- `SECURITY.md` expanded with a detailed threat model (in scope, out of scope, trust boundaries) and supply chain section.
 
 ## [1.0.17] - 2026-05-30
 

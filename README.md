@@ -146,7 +146,7 @@ Detailed steps for release verification with Cosign, node agent enrollment, conf
 - Not a CDN and not protection against volumetric L3/L4 DDoS
 - Not a Web Application Firewall; it does not inspect request bodies
 - Not multi tenant; all admins see all services
-- Not a mature HA edge cluster yet; a single hub today
+- Not a mature HA edge cluster. Several hubs can share a PostgreSQL and a Redis with one of them holding the ACME lease, and that mode is documented in [docs/HA-DEPLOYMENT.md](docs/HA-DEPLOYMENT.md), but there is no automated failover testing behind it yet. Plan for a single hub unless you are willing to verify the cluster path yourself
 - Not a replacement for fixing vulnerable upstream applications
 
 ## Screenshots
