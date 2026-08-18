@@ -98,17 +98,6 @@ func (s *Server) handleEnrollNode(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		writeError(w, stdhttp.StatusUnauthorized, "invalid_enrollment_token", "invalid or expired enrollment token")
 		return
 	}
-	if token.SingleUse {
-		claimed, claimErr := s.enrollmentTokens.ClaimSingleUse(r.Context(), token.ID, now)
-		if claimErr != nil {
-			s.internalError(w, claimErr)
-			return
-		}
-		if !claimed {
-			writeError(w, stdhttp.StatusUnauthorized, "invalid_enrollment_token", "invalid or expired enrollment token")
-			return
-		}
-	}
 	heartbeatToken, err := randomEnrollmentToken()
 	if err != nil {
 		s.internalError(w, err)
@@ -128,13 +117,15 @@ func (s *Server) handleEnrollNode(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		HeartbeatVersion:   strings.TrimSpace(req.Version),
 		HeartbeatTokenHash: hashOpaqueToken(heartbeatToken),
 	}
-	if err := s.nodes.Create(r.Context(), node); err != nil {
+	enrolled, err := s.nodes.EnrollWithToken(r.Context(), node, token.ID, token.SingleUse, now, func(created *domain.Node) {
+		created.HeartbeatEndpoint = "/api/v1/nodes/" + strconv.FormatUint(uint64(created.ID), 10) + "/heartbeat"
+	})
+	if err != nil {
 		s.internalError(w, err)
 		return
 	}
-	node.HeartbeatEndpoint = "/api/v1/nodes/" + strconv.FormatUint(uint64(node.ID), 10) + "/heartbeat"
-	if err := s.nodes.Update(r.Context(), node); err != nil {
-		s.internalError(w, err)
+	if !enrolled {
+		writeError(w, stdhttp.StatusUnauthorized, "invalid_enrollment_token", "invalid or expired enrollment token")
 		return
 	}
 	_ = s.audit.LogRequest(r.Context(), r, nil, "enroll", "node", &node.ID, map[string]any{"node_id": node.ID, "enrollment_token_id": token.ID})

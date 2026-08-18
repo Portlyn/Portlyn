@@ -3,11 +3,14 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 
 	"portlyn/internal/domain"
 )
+
+var errEnrollmentTokenClaimed = errors.New("enrollment token already claimed")
 
 type NodeStore struct {
 	db *gorm.DB
@@ -25,6 +28,42 @@ func (s *NodeStore) List(ctx context.Context) ([]domain.Node, error) {
 
 func (s *NodeStore) Create(ctx context.Context, node *domain.Node) error {
 	return s.db.WithContext(ctx).Create(node).Error
+}
+
+// Claims the token and creates the node in one transaction: a failure leaves the
+// token usable and no partial node behind. finalize runs after the insert, once
+// the node has an ID. Returns false if a single-use token was already claimed.
+func (s *NodeStore) EnrollWithToken(ctx context.Context, node *domain.Node, tokenID uint, singleUse bool, usedAt time.Time, finalize func(*domain.Node)) (bool, error) {
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if singleUse {
+			result := tx.Model(&domain.NodeEnrollmentToken{}).
+				Where("id = ? AND active = ? AND used_at IS NULL", tokenID, true).
+				Updates(map[string]any{"active": false, "used_at": usedAt})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return errEnrollmentTokenClaimed
+			}
+		}
+		if err := tx.Create(node).Error; err != nil {
+			return err
+		}
+		if finalize != nil {
+			finalize(node)
+			if err := tx.Save(node).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if errors.Is(err, errEnrollmentTokenClaimed) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *NodeStore) Count(ctx context.Context) (int64, error) {

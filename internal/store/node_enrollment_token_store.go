@@ -61,17 +61,6 @@ func (s *NodeEnrollmentTokenStore) Update(ctx context.Context, item *domain.Node
 	return s.db.WithContext(ctx).Save(item).Error
 }
 
-func (s *NodeEnrollmentTokenStore) ClaimSingleUse(ctx context.Context, id uint, usedAt time.Time) (bool, error) {
-	result := s.db.WithContext(ctx).
-		Model(&domain.NodeEnrollmentToken{}).
-		Where("id = ? AND active = ? AND used_at IS NULL", id, true).
-		Updates(map[string]any{"active": false, "used_at": usedAt})
-	if result.Error != nil {
-		return false, result.Error
-	}
-	return result.RowsAffected == 1, nil
-}
-
 func (s *NodeEnrollmentTokenStore) Delete(ctx context.Context, id uint) error {
 	result := s.db.WithContext(ctx).Delete(&domain.NodeEnrollmentToken{}, id)
 	if result.Error != nil {
