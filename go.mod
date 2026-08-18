@@ -21,10 +21,10 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/crypto v0.55.0
 	golang.org/x/oauth2 v0.36.0
-	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
+	golang.zx2c4.com/wireguard v0.0.0-20260522210424-ecfc5a8d5446
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
-	gvisor.dev/gvisor v0.0.0-20240306221502-ee1e1f6070e3
+	gvisor.dev/gvisor v0.0.0-20250503011706-39ed1f5ac29c
 )
 
 require (

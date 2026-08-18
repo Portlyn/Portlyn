@@ -123,7 +123,7 @@ func (n *NetStack) Write(buf [][]byte, offset int) (int, error) {
 
 func (n *NetStack) WriteNotify() {
 	pkt := n.ep.Read()
-	if pkt.IsNil() {
+	if pkt == nil {
 		return
 	}
 	view := pkt.ToView()
