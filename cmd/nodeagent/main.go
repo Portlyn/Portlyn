@@ -85,7 +85,8 @@ func main() {
 		}
 	}
 	apiBase := flag.String("api", "https://localhost", "api base url")
-	token := flag.String("token", "", "enrollment token (only needed on first run)")
+	token := flag.String("token", "", "enrollment token (only needed on first run; prefer --token-file)")
+	tokenFile := flag.String("token-file", "", "file holding the enrollment token; systemd credentials are picked up automatically")
 	name := flag.String("name", "node-agent", "node name used during enrollment")
 	description := flag.String("description", "", "node description used during enrollment")
 	versionFlag := flag.String("version", version, "node version")
@@ -122,10 +123,14 @@ func main() {
 	}
 
 	if !state.provisioned() {
-		if strings.TrimSpace(*token) == "" {
-			log.Fatal("no saved state found: provide an enrollment --token for the first run")
+		enrollmentToken, err := resolveEnrollmentToken(*token, *tokenFile)
+		if err != nil {
+			log.Fatalf("read enrollment token: %v", err)
 		}
-		state, err = provision(client, api, *token, *name, *description, *versionFlag)
+		if enrollmentToken == "" {
+			log.Fatal("no saved state found: provide an enrollment token via --token-file, systemd credentials or --token for the first run")
+		}
+		state, err = provision(client, api, enrollmentToken, *name, *description, *versionFlag)
 		if err != nil {
 			log.Fatalf("provision: %v", err)
 		}

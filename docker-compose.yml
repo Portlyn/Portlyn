@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17.9-alpine
+    image: postgres:17.11-alpine
     restart: unless-stopped
     init: true
     security_opt: ["no-new-privileges:true"]
@@ -121,29 +121,8 @@ services:
       logging: "alloy"
       service: "portlyn"
 
-  frontend:
-    image: ghcr.io/portlyn/portlyn-frontend:${PORTLYN_IMAGE_TAG:-v1.1.0}
-    pull_policy: always
-    restart: unless-stopped
-    init: true
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: [ALL]
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-}"
-      INTERNAL_API_BASE_URL: "http://portlyn:8080"
-    depends_on:
-      portlyn:
-        condition: service_healthy
-    labels:
-      logging: "alloy"
-      service: "frontend"
-    expose:
-      - "3000"
-
   loki:
-    image: grafana/loki:3.6.3
+    image: grafana/loki:3.7.6
     restart: unless-stopped
     init: true
     security_opt: ["no-new-privileges:true"]
@@ -189,7 +168,7 @@ services:
       - "2375"
 
   alloy:
-    image: grafana/alloy:v1.12.1
+    image: grafana/alloy:v1.18.1
     restart: unless-stopped
     init: true
     security_opt: ["no-new-privileges:true"]
@@ -202,7 +181,7 @@ services:
       - portlyn_alloy_data:/var/lib/alloy/data
 
   grafana:
-    image: grafana/grafana:12.3.1
+    image: grafana/grafana:13.2.0
     restart: unless-stopped
     init: true
     security_opt: ["no-new-privileges:true"]

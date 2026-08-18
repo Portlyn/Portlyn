@@ -131,7 +131,7 @@ cp .env.docker.example .env.docker
 docker compose --env-file .env.docker up -d
 ```
 
-The Compose stack pulls `ghcr.io/portlyn/portlyn:latest` by default. Pin a specific tag with `PORTLYN_IMAGE_TAG=v1.2.3`. If the pull is denied because the GHCR packages are private, `docker login ghcr.io` or build locally with the dev overlay (`-f docker-compose.yml -f docker-compose.dev.yml up -d --build`).
+The Compose stack pulls a pinned `ghcr.io/portlyn/portlyn` tag. Override it with `PORTLYN_IMAGE_TAG=v1.2.3`. The admin UI ships inside that image, so there is no separate frontend container. If the pull is denied because the GHCR packages are private, `docker login ghcr.io` or build locally with the dev overlay (`-f docker-compose.yml -f docker-compose.dev.yml up -d --build`).
 
 Detailed steps for release verification with Cosign, node agent enrollment, configuration, and the production checklist are in [docs/INSTALL.md](docs/INSTALL.md).
 

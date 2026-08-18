@@ -1,9 +1,10 @@
 /** @type {import('next').NextConfig} */
 const staticExport = process.env.PORTLYN_STATIC_EXPORT === "1";
-const isProd = process.env.NODE_ENV === "production";
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "";
 const connectExtra = apiBase ? ` ${apiBase}` : "";
 
+// Only the dev server uses these. Production serves the static export from the
+// Go binary, which sets its own policy from the hashes of the bundled scripts.
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -13,8 +14,8 @@ const contentSecurityPolicy = [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
-  isProd ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  isProd ? `connect-src 'self'${connectExtra}` : `connect-src 'self' ws: wss:${connectExtra}`,
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  `connect-src 'self' ws: wss:${connectExtra}`,
 ].join("; ");
 
 const securityHeaders = [

@@ -58,6 +58,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Lint frontend
+        run: npm run lint
+
       - name: Typecheck frontend
         run: npx tsc --noEmit
 
@@ -69,6 +72,35 @@ jobs:
 
       - name: Build frontend (static export)
         run: PORTLYN_STATIC_EXPORT=1 npm run build
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.11-alpine
+        env:
+          POSTGRES_USER: portlyn
+          POSTGRES_PASSWORD: portlyn
+          POSTGRES_DB: portlyn_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U portlyn -d portlyn_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run the migration tests against postgres
+        env:
+          PORTLYN_TEST_POSTGRES_URL: postgres://portlyn:portlyn@localhost:5432/portlyn_test?sslmode=disable
+        run: go test ./internal/store/ -run TestPostgres -v -count=1
 
   container-build:
     runs-on: ubuntu-latest
@@ -96,9 +128,6 @@ jobs:
 
       - name: Build nodeagent image
         run: docker build --build-arg TARGETARCH=amd64 -f Dockerfile.nodeagent -t portlyn-nodeagent:test .
-
-      - name: Build frontend image
-        run: docker build -t portlyn-frontend:test ./frontend
 
       - name: Build single-binary image
         run: docker build -t portlyn-single:test -f Dockerfile.single .
@@ -147,7 +176,7 @@ jobs:
         if: failure()
         run: tail -n 200 .tmp/e2e/hub.log || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
@@ -179,7 +208,7 @@ jobs:
           mv out ../cmd/server/frontend_dist
       - name: Build portlyn binary
         run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o portlyn ./cmd/server
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: portlyn-linux-amd64
           path: portlyn

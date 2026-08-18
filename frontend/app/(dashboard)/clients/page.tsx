@@ -2,9 +2,7 @@
 
 import {
   Alert,
-  Badge,
   Button,
-  Card,
   CopyButton,
   Drawer,
   Group,

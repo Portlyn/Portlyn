@@ -89,9 +89,6 @@ export function accessMethodLabel(value: AccessMethod | undefined) {
       return "PIN protected";
     case "email_code":
       return "Email code required";
-    case "session":
-    case "":
-    case undefined:
     default:
       return "Session-based";
   }

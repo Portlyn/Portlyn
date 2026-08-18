@@ -258,7 +258,9 @@ export function findTemplate(id: string): ServiceTemplate | undefined {
 export function templatesByCategory(): Record<ServiceTemplateCategory, ServiceTemplate[]> {
   const grouped: Record<string, ServiceTemplate[]> = {};
   for (const template of serviceTemplates) {
-    (grouped[template.category] ||= []).push(template);
+    const bucket = grouped[template.category] ?? [];
+    bucket.push(template);
+    grouped[template.category] = bucket;
   }
   return grouped as Record<ServiceTemplateCategory, ServiceTemplate[]>;
 }
