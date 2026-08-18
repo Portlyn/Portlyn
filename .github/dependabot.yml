@@ -4,11 +4,6 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-    ignore:
-      - dependency-name: "actions/upload-artifact"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "actions/download-artifact"
-        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "gomod"
     directory: "/"
