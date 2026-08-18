@@ -4,6 +4,65 @@ All notable changes to this project should be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning for tagged releases.
 
+## [1.2.0] - 2026-08-18
+
+### Breaking
+
+- The `ghcr.io/portlyn/portlyn-frontend` image is gone, and so is the separate
+  frontend container in Compose. The admin UI ships inside the main image and
+  the binary, which is what the proxy already preferred. If you pull the
+  frontend image or run that service, drop it: nothing replaces it, the UI is
+  served by `portlyn` itself. `NEXT_PUBLIC_API_BASE_URL` is no longer part of
+  the Compose environment.
+
+### Security
+
+- A route path of `//evil.example` survived normalization and went straight
+  into the Location header on the magic link route. Paths are now rebuilt from
+  their segments, so a protocol-relative result cannot be produced, and the
+  redirect checks the path independently on top of that. Setting such a path
+  needs admin rights, so exposure was limited.
+- The bundled UI is the only production path now, which means the hardened CSP
+  with script hashes applies everywhere. The weaker `unsafe-inline` policy only
+  remains in the dev server.
+- The node installer no longer writes the enrollment token into `ExecStart`,
+  where it sat in the unit file and in every process listing. It goes into a
+  0600 file that systemd passes in with `LoadCredential`. The unit also gained
+  `NoNewPrivileges` and the protect settings the hub unit already had.
+- wireguard-go and gvisor updated from December 2023 to current, which clears a
+  data race the race detector hit during shutdown.
+- `golang.org/x/mod` to 0.40.0 for GO-2026-6179 and GO-2026-6180. Neither was
+  reachable from Portlyn, but both showed up in scans of the release binary.
+
+### Added
+
+- Migration tests against a real PostgreSQL in CI: migrating from empty, five
+  concurrent `Migrate` calls that have to end with exactly one row per
+  migration, and data written before an upgrade that has to still be there
+  afterwards. The advisory lock exists only on the postgres path and was never
+  covered before.
+- Biome as a linter, running as a required CI step. `next lint` was configured
+  but eslint was never installed, so the frontend had no linting at all.
+- `--token-file` on the node agent, and systemd credentials are picked up
+  automatically.
+- A workflow that regenerates `package-lock.json` on linux. npm on Windows drops
+  the optional platform packages that linux needs, which breaks `npm ci` on the
+  runner.
+
+### Changed
+
+- Go modules, npm packages, base images, service images and pinned actions moved
+  to current versions. Three deliberate exceptions: postgres stays on 17.x (a
+  major bump needs `pg_upgrade`), node stays on 24.x (26 is Current, not LTS),
+  and gvisor stays on the May snapshot (the newest one does not build).
+- All seventeen actions are pinned by commit sha. The github-owned ones still
+  rode moving tags in workflows that sign and publish releases.
+- The e2e job gained timeouts. `playwright install --with-deps` shells out to
+  apt-get, which can wait on a prompt forever; three runs sat stuck for hours
+  and blocked the runners. Workflows now also cancel a superseded run on pull
+  requests.
+- `main` requires pull requests and green checks, with no administrator bypass.
+
 ## [1.1.0] - 2026-08-18
 
 ### Security
