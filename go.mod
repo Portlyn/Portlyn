@@ -19,7 +19,7 @@ require (
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/sigstore/sigstore-go v1.3.0
 	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/oauth2 v0.36.0
 	golang.zx2c4.com/wireguard v0.0.0-20260522210424-ecfc5a8d5446
 	gorm.io/driver/postgres v1.6.2
