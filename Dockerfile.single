@@ -16,7 +16,8 @@ COPY --from=frontend /src/out/ ./cmd/server/frontend_dist/
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/portlyn ./cmd/server
 
 FROM alpine:3.24
-RUN apk add --no-cache ca-certificates tzdata wireguard-tools iproute2 && \
+RUN apk upgrade --no-cache && \
+    apk add --no-cache ca-certificates tzdata wireguard-tools iproute2 && \
     addgroup -S app && \
     adduser -S app -G app && \
     mkdir -p /data /data/certificates && \

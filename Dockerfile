@@ -5,7 +5,8 @@ WORKDIR /app
 ARG TARGETARCH
 ARG BINARY_SOURCE_DIR=dist
 
-RUN apk add --no-cache ca-certificates tzdata wget && \
+RUN apk upgrade --no-cache && \
+    apk add --no-cache ca-certificates tzdata wget && \
     addgroup -S app && \
     adduser -S app -G app && \
     mkdir -p /data /data/certificates && \
