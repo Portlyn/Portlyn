@@ -64,6 +64,71 @@ func TestMigrateAppliesEveryMigrationOnce(t *testing.T) {
 	}
 }
 
+func TestMigrateRebuildsTableThatOthersReference(t *testing.T) {
+	db := newMigrationTestDB(t)
+	ctx := context.Background()
+
+	seed := []string{
+		`CREATE TABLE probe_providers (id INTEGER PRIMARY KEY, name TEXT)`,
+		`CREATE TABLE probe_certificates (id INTEGER PRIMARY KEY, provider_id INTEGER REFERENCES probe_providers(id))`,
+		`INSERT INTO probe_providers (id, name) VALUES (1, 'cloudflare')`,
+		`INSERT INTO probe_certificates (id, provider_id) VALUES (1, 1)`,
+	}
+	for _, stmt := range seed {
+		if err := db.Exec(stmt).Error; err != nil {
+			t.Fatalf("seed %q: %v", stmt, err)
+		}
+	}
+
+	// The copy, drop and rename dance gorm performs when a sqlite column changes.
+	list := []Migration{{
+		ID: "9100_rebuild_referenced_table",
+		Up: func(tx *gorm.DB) error {
+			steps := []string{
+				`CREATE TABLE probe_providers__tmp (id INTEGER PRIMARY KEY, name TEXT, added TEXT)`,
+				`INSERT INTO probe_providers__tmp (id, name) SELECT id, name FROM probe_providers`,
+				`DROP TABLE probe_providers`,
+				`ALTER TABLE probe_providers__tmp RENAME TO probe_providers`,
+			}
+			for _, step := range steps {
+				if err := tx.Exec(step).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}}
+
+	if err := migrateList(ctx, db, list); err != nil {
+		t.Fatalf("migrating a referenced table on a populated database: %v", err)
+	}
+
+	var providers int64
+	if err := db.Raw(`SELECT COUNT(*) FROM probe_providers`).Scan(&providers).Error; err != nil {
+		t.Fatalf("count providers: %v", err)
+	}
+	if providers != 1 {
+		t.Fatalf("expected the seeded row to survive the rebuild, got %d", providers)
+	}
+}
+
+func TestMigrateLeavesForeignKeyEnforcementOn(t *testing.T) {
+	db := newMigrationTestDB(t)
+	ctx := context.Background()
+
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	var enabled int
+	if err := db.Raw("PRAGMA foreign_keys").Scan(&enabled).Error; err != nil {
+		t.Fatalf("read pragma: %v", err)
+	}
+	if enabled != 1 {
+		t.Fatal("foreign key enforcement stayed off after migrating")
+	}
+}
+
 func TestStatusReportsAppliedAndPending(t *testing.T) {
 	db := newMigrationTestDB(t)
 	ctx := context.Background()

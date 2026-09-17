@@ -80,23 +80,54 @@ func Migrate(ctx context.Context, db *gorm.DB) error {
 
 func migrateList(ctx context.Context, db *gorm.DB, list []Migration) error {
 	return withMigrationLock(ctx, db, func() error {
-		if err := db.WithContext(ctx).AutoMigrate(&SchemaMigration{}); err != nil {
-			return fmt.Errorf("create schema_migrations: %w", err)
-		}
-		applied, err := appliedMigrations(ctx, db)
-		if err != nil {
-			return err
-		}
-		for _, m := range list {
-			if _, done := applied[m.ID]; done {
-				continue
+		return withoutSQLiteForeignKeys(ctx, db, func() error {
+			if err := db.WithContext(ctx).AutoMigrate(&SchemaMigration{}); err != nil {
+				return fmt.Errorf("create schema_migrations: %w", err)
 			}
-			if err := runMigration(ctx, db, m); err != nil {
-				return fmt.Errorf("migration %s: %w", m.ID, err)
+			applied, err := appliedMigrations(ctx, db)
+			if err != nil {
+				return err
 			}
-		}
-		return nil
+			for _, m := range list {
+				if _, done := applied[m.ID]; done {
+					continue
+				}
+				if err := runMigration(ctx, db, m); err != nil {
+					return fmt.Errorf("migration %s: %w", m.ID, err)
+				}
+			}
+			return nil
+		})
 	})
+}
+
+// SQLite changes a column by copying the table and dropping the original, which
+// it refuses while another table holds a foreign key on it. The pragma is a
+// no-op inside a transaction, so it has to wrap the whole run from out here.
+func withoutSQLiteForeignKeys(ctx context.Context, db *gorm.DB, fn func() error) (err error) {
+	if db.Dialector == nil || db.Dialector.Name() != "sqlite" {
+		return fn()
+	}
+	if offErr := db.WithContext(ctx).Exec("PRAGMA foreign_keys = OFF").Error; offErr != nil {
+		return fmt.Errorf("disable foreign keys: %w", offErr)
+	}
+	defer func() {
+		onErr := db.Exec("PRAGMA foreign_keys = ON").Error
+		if err == nil && onErr != nil {
+			err = fmt.Errorf("re-enable foreign keys: %w", onErr)
+		}
+	}()
+	if err = fn(); err != nil {
+		return err
+	}
+	var violations int64
+	if checkErr := db.WithContext(ctx).Raw("SELECT COUNT(*) FROM pragma_foreign_key_check").Scan(&violations).Error; checkErr != nil {
+		return fmt.Errorf("foreign key check: %w", checkErr)
+	}
+	if violations > 0 {
+		return fmt.Errorf("migration left %d foreign key violations behind", violations)
+	}
+	return nil
 }
 
 func Rollback(ctx context.Context, db *gorm.DB, id string) error {
