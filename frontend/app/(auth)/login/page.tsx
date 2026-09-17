@@ -211,7 +211,15 @@ function LoginContent() {
                 {useRecoveryCode ? "Enter one of your recovery codes." : "Enter the 6-digit code from your authenticator app."}
               </Text>
               {useRecoveryCode ? (
-                <TextInput label="Recovery code" value={mfaCode} onChange={(event) => setMFACode(event.currentTarget.value)} styles={fields} autoFocus />
+                <TextInput
+                  label="Recovery code"
+                  name="recovery-code"
+                  autoComplete="off"
+                  value={mfaCode}
+                  onChange={(event) => setMFACode(event.currentTarget.value)}
+                  styles={fields}
+                  autoFocus
+                />
               ) : (
                 <Group justify="center" my="xs">
                   <PinInput
@@ -236,8 +244,23 @@ function LoginContent() {
             </Stack>
           ) : authConfig.local_login_disabled ? null : (
           <Stack gap="sm">
-            <TextInput label="Email" value={email} onChange={(event) => setEmail(event.currentTarget.value)} styles={fields} />
-            <PasswordInput label="Password" value={password} onChange={(event) => setPassword(event.currentTarget.value)} styles={fields} />
+            <TextInput
+              label="Email"
+              type="email"
+              name="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.currentTarget.value)}
+              styles={fields}
+            />
+            <PasswordInput
+              label="Password"
+              name="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.currentTarget.value)}
+              styles={fields}
+            />
             <Button loading={isSubmitting} onClick={handleSubmit} style={buttonStyle(ui)}>
               {ui.login_password_label}
             </Button>
@@ -261,7 +284,15 @@ function LoginContent() {
               <Divider label="One-time code" labelPosition="center" />
               <Stack gap="sm">
                 <Group grow align="end">
-                  <TextInput label="Email for OTP" value={email} onChange={(event) => setEmail(event.currentTarget.value)} styles={fields} />
+                  <TextInput
+                    label="Email for OTP"
+                    type="email"
+                    name="otp-email"
+                    autoComplete="username"
+                    value={email}
+                    onChange={(event) => setEmail(event.currentTarget.value)}
+                    styles={fields}
+                  />
                   <Button loading={isOTPSubmitting} onClick={handleRequestOTP} style={buttonStyle(ui)}>
                     {ui.login_otp_request_label}
                   </Button>
