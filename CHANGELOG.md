@@ -4,6 +4,25 @@ All notable changes to this project should be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning for tagged releases.
 
+## [1.3.1] - 2026-09-17
+
+### Fixed
+
+- Signed in users bounced between the route login page and `/login` instead of
+  reaching the service. The page only read `isAuthenticated`, which is false
+  while the auth provider is still loading, so it offered the Continue button
+  to someone who was already signed in. That button leads to `/login`, which
+  sends them straight back, and round it goes. Whether it settled at all
+  depended on whether the bridging effect won the race against the click. The
+  page now waits for the auth state, and the button only appears when the user
+  really is signed out or when bridging failed and they need a way forward.
+- Password managers overwrote the email field with the TOTP code. The login
+  fields carried no autocomplete metadata, and the MFA input only mounts after
+  the first step, so nothing on the page was marked `one-time-code` when the
+  manager went looking for somewhere to put it. It fell back to the first text
+  field, which was the email it had just filled. Email is now `username`,
+  password is `current-password`, and the recovery code and route PIN opt out.
+
 ## [1.3.0] - 2026-09-17
 
 ### Security
