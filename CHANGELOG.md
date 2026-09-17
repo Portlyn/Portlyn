@@ -4,6 +4,36 @@ All notable changes to this project should be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning for tagged releases.
 
+## [1.3.2] - 2026-09-17
+
+### Fixed
+
+- Upgrading an existing sqlite installation died in `0001_baseline_schema` with
+  `FOREIGN KEY constraint failed (787)` on `DROP TABLE dns_providers`, which
+  left the server refusing to start until you rolled back. Sqlite changes a
+  column by copying the table, dropping the original and renaming the copy,
+  which is what gorm does under AutoMigrate, and it refuses that drop while
+  another table holds a foreign key on it. `certificates.dns_provider_id` is
+  exactly such a key. Foreign keys are now suspended around the migration run
+  and switched back on afterwards, with a `foreign_key_check` to confirm
+  nothing was left dangling in between. The pragma is a no-op inside a
+  transaction, so wrapping the individual migration would not have worked.
+  Fresh installs never hit this, only databases with data in them, which is
+  why it survived until someone upgraded. Postgres is unaffected.
+- `portlyn init` always closed with "Start the server with: portlyn". On any
+  machine the installer touched that is wrong twice over: the unit file is in
+  place, so you start it through systemd, and the service may already be
+  running, in which case it needs a restart to read the file init just wrote.
+  It now looks for the unit and says so.
+
+### Changed
+
+- The `.env` that `init` generates now also lists the roughly 60 settings it
+  does not set, commented out and with their real defaults, grouped by topic.
+  They were previously invisible unless you went through the docs.
+- Secrets in that file were written by iterating a map, so they landed in a
+  different order on every run. Fixed order now, which keeps diffs readable.
+
 ## [1.3.1] - 2026-09-17
 
 ### Fixed
