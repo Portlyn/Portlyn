@@ -7,12 +7,14 @@ import { useEffect } from "react";
 
 import { useAuth } from "@/components/providers";
 
+const VIEWER_PATHS = ["/services", "/security"];
+
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-  const viewerAllowed = normalizedPath === "/services";
+  const viewerAllowed = VIEWER_PATHS.includes(normalizedPath);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

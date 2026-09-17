@@ -383,6 +383,13 @@ func (m *Manager) Handler() http.Handler {
 			}
 		}
 
+		if m.bootstrapAdminEnabled && !m.bootstrapAdminAllowRemote && isBootstrapAdminHost(host) && !isLocalRequestSource(r) {
+			outcome = "denied"
+			reason = "bootstrap_admin_local_only"
+			writeBootstrapAdminHint(writer)
+			return
+		}
+
 		route, ok := m.matchRoute(r.Context(), host, path)
 		if !ok {
 			outcome = "not_found"
@@ -626,6 +633,37 @@ type retryTransport struct {
 	retries int
 	backoff time.Duration
 }
+
+func writeBootstrapAdminHint(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusForbidden)
+	_, _ = w.Write([]byte(bootstrapAdminHintHTML))
+}
+
+const bootstrapAdminHintHTML = `<!doctype html>
+<meta charset="utf-8">
+<title>Portlyn</title>
+<style>
+body{background:#0f1117;color:#e6e9ef;font:15px/1.6 system-ui,sans-serif;margin:0;padding:48px 20px}
+main{max-width:620px;margin:0 auto}
+h1{font-size:20px;margin:0 0 18px}
+code{background:#1a1d26;padding:2px 6px;border-radius:4px;font-size:13px}
+pre{background:#1a1d26;padding:14px;border-radius:8px;overflow-x:auto;font-size:13px}
+p{color:#b6bdcc}
+</style>
+<main>
+<h1>Portlyn is running, but the dashboard is not served here.</h1>
+<p>You reached this server by IP. The setup dashboard only answers local
+requests right now, so pick one of these:</p>
+<pre>ssh -L 8080:127.0.0.1:8080 user@this-server</pre>
+<p>Then open <code>http://localhost:8080</code> in your browser.</p>
+<p>Or set <code>BOOTSTRAP_ADMIN_ALLOW_REMOTE=true</code>, restart Portlyn, and
+reload this page. Turn it off again once your domain works.</p>
+<p>Once DNS points at this server and a certificate is issued, use the domain
+instead of the IP.</p>
+</main>
+`
 
 func isBootstrapAdminHost(host string) bool {
 	switch host {
