@@ -127,7 +127,7 @@ func (s *Server) handleRouteRequestEmailCode(w stdhttp.ResponseWriter, r *stdhtt
 		writeError(w, stdhttp.StatusForbidden, "email_domain_not_allowed", "email domain is not allowed for this route")
 		return
 	}
-	result, err := s.auth.RequestRouteEmailCode(r.Context(), service.ID, req.Email, s.requestMeta(r), s.cfg.AllowInsecureDevMode || s.cfg.OTP.ResponseIncludesCode)
+	result, err := s.auth.RequestRouteEmailCode(r.Context(), service.ID, req.Email, s.requestMeta(r), s.cfg.AllowInsecureDevMode && s.cfg.OTP.ResponseIncludesCode)
 	if err != nil {
 		_ = s.audit.LogRequest(r.Context(), r, nil, "route_email_code_request_failed", "service", &service.ID, map[string]any{"service_id": service.ID, "email": req.Email})
 		if errors.Is(err, auth.ErrRateLimited) {

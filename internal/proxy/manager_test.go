@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -220,6 +221,48 @@ func TestManagerServesBootstrapAdminHosts(t *testing.T) {
 	manager.Handler().ServeHTTP(remoteRecorder, remoteReq)
 	if remoteRecorder.Code == http.StatusNoContent {
 		t.Fatal("bootstrap admin host must not be served to non-local request sources")
+	}
+}
+
+func TestManagerServesBootstrapHintToRemoteWhenNotAllowed(t *testing.T) {
+	manager := NewManager(newFakeRoutingStore(), NewInMemoryConfigCache(), NewInMemoryConfigBus(), nil, nil, nil, nil, ManagerOptions{
+		LocalCacheTTL:         time.Hour,
+		LocalCacheCapacity:    16,
+		BootstrapAdminEnabled: true,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "http://203.0.113.10/", nil)
+	req.Host = "203.0.113.10"
+	req.RemoteAddr = "198.51.100.7:54321"
+	recorder := httptest.NewRecorder()
+	manager.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("expected bootstrap hint status 403, got %d", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "BOOTSTRAP_ADMIN_ALLOW_REMOTE") {
+		t.Fatal("expected the hint to name the env var that opens remote access")
+	}
+}
+
+func TestManagerKeepsNotFoundForUnknownDomain(t *testing.T) {
+	manager := NewManager(newFakeRoutingStore(), NewInMemoryConfigCache(), NewInMemoryConfigBus(), nil, nil, nil, nil, ManagerOptions{
+		LocalCacheTTL:         time.Hour,
+		LocalCacheCapacity:    16,
+		BootstrapAdminEnabled: true,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "http://unknown.example.com/", nil)
+	req.Host = "unknown.example.com"
+	req.RemoteAddr = "198.51.100.7:54321"
+	recorder := httptest.NewRecorder()
+	manager.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("expected plain 404 for an unknown domain, got %d", recorder.Code)
+	}
+	if strings.Contains(recorder.Body.String(), "Portlyn") {
+		t.Fatal("unknown domains must not reveal that Portlyn runs here")
 	}
 }
 
