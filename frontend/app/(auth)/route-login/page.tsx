@@ -52,7 +52,7 @@ async function bridgeSessionToTarget(service: RouteAuthService, returnTo: string
 
 function RouteLoginContent() {
   const params = useSearchParams();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isLoading: isAuthLoading } = useAuth();
   const serviceId = params.get("serviceId") || "";
   const returnTo = params.get("returnTo");
   const continuePath = useMemo(() => buildContinuePath(serviceId, returnTo), [returnTo, serviceId]);
@@ -189,11 +189,13 @@ function RouteLoginContent() {
             <Alert color="gray" variant="light" styles={authInfoAlertStyle(ui)}>{service.access_message}</Alert>
           ) : null}
 
-          {isLoading || isBridging ? (
-            <Text c={ui.muted_text_color} ta="center" size="sm">{isBridging ? "Continuing to protected route..." : "Loading route access details..."}</Text>
+          {isLoading || isAuthLoading || isBridging ? (
+            <Text c={ui.muted_text_color} ta="center" size="sm">
+              {isBridging || isAuthLoading ? "Continuing to protected route..." : "Loading route access details..."}
+            </Text>
           ) : null}
 
-          {!isLoading && service?.access_method === "oidc_only" ? (
+          {!isLoading && !isAuthLoading && !isBridging && service?.access_method === "oidc_only" ? (
             <Stack gap="sm">
               <Button loading={isOIDCSubmitting} onClick={handleOIDC} disabled={!authConfig?.oidc_enabled} style={buttonStyle(ui)}>
                 {ui.route_oidc_label || `Continue with ${authConfig?.oidc_label || "SSO"}`}
@@ -201,7 +203,7 @@ function RouteLoginContent() {
             </Stack>
           ) : null}
 
-          {!isLoading && service?.access_method === "session" ? (
+          {!isLoading && !isAuthLoading && !isBridging && (!isAuthenticated || error) && service?.access_method === "session" ? (
             <Stack gap="sm">
               <Button component={Link} href={`/login?next=${encodeURIComponent(continuePath)}`} style={buttonStyle(ui)}>
                 {ui.route_continue_label}
@@ -219,7 +221,14 @@ function RouteLoginContent() {
 
           {!isLoading && service?.access_method === "pin" ? (
             <Stack gap="sm">
-              <PasswordInput label="PIN" value={pin} onChange={(event) => setPIN(event.currentTarget.value)} styles={fields} />
+              <PasswordInput
+                label="PIN"
+                name="route-pin"
+                autoComplete="off"
+                value={pin}
+                onChange={(event) => setPIN(event.currentTarget.value)}
+                styles={fields}
+              />
               {service.access_method_config?.hint ? (
                 <Text size="sm" c={ui.muted_text_color}>{service.access_method_config?.hint}</Text>
               ) : null}
@@ -231,7 +240,15 @@ function RouteLoginContent() {
 
           {!isLoading && service?.access_method === "email_code" ? (
             <Stack gap="sm">
-              <TextInput label="Email" value={email} onChange={(event) => setEmail(event.currentTarget.value)} styles={fields} />
+              <TextInput
+                label="Email"
+                type="email"
+                name="email"
+                autoComplete="username"
+                value={email}
+                onChange={(event) => setEmail(event.currentTarget.value)}
+                styles={fields}
+              />
               {service.access_method_config?.hint ? (
                 <Text size="sm" c={ui.muted_text_color}>{service.access_method_config?.hint}</Text>
               ) : null}
