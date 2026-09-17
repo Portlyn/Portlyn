@@ -141,8 +141,23 @@ func runInitWizard(args []string) error {
 		fmt.Printf("\nBreak-glass recovery is enabled, reachable only from the server itself (loopback).\n")
 		fmt.Printf("If you ever lock yourself out (e.g. SSO-only plus a lost authenticator), use the token in BREAK_GLASS_TOKEN.\n")
 	}
-	fmt.Printf("\nStart the server with:\n  portlyn\n")
+	printStartHint()
 	return nil
+}
+
+const systemdUnitPath = "/etc/systemd/system/portlyn.service"
+
+func printStartHint() {
+	_, err := os.Stat(systemdUnitPath)
+	fmt.Print(startHint(err == nil))
+}
+
+func startHint(managedBySystemd bool) string {
+	if managedBySystemd {
+		return "\nStart the server with:\n  sudo systemctl start portlyn\n" +
+			"It may already be running, in which case restart it so it picks up this file:\n  sudo systemctl restart portlyn\n"
+	}
+	return "\nStart the server with:\n  portlyn\n"
 }
 
 func isLocalInitDomain(domain string) bool {
@@ -198,18 +213,114 @@ func validateInitAnswers(a initAnswers) error {
 	return nil
 }
 
+const optionalEnvReference = `
+# ---------------------------------------------------------------------------
+# Everything below is optional. The value shown is the built-in default, so
+# uncommenting a line without changing it does nothing. Delete what you do not
+# need. Reference: https://portlyn.dev/reference/configuration/
+# ---------------------------------------------------------------------------
+
+# Sessions and tokens
+#TOKEN_TTL=30m
+#REFRESH_TOKEN_TTL=720h
+#ROUTE_AUTH_TTL=12h
+#CSRF_TOKEN_TTL=12h
+#AUTH_CACHE_TTL=1m
+#JWT_ISSUER=portlyn
+
+# Sign-in
+#REQUIRE_MFA_FOR_ADMINS=true
+#AUTH_RATE_LIMIT_ATTEMPTS=10
+#AUTH_RATE_LIMIT_WINDOW=10m
+#BOOTSTRAP_ADMIN_ALLOW_REMOTE=false
+
+# One-time codes by email. Needs SMTP, which is configured in the dashboard.
+#OTP_ENABLED=true
+#OTP_TOKEN_TTL=10m
+#OTP_REQUEST_LIMIT=5
+#OTP_REQUEST_WINDOW=15m
+
+# OIDC. Issuer, client id and secret are set in the dashboard.
+#OIDC_ENABLED=false
+#OIDC_REQUIRE_VERIFIED_EMAIL=true
+#OIDC_ALLOW_EMAIL_LINKING=false
+#OIDC_ALLOWED_EMAIL_DOMAINS=
+#OIDC_MANAGE_ROLES=true
+#OIDC_ADMIN_ROLE_CLAIM_PATH=realm_access.roles
+#OIDC_PROVIDER_LABEL=SSO
+#OIDC_ALLOW_PRIVATE_ISSUER=false
+
+# Proxy and client addresses
+#TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128
+#CORS_ALLOWED_ORIGINS=http://localhost,http://127.0.0.1
+#PROXY_ALLOW_PRIVATE_UPSTREAMS=true
+#REQUEST_CLIENT_CERT=false
+#ROUTE_CACHE_TTL=30s
+#ROUTE_LOCAL_CACHE_TTL=5s
+#ROUTE_LOCAL_CACHE_SIZE=2048
+
+# Certificates
+#ACME_RENEW_WITHIN=720h
+#ACME_POLL_INTERVAL=1m
+
+# Nodes and tunnel
+#NODE_OFFLINE_AFTER=2m
+#NODE_TRUST_FORWARDED_PROTO=true
+#NODE_ALLOW_MTLS_HEADER_FALLBACK=false
+#NODE_ENROLL_RATE_LIMIT=20
+#NODE_ENROLL_RATE_WINDOW=10m
+#NODE_HEARTBEAT_AUTH_FAIL_RATE_LIMIT=20
+#NODE_HEARTBEAT_AUTH_FAIL_RATE_WINDOW=1m
+
+# Audit log
+#AUDIT_BUFFER_SIZE=1024
+#AUDIT_BATCH_SIZE=128
+#AUDIT_FLUSH_INTERVAL=250ms
+#AUDIT_DROP_POLICY=sync_fallback
+#AUDIT_WEBHOOK_ALLOW_PRIVATE_TARGETS=false
+
+# Alerting thresholds, counted within ALERT_WINDOW
+#ALERT_WINDOW=15m
+#ALERT_LOGIN_FAIL_SPIKE_THRESHOLD=20
+#ALERT_NODE_HEARTBEAT_FAIL_THRESHOLD=20
+#ALERT_AUDIT_ANOMALY_THRESHOLD=10
+
+# Break-glass recovery, reachable from the listed networks only
+#BREAK_GLASS_ENABLED=false
+#BREAK_GLASS_TTL=15m
+#BREAK_GLASS_ALLOW_CIDRS=127.0.0.1/32,::1/128
+
+# GeoIP and CrowdSec decide what happens when the lookup itself fails
+#GEOIP_FAIL_OPEN=false
+#CROWDSEC_FAIL_OPEN=true
+
+# Diagnostics. Leave these off in production.
+#LOG_LEVEL=info
+#DB_LOG_LEVEL=warn
+#METRICS_PUBLIC=false
+#HEALTH_EXPOSE_VERSION=false
+#EXPOSE_AUTH_TOKENS=false
+#ALLOW_INSECURE_DEV_MODE=false
+#OTP_RESPONSE_INCLUDES_CODE=false
+
+# Key rotation. Old secrets stay here until everything is re-encrypted.
+#DATA_ENCRYPTION_LEGACY_SECRETS=
+`
+
+var generatedSecretKeys = []string{
+	"JWT_SECRET",
+	"JWT_SIGNING_SECRET",
+	"SESSION_BRIDGE_SECRET",
+	"OIDC_STATE_SECRET",
+	"MFA_ENCRYPTION_SECRET",
+	"CSRF_SECRET",
+	"DATA_ENCRYPTION_SECRET",
+	"AUDIT_HMAC_SECRET",
+}
+
 func buildEnvFile(a initAnswers) (string, error) {
 	secrets := map[string]string{}
-	for _, key := range []string{
-		"JWT_SECRET",
-		"JWT_SIGNING_SECRET",
-		"SESSION_BRIDGE_SECRET",
-		"OIDC_STATE_SECRET",
-		"MFA_ENCRYPTION_SECRET",
-		"CSRF_SECRET",
-		"DATA_ENCRYPTION_SECRET",
-		"AUDIT_HMAC_SECRET",
-	} {
+	for _, key := range generatedSecretKeys {
 		s, err := randomURLSafe(48)
 		if err != nil {
 			return "", err
@@ -264,9 +375,10 @@ func buildEnvFile(a initAnswers) (string, error) {
 	}
 	fmt.Fprintln(&b, "LOG_LEVEL=info")
 	fmt.Fprintln(&b)
-	for key, value := range secrets {
-		fmt.Fprintf(&b, "%s=%s\n", key, value)
+	for _, key := range generatedSecretKeys {
+		fmt.Fprintf(&b, "%s=%s\n", key, secrets[key])
 	}
+	fmt.Fprint(&b, optionalEnvReference)
 	return b.String(), nil
 }
 
