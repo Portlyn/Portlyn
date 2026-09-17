@@ -219,7 +219,7 @@ export default function ServiceGroupsPage() {
               <TextInput
                 label="Hint"
                 value={accessMethodConfig.hint || ""}
-                onChange={(event) => setAccessMethodConfig((current) => ({ ...current, hint: event.currentTarget.value }))}
+                onChange={(event) => { const value = event.currentTarget.value; setAccessMethodConfig((current) => ({ ...current, hint: value })); }}
               />
             ) : null}
             {accessMethod === "pin" ? (
@@ -227,7 +227,7 @@ export default function ServiceGroupsPage() {
                 label="Route-PIN"
                 description="Only sent on save. Existing PIN stays unchanged if left blank."
                 value={accessMethodConfig.pin || ""}
-                onChange={(event) => setAccessMethodConfig((current) => ({ ...current, pin: event.currentTarget.value }))}
+                onChange={(event) => { const value = event.currentTarget.value; setAccessMethodConfig((current) => ({ ...current, pin: value })); }}
               />
             ) : null}
             {accessMethod === "email_code" ? (
@@ -235,7 +235,7 @@ export default function ServiceGroupsPage() {
                 <TextInput
                   label="Allowed email domain"
                   value={accessMethodConfig.allowed_email_domain || ""}
-                  onChange={(event) => setAccessMethodConfig((current) => ({ ...current, allowed_email_domain: event.currentTarget.value }))}
+                  onChange={(event) => { const value = event.currentTarget.value; setAccessMethodConfig((current) => ({ ...current, allowed_email_domain: value })); }}
                 />
                 <Textarea
                   label="Allowed email addresses"

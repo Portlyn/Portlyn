@@ -374,10 +374,10 @@ export function ServiceForm({
               <Text fw={600}>Access windows</Text>
               <Grid>
                 <Grid.Col span={{ base: 12, md: 6 }}>
-                  <TextInput label="Name" value={windowDraft.name} onChange={(event) => setWindowDraft((current) => ({ ...current, name: event.currentTarget.value }))} />
+                  <TextInput label="Name" value={windowDraft.name} onChange={(event) => { const value = event.currentTarget.value; setWindowDraft((current) => ({ ...current, name: value })); }} />
                 </Grid.Col>
                 <Grid.Col span={{ base: 12, md: 6 }}>
-                  <TextInput label="Timezone" value={windowDraft.timezone} onChange={(event) => setWindowDraft((current) => ({ ...current, timezone: event.currentTarget.value }))} />
+                  <TextInput label="Timezone" value={windowDraft.timezone} onChange={(event) => { const value = event.currentTarget.value; setWindowDraft((current) => ({ ...current, timezone: value })); }} />
                 </Grid.Col>
                 <Grid.Col span={{ base: 12, md: 6 }}>
                   <MultiSelect
@@ -388,10 +388,10 @@ export function ServiceForm({
                   />
                 </Grid.Col>
                 <Grid.Col span={{ base: 6, md: 3 }}>
-                  <TextInput label="Start" value={windowDraft.start_time} onChange={(event) => setWindowDraft((current) => ({ ...current, start_time: event.currentTarget.value }))} />
+                  <TextInput label="Start" value={windowDraft.start_time} onChange={(event) => { const value = event.currentTarget.value; setWindowDraft((current) => ({ ...current, start_time: value })); }} />
                 </Grid.Col>
                 <Grid.Col span={{ base: 6, md: 3 }}>
-                  <TextInput label="End" value={windowDraft.end_time} onChange={(event) => setWindowDraft((current) => ({ ...current, end_time: event.currentTarget.value }))} />
+                  <TextInput label="End" value={windowDraft.end_time} onChange={(event) => { const value = event.currentTarget.value; setWindowDraft((current) => ({ ...current, end_time: value })); }} />
                 </Grid.Col>
               </Grid>
               <Group justify="flex-end">
