@@ -49,7 +49,7 @@ DATABASE_PATH=/var/lib/portlyn/portlyn.db
 
 ## Reaching the dashboard early
 
-- `BOOTSTRAP_ADMIN_ENABLED` serves the dashboard on the raw IP or loopback before a domain exists. `init` sets it to `true`.
+- `BOOTSTRAP_ADMIN_ENABLED` serves the dashboard on the raw IP or loopback before a domain exists. `init` and the Docker Compose file both set it to `true`. With it on but remote access off, hitting the server by IP returns a short page telling you how to get in, instead of a bare 404.
 - `BOOTSTRAP_ADMIN_ALLOW_REMOTE` drops the local-only guard so a remote browser can reach that bootstrap dashboard. Off by default. See [First boot and TLS](/guides/tls/).
 
 ## Behind a proxy

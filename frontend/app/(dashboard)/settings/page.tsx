@@ -441,7 +441,12 @@ export default function SettingsPage() {
                 <TextInput label="Admin role value" value={form.oidc_admin_role_value} onChange={(event) => update("oidc_admin_role_value", event.currentTarget.value)} />
                 <TextInput label="Provider label" value={form.oidc_provider_label} onChange={(event) => update("oidc_provider_label", event.currentTarget.value)} />
                 <Checkbox checked={form.oidc_allow_email_linking} onChange={(event) => update("oidc_allow_email_linking", event.currentTarget.checked)} label="Allow email linking" />
-                <Checkbox checked={form.oidc_require_verified_email} onChange={(event) => update("oidc_require_verified_email", event.currentTarget.checked)} label="Require verified email" />
+                <Checkbox
+                  checked={form.oidc_require_verified_email}
+                  onChange={(event) => update("oidc_require_verified_email", event.currentTarget.checked)}
+                  label="Require verified email from provider"
+                  description="Rejects a login when your OIDC provider reports email_verified as false. Portlyn never sends verification emails itself, so this needs no SMTP."
+                />
                 <Checkbox checked={form.local_login_disabled} onChange={(event) => update("local_login_disabled", event.currentTarget.checked)} label="Disable local password login (SSO only)" description="Only works with OIDC enabled. Break-glass login stays available." />
               </Stack>
             </Card>

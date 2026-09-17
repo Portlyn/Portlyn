@@ -280,9 +280,10 @@ export function ServiceWizard({
                 <TextInput
                   label="Service name"
                   value={basics.name}
-                  onChange={(event) =>
-                    setBasics((current) => ({ ...current, name: event.currentTarget.value }))
-                  }
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setBasics((current) => ({ ...current, name: value }));
+                  }}
                   required
                 />
                 <Group grow>
@@ -290,9 +291,10 @@ export function ServiceWizard({
                     label="Subdomain (optional)"
                     placeholder="e.g. grafana"
                     value={basics.subdomain}
-                    onChange={(event) =>
-                      setBasics((current) => ({ ...current, subdomain: event.currentTarget.value }))
-                    }
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setBasics((current) => ({ ...current, subdomain: value }));
+                    }}
                   />
                   <Select
                     label="Root domain"
@@ -379,28 +381,28 @@ export function ServiceWizard({
                     label="Host or IP"
                     placeholder="e.g. gitea or 10.0.0.5"
                     value={basics.upstreamHost}
-                    onChange={(event) =>
-                      setBasics((current) => ({ ...current, upstreamHost: event.currentTarget.value }))
-                    }
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setBasics((current) => ({ ...current, upstreamHost: value }));
+                    }}
                     required
                   />
                   <TextInput
                     label="Port"
                     type="number"
                     value={String(basics.upstreamPort)}
-                    onChange={(event) =>
-                      setBasics((current) => ({
-                        ...current,
-                        upstreamPort: Number(event.currentTarget.value) || 0,
-                      }))
-                    }
+                    onChange={(event) => {
+                      const port = Number(event.currentTarget.value) || 0;
+                      setBasics((current) => ({ ...current, upstreamPort: port }));
+                    }}
                   />
                   <TextInput
                     label="Path"
                     value={basics.upstreamPath}
-                    onChange={(event) =>
-                      setBasics((current) => ({ ...current, upstreamPath: event.currentTarget.value }))
-                    }
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setBasics((current) => ({ ...current, upstreamPath: value }));
+                    }}
                   />
                 </Group>
                 {selectedTemplate?.notes ? (
