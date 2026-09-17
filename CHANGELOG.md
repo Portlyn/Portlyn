@@ -4,6 +4,65 @@ All notable changes to this project should be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning for tagged releases.
 
+## [1.3.0] - 2026-09-17
+
+### Security
+
+- gRPC to 1.83.2 for CVE-2026-84445, CVE-2026-84304 and CVE-2026-84303. Worth
+  knowing if you pin it yourself: 84445 is only fixed in 1.83.2, so 1.83.1
+  still trips a Trivy scan.
+- The Alpine images now run `apk upgrade` during build. `libcrypto3` ships
+  inside the base layer, and `apk add` only installs what is missing, so it sat
+  on 3.5.7-r0 with CVE-2026-14456 no matter how often the image was rebuilt.
+  It lands on 3.5.8-r0 now.
+- Next.js to 16.3.3 for two critical unauthenticated RCEs,
+  GHSA-p293-qw3h-jr36 and GHSA-2xp9-vwfh-vxw4. `sharp` to 0.35.4 for
+  GHSA-rgj7-g3m4-5g8c. `sharp` hangs off Next as a transitive dependency and a
+  Next bump alone does not move it, the caret range stays resolved where it
+  was.
+- `golang.org/x/crypto` to 0.57.0 for the two ssh channel denial of service
+  fixes, GO-2026-6354 and GO-2026-6355.
+- The route email code endpoint used OR where the rest of the code uses AND, so
+  `OTP_RESPONSE_INCLUDES_CODE=true` on its own put route codes in the API
+  response without dev mode being on. It now needs both, matching how the login
+  OTP path has always behaved.
+
+### Added
+
+- Hitting the server by IP while remote bootstrap access is off returns a short
+  page explaining the SSH tunnel and the env var, instead of a bare 404. Unknown
+  domains still get a plain 404 that does not mention Portlyn.
+- Compose passes the `ACME_DNS_*` variables through, and the example env file
+  lists them. Setting them previously did nothing there, the variables never
+  reached the container, so DNS-01 by env could not work on the Docker path at
+  all.
+
+### Changed
+
+- `BOOTSTRAP_ADMIN_ENABLED` now defaults to `true` in Compose, which is what
+  `init` and `deploy.sh` already did. With the API bound to loopback and the
+  proxy answering 404 on the IP, a fresh Compose install had no way in. It
+  still only answers local requests until you also set
+  `BOOTSTRAP_ADMIN_ALLOW_REMOTE=true`, and production setups should turn it off
+  once a domain is live.
+- The OIDC setting is now labelled "Require verified email from provider" and
+  says what it does. It checks the `email_verified` claim from your provider and
+  needs no SMTP, but the old wording read like Portlyn sends verification mail
+  itself, which it never has.
+
+### Fixed
+
+- Viewers saw Security in the sidebar but every click bounced them back to
+  `/services`. The guard allowed exactly one path while the API has always
+  served `/me/mfa` and `/me/passkeys` to any signed in user, so a non-admin
+  could not enrol a passkey or set up TOTP at all.
+- Typing into the service wizard threw `Cannot read properties of null` and
+  killed the form. The handlers read `event.currentTarget` inside the setState
+  updater, and React nulls it after dispatch and runs the updater afterwards.
+  It looked intermittent because React sometimes evaluates the updater eagerly.
+  Twelve fields had it, across the wizard, the access window editor and the
+  service group access methods.
+
 ## [1.2.0] - 2026-08-18
 
 ### Breaking
