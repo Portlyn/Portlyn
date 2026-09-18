@@ -55,8 +55,6 @@ func TestBuildEnvFileAssignsEveryKeyOnce(t *testing.T) {
 	}
 }
 
-// A dropped '#' would turn documentation into a setting that overrides the
-// built-in default for everyone who runs init.
 func TestOptionalEnvReferenceIsFullyCommented(t *testing.T) {
 	for _, raw := range strings.Split(optionalEnvReference, "\n") {
 		line := strings.TrimSpace(raw)

@@ -155,12 +155,12 @@ func TestSubnetProxyRoundTrip(t *testing.T) {
 	if err := clientDevice.IpcSet(clientCfg); err != nil {
 		t.Fatalf("client ipc: %v", err)
 	}
-	if err := clientDevice.Up(); err != nil {
-		t.Fatalf("client up: %v", err)
-	}
 	dial := func(network, _ string) (net.Conn, error) { return net.Dial(network, echoAddr) }
 	if err := clientNet.EnableSubnetProxy([]netip.Prefix{netip.MustParsePrefix(lanSubnet)}, dial); err != nil {
 		t.Fatalf("enable subnet proxy: %v", err)
+	}
+	if err := clientDevice.Up(); err != nil {
+		t.Fatalf("client up: %v", err)
 	}
 
 	clientCtx := context.Background()

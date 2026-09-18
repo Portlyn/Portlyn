@@ -147,6 +147,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("parse tunnel ip: %v", err)
 	}
+	subnets := parseCIDRs(state.Subnets)
 	wgClient := tunnel.NewClient(tunnel.ClientOptions{
 		PrivateKey:      state.WGPrivateKey,
 		ServerPublicKey: state.ServerPublicKey,
@@ -154,6 +155,7 @@ func main() {
 		PresharedKey:    state.PresharedKey,
 		TunnelIP:        tunnelIP,
 		AllowedIPs:      state.AllowedIPs,
+		Subnets:         subnets,
 		Keepalive:       state.Keepalive,
 	})
 	if err := wgClient.Start(ctx); err != nil {
@@ -162,12 +164,8 @@ func main() {
 	defer wgClient.Stop()
 	log.Printf("tunnel client up on %s, dialing %s", state.TunnelIP, state.ServerEndpoint)
 
-	if subnets := parseCIDRs(state.Subnets); len(subnets) > 0 {
-		if err := wgClient.EnableSubnetProxy(subnets); err != nil {
-			log.Printf("enable subnet proxy: %v", err)
-		} else {
-			log.Printf("subnet proxy active for %v", state.Subnets)
-		}
+	if len(subnets) > 0 {
+		log.Printf("subnet proxy active for %v", state.Subnets)
 	}
 
 	fwd := newForwarder(wgClient)
