@@ -28,6 +28,7 @@ type ClientOptions struct {
 	PresharedKey    string
 	TunnelIP        netip.Addr
 	AllowedIPs      []string
+	Subnets         []netip.Prefix
 	MTU             int
 	Keepalive       int
 	LogLevel        int
@@ -133,6 +134,14 @@ func (c *Client) Start(ctx context.Context) error {
 		dev.Close()
 		return fmt.Errorf("tunnel client: ipc set: %w", err)
 	}
+
+	if len(c.options.Subnets) > 0 {
+		if err := netStack.EnableSubnetProxy(c.options.Subnets, net.Dial); err != nil {
+			dev.Close()
+			return fmt.Errorf("tunnel client: enable subnet proxy: %w", err)
+		}
+	}
+
 	if err := dev.Up(); err != nil {
 		dev.Close()
 		return fmt.Errorf("tunnel client: bring up: %w", err)
@@ -158,17 +167,6 @@ func (c *Client) ListenTCP(port int) (net.Listener, error) {
 		return nil, fmt.Errorf("tunnel client: not running")
 	}
 	return ns.ListenTCP(port)
-}
-
-func (c *Client) EnableSubnetProxy(subnets []netip.Prefix) error {
-	c.mu.Lock()
-	ns := c.net
-	started := c.started
-	c.mu.Unlock()
-	if !started || ns == nil {
-		return fmt.Errorf("tunnel client: not running")
-	}
-	return ns.EnableSubnetProxy(subnets, net.Dial)
 }
 
 func (c *Client) HandshakeAge() (time.Time, bool) {

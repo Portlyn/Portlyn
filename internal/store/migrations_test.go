@@ -80,7 +80,6 @@ func TestMigrateRebuildsTableThatOthersReference(t *testing.T) {
 		}
 	}
 
-	// The copy, drop and rename dance gorm performs when a sqlite column changes.
 	list := []Migration{{
 		ID: "9100_rebuild_referenced_table",
 		Up: func(tx *gorm.DB) error {

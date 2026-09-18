@@ -101,9 +101,6 @@ func migrateList(ctx context.Context, db *gorm.DB, list []Migration) error {
 	})
 }
 
-// SQLite changes a column by copying the table and dropping the original, which
-// it refuses while another table holds a foreign key on it. The pragma is a
-// no-op inside a transaction, so it has to wrap the whole run from out here.
 func withoutSQLiteForeignKeys(ctx context.Context, db *gorm.DB, fn func() error) (err error) {
 	if db.Dialector == nil || db.Dialector.Name() != "sqlite" {
 		return fn()
