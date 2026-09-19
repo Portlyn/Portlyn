@@ -128,6 +128,7 @@ func serviceResponse(item domain.Service, health serviceHealthInfo, cert acme.Ce
 	return map[string]any{
 		"id":                             item.ID,
 		"name":                           item.Name,
+		"enabled":                        item.Enabled,
 		"domain_id":                      item.DomainID,
 		"domain":                         item.Domain,
 		"subdomain":                      item.Subdomain,

@@ -24,6 +24,10 @@ export function servicePublicURL(service?: Partial<Service> | null) {
   if (!host) {
     return "";
   }
+  const protocol = typeof window === "undefined" ? "https:" : window.location.protocol;
   const path = (service?.path || "/").trim();
-  return `https://${host}${path === "/" ? "" : path}`;
+  if (!path || path === "/") {
+    return `${protocol}//${host}`;
+  }
+  return `${protocol}//${host}${path.startsWith("/") ? path : `/${path}`}`;
 }

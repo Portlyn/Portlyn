@@ -205,6 +205,7 @@ func viewerServiceResponse(item domain.Service, health serviceHealthInfo, cert a
 	return map[string]any{
 		"id":                     item.ID,
 		"name":                   item.Name,
+		"enabled":                item.Enabled,
 		"domain_id":              item.DomainID,
 		"domain":                 item.Domain,
 		"path":                   item.Path,
