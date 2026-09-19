@@ -428,6 +428,7 @@ type Service struct {
 	AccessWindows        AccessWindowList `gorm:"type:text;not null;default:'[]'" json:"access_windows"`
 	LastDeployedAt       *time.Time       `json:"last_deployed_at"`
 	DeploymentRevision   uint64           `gorm:"not null;default:0" json:"deployment_revision"`
+	Enabled              bool             `gorm:"not null;default:true" json:"enabled"`
 	NodeID               *uint            `gorm:"index" json:"node_id"`
 	Node                 *Node            `gorm:"foreignKey:NodeID;references:ID" json:"node,omitempty"`
 	ServiceGroups        []ServiceGroup   `gorm:"many2many:service_group_memberships" json:"service_groups,omitempty"`

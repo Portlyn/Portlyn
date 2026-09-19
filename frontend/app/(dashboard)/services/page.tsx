@@ -108,6 +108,28 @@ export default function ServicesPage() {
     }
   };
 
+  const handleToggleEnabled = async (service: Service, enabled: boolean) => {
+    setServices((current) => current.map((item) => (item.id === service.id ? { ...item, enabled } : item)));
+    try {
+      await apiFetch<Service>(`/api/v1/services/${service.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled })
+      });
+      notifications.show({
+        color: "success",
+        message: enabled ? `${service.name} is live again` : `${service.name} no longer answers requests`
+      });
+    } catch (err) {
+      setServices((current) =>
+        current.map((item) => (item.id === service.id ? { ...item, enabled: !enabled } : item))
+      );
+      notifications.show({
+        color: "danger",
+        message: err instanceof ApiError ? err.message : "Unable to change the service."
+      });
+    }
+  };
+
   const handleDelete = async () => {
     if (!serviceToDelete) return;
     setIsDeleting(true);
@@ -164,7 +186,12 @@ export default function ServicesPage() {
       ) : (
         canManage ? (
           <Paper withBorder radius="md" p="sm">
-            <ServiceTable services={filteredServices} canManage={canManage} onDelete={setServiceToDelete} />
+            <ServiceTable
+              services={filteredServices}
+              canManage={canManage}
+              onDelete={setServiceToDelete}
+              onToggleEnabled={handleToggleEnabled}
+            />
           </Paper>
         ) : (
           <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }}>

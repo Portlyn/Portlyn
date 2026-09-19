@@ -305,6 +305,7 @@ func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 func buildServiceFromCreateRequest(req createServiceRequest, subdomain string, existingConfig domain.JSONObject) *domain.Service {
 	return &domain.Service{
 		Name:                 req.Name,
+		Enabled:              true,
 		DomainID:             req.DomainID,
 		Subdomain:            subdomain,
 		Path:                 req.Path,
@@ -381,6 +382,9 @@ func (s *Server) handleUpdateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	}
 	if req.TLSMode != nil {
 		item.TLSMode = *req.TLSMode
+	}
+	if req.Enabled != nil {
+		item.Enabled = *req.Enabled
 	}
 	if req.PassHostHeader != nil {
 		item.PassHostHeader = *req.PassHostHeader

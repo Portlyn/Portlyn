@@ -187,6 +187,7 @@ type createServiceRequest struct {
 
 type updateServiceRequest struct {
 	Name               *string                    `json:"name" validate:"omitempty,min=2,max=255"`
+	Enabled            *bool                      `json:"enabled"`
 	DomainID           *uint                      `json:"domain_id" validate:"omitempty,gt=0"`
 	Subdomain          *string                    `json:"subdomain" validate:"omitempty,max=255"`
 	Path               *string                    `json:"path" validate:"omitempty,max=255"`

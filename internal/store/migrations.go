@@ -70,6 +70,21 @@ var migrations = []Migration{
 			)
 		},
 	},
+	{
+		ID: "0002_service_enabled",
+		Up: func(db *gorm.DB) error {
+			if db.Migrator().HasColumn(&domain.Service{}, "enabled") {
+				return nil
+			}
+			if err := db.Migrator().AddColumn(&domain.Service{}, "Enabled"); err != nil {
+				return err
+			}
+			return db.Model(&domain.Service{}).Where("enabled IS NULL").Update("enabled", true).Error
+		},
+		Down: func(db *gorm.DB) error {
+			return db.Migrator().DropColumn(&domain.Service{}, "Enabled")
+		},
+	},
 }
 
 // Each migration commits together with its bookkeeping row, so a crash
