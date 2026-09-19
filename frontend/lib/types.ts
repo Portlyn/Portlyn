@@ -277,6 +277,7 @@ export interface ServiceGroup {
 export interface Service {
   id: number;
   name: string;
+  enabled: boolean;
   domain_id: number;
   domain?: Domain;
   subdomain: string;

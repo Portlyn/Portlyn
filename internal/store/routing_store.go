@@ -27,6 +27,7 @@ func (s *SQLRoutingStore) GetRoutesForHost(ctx context.Context, host string) ([]
 	host = strings.ToLower(strings.TrimSpace(host))
 	err := s.baseQuery(ctx).
 		Where(`LOWER("Domain"."name") IN ?`, domainCandidatesForHost(host)).
+		Where("services.enabled = ?", true).
 		Order("services.path asc").
 		Find(&services).Error
 	if err != nil {

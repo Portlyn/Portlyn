@@ -18,3 +18,12 @@ export function serviceHostname(service?: Partial<Service> | null) {
   }
   return service.hostname || buildServiceHostname(service.domain?.name, service.subdomain);
 }
+
+export function servicePublicURL(service?: Partial<Service> | null) {
+  const host = serviceHostname(service);
+  if (!host) {
+    return "";
+  }
+  const path = (service?.path || "/").trim();
+  return `https://${host}${path === "/" ? "" : path}`;
+}

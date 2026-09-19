@@ -61,4 +61,29 @@ func TestRoutingStoreResolvesServiceSubdomainHost(t *testing.T) {
 	if routes[0].Host != "pangolin.schnittert.cloud" {
 		t.Fatalf("unexpected route host %q", routes[0].Host)
 	}
+
+	service.Enabled = false
+	if err := serviceStore.Update(ctx, service); err != nil {
+		t.Fatalf("disable service: %v", err)
+	}
+
+	routes, err = routingStore.GetRoutesForHost(ctx, "pangolin.schnittert.cloud")
+	if err != nil {
+		t.Fatalf("get routes after disabling: %v", err)
+	}
+	if len(routes) != 0 {
+		t.Fatalf("a disabled service must not be routed, got %d routes", len(routes))
+	}
+
+	service.Enabled = true
+	if err := serviceStore.Update(ctx, service); err != nil {
+		t.Fatalf("re-enable service: %v", err)
+	}
+	routes, err = routingStore.GetRoutesForHost(ctx, "pangolin.schnittert.cloud")
+	if err != nil {
+		t.Fatalf("get routes after re-enabling: %v", err)
+	}
+	if len(routes) != 1 {
+		t.Fatalf("expected the route to come back, got %d", len(routes))
+	}
 }
