@@ -136,7 +136,11 @@ func TestSubnetProxyRoundTrip(t *testing.T) {
 
 	// Build the client device manually so we can inject a dialer that reaches the
 	// in-process echo server instead of an unreachable LAN IP.
-	clientTun, clientNet, err := CreateNetStack([]netip.Addr{clientIP}, 1420)
+	dial := func(network, _ string) (net.Conn, error) { return net.Dial(network, echoAddr) }
+	clientTun, _, err := CreateNetStackWithProxy([]netip.Addr{clientIP}, 1420, &SubnetProxy{
+		Subnets: []netip.Prefix{netip.MustParsePrefix(lanSubnet)},
+		Dial:    dial,
+	})
 	if err != nil {
 		t.Fatalf("client netstack: %v", err)
 	}
@@ -154,10 +158,6 @@ func TestSubnetProxyRoundTrip(t *testing.T) {
 	}, "\n")
 	if err := clientDevice.IpcSet(clientCfg); err != nil {
 		t.Fatalf("client ipc: %v", err)
-	}
-	dial := func(network, _ string) (net.Conn, error) { return net.Dial(network, echoAddr) }
-	if err := clientNet.EnableSubnetProxy([]netip.Prefix{netip.MustParsePrefix(lanSubnet)}, dial); err != nil {
-		t.Fatalf("enable subnet proxy: %v", err)
 	}
 	if err := clientDevice.Up(); err != nil {
 		t.Fatalf("client up: %v", err)
