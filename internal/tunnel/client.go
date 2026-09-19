@@ -86,7 +86,11 @@ func (c *Client) Start(ctx context.Context) error {
 		return fmt.Errorf("tunnel client: resolve endpoint %q: %w", endpoint, err)
 	}
 
-	tunDevice, netStack, err := CreateNetStack([]netip.Addr{c.tunnelIP}, c.options.MTU)
+	var proxy *SubnetProxy
+	if len(c.options.Subnets) > 0 {
+		proxy = &SubnetProxy{Subnets: c.options.Subnets, Dial: net.Dial}
+	}
+	tunDevice, netStack, err := CreateNetStackWithProxy([]netip.Addr{c.tunnelIP}, c.options.MTU, proxy)
 	if err != nil {
 		return fmt.Errorf("tunnel client: create tun: %w", err)
 	}
@@ -134,14 +138,6 @@ func (c *Client) Start(ctx context.Context) error {
 		dev.Close()
 		return fmt.Errorf("tunnel client: ipc set: %w", err)
 	}
-
-	if len(c.options.Subnets) > 0 {
-		if err := netStack.EnableSubnetProxy(c.options.Subnets, net.Dial); err != nil {
-			dev.Close()
-			return fmt.Errorf("tunnel client: enable subnet proxy: %w", err)
-		}
-	}
-
 	if err := dev.Up(); err != nil {
 		dev.Close()
 		return fmt.Errorf("tunnel client: bring up: %w", err)

@@ -39,7 +39,16 @@ type NetStack struct {
 	mtu            int
 }
 
+type SubnetProxy struct {
+	Subnets []netip.Prefix
+	Dial    DialFunc
+}
+
 func CreateNetStack(localAddrs []netip.Addr, mtu int) (tun.Device, *NetStack, error) {
+	return CreateNetStackWithProxy(localAddrs, mtu, nil)
+}
+
+func CreateNetStackWithProxy(localAddrs []netip.Addr, mtu int, proxy *SubnetProxy) (tun.Device, *NetStack, error) {
 	opts := stack.Options{
 		NetworkProtocols:   []stack.NetworkProtocolFactory{ipv4.NewProtocol},
 		TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol, udp.NewProtocol, icmp.NewProtocol4},
@@ -57,9 +66,20 @@ func CreateNetStack(localAddrs []netip.Addr, mtu int) (tun.Device, *NetStack, er
 	if err := dev.stack.SetTransportProtocolOption(tcp.ProtocolNumber, &sackEnabled); err != nil {
 		return nil, nil, fmt.Errorf("enable TCP SACK: %v", err)
 	}
+	if proxy != nil && len(proxy.Subnets) > 0 {
+		dev.registerSubnetProxyHandlers(proxy.Dial)
+	}
 	dev.ep.AddNotify(dev)
 	if err := dev.stack.CreateNIC(nicID, dev.ep); err != nil {
 		return nil, nil, fmt.Errorf("CreateNIC: %v", err)
+	}
+	if proxy != nil && len(proxy.Subnets) > 0 {
+		if err := dev.stack.SetPromiscuousMode(nicID, true); err != nil {
+			return nil, nil, fmt.Errorf("set promiscuous: %v", err)
+		}
+		if err := dev.stack.SetSpoofing(nicID, true); err != nil {
+			return nil, nil, fmt.Errorf("set spoofing: %v", err)
+		}
 	}
 	for _, ip := range localAddrs {
 		if !ip.Is4() {
@@ -173,15 +193,9 @@ func (n *NetStack) EnableForwarding() error {
 	return nil
 }
 
-func (n *NetStack) EnableSubnetProxy(subnets []netip.Prefix, dial DialFunc) error {
-	if len(subnets) == 0 {
-		return nil
-	}
-	if err := n.stack.SetPromiscuousMode(nicID, true); err != nil {
-		return fmt.Errorf("set promiscuous: %v", err)
-	}
-	if err := n.stack.SetSpoofing(nicID, true); err != nil {
-		return fmt.Errorf("set spoofing: %v", err)
+func (n *NetStack) registerSubnetProxyHandlers(dial DialFunc) {
+	if dial == nil {
+		dial = net.Dial
 	}
 	tcpFwd := tcp.NewForwarder(n.stack, 0, 2048, func(req *tcp.ForwarderRequest) {
 		id := req.ID()
@@ -208,7 +222,6 @@ func (n *NetStack) EnableSubnetProxy(subnets []netip.Prefix, dial DialFunc) erro
 		go proxyUDP(gonet.NewUDPConn(&wq, ep), target, dial)
 	})
 	n.stack.SetTransportProtocolHandler(udp.ProtocolNumber, udpFwd.HandlePacket)
-	return nil
 }
 
 func addrToIP(addr tcpip.Address) string {
