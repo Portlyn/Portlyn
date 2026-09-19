@@ -4,6 +4,31 @@ All notable changes to this project should be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning for tagged releases.
 
+## [1.4.0] - 2026-09-19
+
+### Added
+
+- Services can be switched off from the overview without deleting them. A
+  disabled service stops being routed and its host answers 404, the same as one
+  that was never configured. The filter sits in the routing query rather than in
+  the UI, so turning something off really takes it off the proxy. Useful for a
+  maintenance window, and less drastic than deleting a service to take it
+  offline for an hour. Existing services default to enabled, so an upgrade
+  changes nothing.
+- The domain in the service overview links to the public URL, and the target
+  URL links to the upstream. The upstream is usually a private address, so that
+  link only resolves from inside your network.
+
+### Fixed
+
+- The tunnel registered its transport handlers on a stack that was already
+  carrying traffic, which the race detector flagged as a data race in the
+  nodeagent startup path. A first attempt moved registration ahead of
+  `dev.Up()`, which was not enough: wireguard also starts the receiver from
+  `IpcSet` when the device is already up, so "before Up" is not a reliable
+  point in time. Registration now happens before the NIC exists at all, and
+  the method that allowed attaching handlers later is gone.
+
 ## [1.3.2] - 2026-09-17
 
 ### Fixed
