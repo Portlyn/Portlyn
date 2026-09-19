@@ -142,6 +142,7 @@ func (s *Server) handleUpsertService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		item.CreatedAt = existing.CreatedAt
 		item.DeploymentRevision = existing.DeploymentRevision
 		item.LastDeployedAt = existing.LastDeployedAt
+		item.Enabled = existing.Enabled
 		if err := s.services.Update(r.Context(), item); err != nil {
 			s.internalError(w, err)
 			return
