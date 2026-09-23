@@ -4,6 +4,13 @@ All notable changes to this project should be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning for tagged releases.
 
+## [Unreleased]
+
+### Fixed
+
+- Login redirects no longer write to the audit log, and other denials are
+  capped per minute. Run `portlyn audit compact` once to drop the old rows.
+
 ## [1.5.0] - 2026-09-23
 
 This release is almost entirely security fixes from a review of the whole

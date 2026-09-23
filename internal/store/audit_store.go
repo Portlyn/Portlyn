@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -204,22 +205,27 @@ func auditRowIsAccessNoise(item *domain.AuditLog) bool {
 		return true
 	}
 	if item.Action == "proxy_access" {
-		return auditDetailOutcome(item.Details) != "denied"
+		outcome, reason := auditDetailOutcome(item.Details)
+		if outcome != "denied" {
+			return true
+		}
+		return reason == "login_required" || (reason == "authz" && item.StatusCode == http.StatusFound)
 	}
 	return false
 }
 
-func auditDetailOutcome(raw string) string {
+func auditDetailOutcome(raw string) (string, string) {
 	if strings.TrimSpace(raw) == "" {
-		return ""
+		return "", ""
 	}
 	var parsed struct {
 		Outcome string `json:"outcome"`
+		Reason  string `json:"reason"`
 	}
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return ""
+		return "", ""
 	}
-	return parsed.Outcome
+	return parsed.Outcome, parsed.Reason
 }
 
 func (s *AuditStore) Compact(ctx context.Context) (AuditCompactionResult, error) {

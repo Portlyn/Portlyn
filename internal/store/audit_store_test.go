@@ -42,6 +42,8 @@ func TestAuditCompactDropsAccessNoiseAndRechains(t *testing.T) {
 		{Timestamp: base.Add(2 * time.Second), Action: "api_access", ResourceType: "http_request", Details: `{"channel":"api"}`},
 		{Timestamp: base.Add(3 * time.Second), Action: "proxy_access", ResourceType: "service", Details: `{"outcome":"denied","reason":"authz"}`},
 		{Timestamp: base.Add(4 * time.Second), Action: "update", ResourceType: "service"},
+		{Timestamp: base.Add(5 * time.Second), Action: "proxy_access", ResourceType: "service", StatusCode: 302, Details: `{"outcome":"denied","reason":"authz"}`},
+		{Timestamp: base.Add(6 * time.Second), Action: "proxy_access", ResourceType: "service", StatusCode: 302, Details: `{"outcome":"denied","reason":"login_required"}`},
 	}
 	for i := range rows {
 		if err := s.Create(ctx, &rows[i]); err != nil {
@@ -57,7 +59,7 @@ func TestAuditCompactDropsAccessNoiseAndRechains(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compact: %v", err)
 	}
-	if result.Scanned != 5 || result.Removed != 2 || result.Kept != 3 {
+	if result.Scanned != 7 || result.Removed != 4 || result.Kept != 3 {
 		t.Fatalf("unexpected compaction result: %+v", result)
 	}
 
@@ -80,8 +82,8 @@ func TestAuditCompactDropsAccessNoiseAndRechains(t *testing.T) {
 		if row.ResourceType == "http_request" {
 			t.Fatalf("api access row survived: %+v", row)
 		}
-		if row.Action == "proxy_access" && auditDetailOutcome(row.Details) != "denied" {
-			t.Fatalf("non-denial proxy access row survived: %+v", row)
+		if row.Action == "proxy_access" && auditRowIsAccessNoise(&row) {
+			t.Fatalf("access noise row survived: %+v", row)
 		}
 	}
 }
