@@ -27,10 +27,12 @@ func sanitizePortlynIdentityHeaders(headers http.Header) {
 	if headers == nil {
 		return
 	}
-	headers.Del("X-Portlyn-User-Email")
-	headers.Del("X-Portlyn-User-Role")
-	headers.Del("X-Portlyn-User-ID")
-	headers.Del("X-Portlyn-Client-Cert-SHA256")
+	for name := range headers {
+		normalized := strings.ReplaceAll(strings.ToLower(name), "_", "-")
+		if strings.HasPrefix(normalized, "x-portlyn-") {
+			delete(headers, name)
+		}
+	}
 }
 
 func (m *Manager) matchRoute(ctx context.Context, host, path string) (Route, bool) {

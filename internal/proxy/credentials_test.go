@@ -28,6 +28,21 @@ func TestStripPortlynCookiesDropsHeaderWhenOnlyPortlynCookies(t *testing.T) {
 	}
 }
 
+func TestSanitizePortlynIdentityHeadersDropsEverySpelling(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("X-Portlyn-User-Email", "a@example.com")
+	headers["X_portlyn_user_email"] = []string{"admin@example.com"}
+	headers["X_Portlyn_User_Role"] = []string{"admin"}
+	headers["x-portlyn-anything"] = []string{"1"}
+	headers.Set("X-Other", "keep")
+
+	sanitizePortlynIdentityHeaders(headers)
+
+	if len(headers) != 1 || headers.Get("X-Other") != "keep" {
+		t.Fatalf("unexpected headers after sanitize: %v", headers)
+	}
+}
+
 func TestStripPortlynCookiesLeavesForeignCookiesUntouched(t *testing.T) {
 	headers := http.Header{}
 	headers.Set("Cookie", "a=1;b=2")

@@ -384,6 +384,10 @@ func (m *Manager) Handler() http.Handler {
 		path := normalizePath(r.URL.Path)
 
 		if m.allowAdminHost(host, r) {
+			sanitizePortlynIdentityHeaders(r.Header)
+			if fingerprint := clientCertSHA256(r); fingerprint != "" {
+				r.Header.Set("X-Portlyn-Client-Cert-SHA256", fingerprint)
+			}
 			if m.handleAdminHost(writer, r, path) {
 				outcome = "admin"
 				reason = "admin_host"
