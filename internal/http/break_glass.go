@@ -81,8 +81,11 @@ func (s *Server) validateBreakGlassRequest(r *http.Request, token string) (bool,
 }
 
 func (s *Server) breakGlassAllowedSource(r *http.Request) bool {
-	addr, ok := remoteAddrFromRequest(r)
-	if !ok {
+	if !s.requestFromTrustedProxy(r) && (strings.TrimSpace(r.Header.Get("X-Forwarded-For")) != "" || strings.TrimSpace(r.Header.Get("X-Real-Ip")) != "") {
+		return false
+	}
+	addr, err := netip.ParseAddr(s.clientIPForRequest(r))
+	if err != nil {
 		return false
 	}
 	for _, raw := range s.cfg.BreakGlassAllowCIDRs {
