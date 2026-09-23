@@ -7,6 +7,9 @@ name: Refresh lockfile
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   lockfile:
     runs-on: ubuntu-latest

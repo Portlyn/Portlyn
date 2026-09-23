@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.zx2c4.com/wireguard/conn"
@@ -33,6 +34,12 @@ type Server struct {
 	cidr       netip.Prefix
 	tunnelIP   netip.Addr
 	settings   *domain.AppSettings
+	forwarding atomic.Pointer[[]ForwardRule]
+}
+
+type ForwardRule struct {
+	Sources      []netip.Prefix
+	Destinations []netip.Prefix
 }
 
 func NewServer(opts ServerOptions) *Server {
@@ -97,6 +104,9 @@ func (s *Server) Start(ctx context.Context, settings *domain.AppSettings) error 
 		dev.Close()
 		return fmt.Errorf("tunnel: bring up: %w", err)
 	}
+	netStack.SetInboundFilter(func(src, dst netip.Addr) bool {
+		return dst == tunnelIP || s.forwardAllowed(src, dst)
+	})
 	if err := netStack.EnableForwarding(); err != nil {
 		dev.Close()
 		return fmt.Errorf("tunnel: enable forwarding: %w", err)
@@ -185,6 +195,34 @@ func (s *Server) ApplyPeerSpecs(specs []PeerSpec) error {
 		fmt.Fprintf(&b, "persistent_keepalive_interval=25\n")
 	}
 	return s.device.IpcSet(b.String())
+}
+
+func (s *Server) SetForwardRules(rules []ForwardRule) {
+	copied := make([]ForwardRule, len(rules))
+	copy(copied, rules)
+	s.forwarding.Store(&copied)
+}
+
+func (s *Server) forwardAllowed(src, dst netip.Addr) bool {
+	rules := s.forwarding.Load()
+	if rules == nil {
+		return false
+	}
+	for _, rule := range *rules {
+		if prefixesContain(rule.Sources, src) && prefixesContain(rule.Destinations, dst) {
+			return true
+		}
+	}
+	return false
+}
+
+func prefixesContain(prefixes []netip.Prefix, addr netip.Addr) bool {
+	for _, prefix := range prefixes {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) DialContext(ctx context.Context, network, address string) (net.Conn, error) {

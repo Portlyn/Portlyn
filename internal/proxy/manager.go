@@ -17,6 +17,7 @@ import (
 
 	"portlyn/internal/audit"
 	"portlyn/internal/auth"
+	"portlyn/internal/clientcert"
 	"portlyn/internal/domain"
 	"portlyn/internal/observability"
 )
@@ -48,6 +49,7 @@ type Manager struct {
 	reputation                ReputationBlocklist
 	geoIPFailOpen             bool
 	crowdSecFailOpen          bool
+	clientCertHeaderSecret    string
 }
 
 type RuntimeRoute struct {
@@ -123,6 +125,7 @@ type ManagerOptions struct {
 	GeoIPFailOpen               bool
 	CrowdSecFailOpen            bool
 	BlockPrivateUpstreams       bool
+	ClientCertHeaderSecret      string
 }
 
 type TunnelDialer interface {
@@ -219,6 +222,7 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 		reputation:                options.Reputation,
 		geoIPFailOpen:             options.GeoIPFailOpen,
 		crowdSecFailOpen:          options.CrowdSecFailOpen,
+		clientCertHeaderSecret:    options.ClientCertHeaderSecret,
 	}
 }
 
@@ -356,6 +360,14 @@ func (m *Manager) Handler() http.Handler {
 			m.logAccess(r, writer, startedAt, matchedRoute, user, outcome, reason)
 		}()
 
+		canonicalPath, ok := canonicalRequestPath(r.URL.Path)
+		if !ok {
+			outcome = "denied"
+			reason = "non_canonical_path"
+			writeProxyError(writer, http.StatusBadRequest, "invalid_path", "request path must not contain dot segments")
+			return
+		}
+
 		if m.handleSessionBridge(writer, r) {
 			outcome = "session_bridge"
 			reason = "session_bridge"
@@ -376,6 +388,13 @@ func (m *Manager) Handler() http.Handler {
 		path := normalizePath(r.URL.Path)
 
 		if m.allowAdminHost(host, r) {
+			sanitizePortlynIdentityHeaders(r.Header)
+			if fingerprint := clientCertSHA256(r); fingerprint != "" {
+				r.Header.Set(clientcert.FingerprintHeader, fingerprint)
+				if m.clientCertHeaderSecret != "" {
+					r.Header.Set(clientcert.SignatureHeader, clientcert.Sign(m.clientCertHeaderSecret, fingerprint))
+				}
+			}
 			if m.handleAdminHost(writer, r, path) {
 				outcome = "admin"
 				reason = "admin_host"
@@ -396,6 +415,15 @@ func (m *Manager) Handler() http.Handler {
 			reason = "route_miss"
 			http.NotFound(writer, r)
 			return
+		}
+		if strings.Contains(path, ";") {
+			paramRoute, found := m.matchRoute(r.Context(), host, normalizePath(stripPathParams(path)))
+			if !found || paramRoute.ServiceID != route.ServiceID || paramRoute.Path != route.Path {
+				outcome = "denied"
+				reason = "ambiguous_path"
+				writeProxyError(writer, http.StatusBadRequest, "invalid_path", "request path parameters change the matched route")
+				return
+			}
 		}
 		matchedRoute = &route
 		sanitizePortlynIdentityHeaders(r.Header)
@@ -448,6 +476,11 @@ func (m *Manager) Handler() http.Handler {
 			reason = degradedReason
 			writeProxyError(writer, http.StatusServiceUnavailable, "target_degraded", "target temporarily degraded after repeated upstream failures")
 			return
+		}
+		m.stripPortlynCredentials(r)
+		if strings.HasPrefix(r.URL.Path, "/") && canonicalPath != r.URL.Path {
+			r.URL.Path = canonicalPath
+			r.URL.RawPath = ""
 		}
 		route.ReverseProxyHandler.ServeHTTP(writer, r)
 	})
@@ -513,7 +546,7 @@ func (m *Manager) handleSessionBridge(w http.ResponseWriter, r *http.Request) bo
 		writeProxyError(w, http.StatusUnauthorized, "invalid_token", "session bridge token already used")
 		return true
 	}
-	m.auth.SetSessionCookieForHost(w, claims.AccessToken, normalizeHost(r.Host), m.forwardedProto(r) == "https")
+	m.auth.SetSessionCookieForHost(w, claims.HostToken, normalizeHost(r.Host), m.forwardedProto(r) == "https")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	http.Redirect(w, r, "/", http.StatusFound)
 	return true
@@ -707,6 +740,37 @@ func normalizePath(value string) string {
 		return "/"
 	}
 	return "/" + strings.Join(segments, "/")
+}
+
+func canonicalRequestPath(value string) (string, bool) {
+	cleaned := strings.ReplaceAll(value, `\`, "/")
+	segments := make([]string, 0, 8)
+	for _, segment := range strings.Split(cleaned, "/") {
+		if segment == "" {
+			continue
+		}
+		name, _, _ := strings.Cut(segment, ";")
+		if name == "." || name == ".." {
+			return "", false
+		}
+		segments = append(segments, segment)
+	}
+	if len(segments) == 0 {
+		return "/", true
+	}
+	canonical := "/" + strings.Join(segments, "/")
+	if strings.HasSuffix(cleaned, "/") {
+		canonical += "/"
+	}
+	return canonical, true
+}
+
+func stripPathParams(value string) string {
+	segments := strings.Split(value, "/")
+	for i, segment := range segments {
+		segments[i], _, _ = strings.Cut(segment, ";")
+	}
+	return strings.Join(segments, "/")
 }
 
 func (m *Manager) forwardedProto(r *http.Request) string {

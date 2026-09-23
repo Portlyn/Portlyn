@@ -259,13 +259,15 @@ func (s *Service) Login(ctx context.Context, email, password string, meta Reques
 	user, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
+			burnPasswordCheck(password)
 			s.observeAuth("password", "invalid_credentials")
 			return nil, ErrInvalidCredentials
 		}
 		return nil, err
 	}
 
-	if user.AuthProvider != "" && user.AuthProvider != domain.AuthProviderLocal && user.PasswordHash == "" {
+	if user.PasswordHash == "" {
+		burnPasswordCheck(password)
 		s.observeAuth("password", "invalid_credentials")
 		return nil, ErrInvalidCredentials
 	}
@@ -474,6 +476,9 @@ func (s *Service) CompleteAccountSetup(ctx context.Context, userID uint, email, 
 	if err != nil {
 		return nil, err
 	}
+	if !user.MustChangePassword {
+		return nil, ErrAccountSetupDone
+	}
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" {
 		return nil, ErrInvalidCredentials
@@ -490,7 +495,10 @@ func (s *Service) CompleteAccountSetup(ctx context.Context, userID uint, email, 
 	user.Email = email
 	user.PasswordHash = hash
 	user.MustChangePassword = false
-	if err := s.users.Update(ctx, user); err != nil {
+	if err := s.users.UpdateFieldsIf(ctx, user, map[string]any{"must_change_password": true}, "email", "password_hash", "must_change_password"); err != nil {
+		if errors.Is(err, store.ErrStale) {
+			return nil, ErrAccountSetupDone
+		}
 		return nil, err
 	}
 	s.InvalidateUser(user.ID)
@@ -517,9 +525,13 @@ func (s *Service) ChangeOwnPassword(ctx context.Context, userID uint, currentPas
 	if err != nil {
 		return err
 	}
+	previousHash := user.PasswordHash
 	user.PasswordHash = hash
 	user.MustChangePassword = false
-	if err := s.users.Update(ctx, user); err != nil {
+	if err := s.users.UpdateFieldsIf(ctx, user, map[string]any{"password_hash": previousHash}, "password_hash", "must_change_password"); err != nil {
+		if errors.Is(err, store.ErrStale) {
+			return ErrInvalidCredentials
+		}
 		return err
 	}
 	s.InvalidateUser(user.ID)
@@ -536,6 +548,18 @@ const PasswordHashCost = 12
 func HashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), PasswordHashCost)
 	return string(hash), err
+}
+
+var (
+	dummyPasswordHashOnce sync.Once
+	dummyPasswordHash     []byte
+)
+
+func burnPasswordCheck(password string) {
+	dummyPasswordHashOnce.Do(func() {
+		dummyPasswordHash, _ = bcrypt.GenerateFromPassword([]byte("portlyn-dummy-password"), PasswordHashCost)
+	})
+	_ = bcrypt.CompareHashAndPassword(dummyPasswordHash, []byte(password))
 }
 
 func CheckPassword(hash, password string) error {

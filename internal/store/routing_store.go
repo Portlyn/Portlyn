@@ -25,8 +25,12 @@ func NewRoutingStore(db *gorm.DB) *SQLRoutingStore {
 func (s *SQLRoutingStore) GetRoutesForHost(ctx context.Context, host string) ([]routing.RouteConfig, error) {
 	var services []domain.Service
 	host = strings.ToLower(strings.TrimSpace(host))
+	candidates := domainCandidatesForHost(host)
+	if len(candidates) == 0 {
+		return []routing.RouteConfig{}, nil
+	}
 	err := s.baseQuery(ctx).
-		Where(`LOWER("Domain"."name") IN ?`, domainCandidatesForHost(host)).
+		Where(`LOWER("Domain"."name") IN ?`, candidates).
 		Where("services.enabled = ?", true).
 		Order("services.path asc").
 		Find(&services).Error
@@ -195,16 +199,28 @@ func domainCandidatesForHost(host string) []string {
 	if normalizedHost == "" {
 		return nil
 	}
+	if len(normalizedHost) > maxHostnameLength || strings.Count(normalizedHost, ".")+1 > maxHostnameLabels {
+		return nil
+	}
 	parts := strings.Split(normalizedHost, ".")
-	candidates := make([]string, 0, len(parts))
-	for i := range parts {
-		candidate := strings.Join(parts[i:], ".")
-		if candidate != "" {
-			candidates = append(candidates, candidate)
+	for _, part := range parts {
+		if part == "" {
+			return nil
 		}
+	}
+	candidates := make([]string, 0, len(parts))
+	offset := 0
+	for _, part := range parts {
+		candidates = append(candidates, normalizedHost[offset:])
+		offset += len(part) + 1
 	}
 	return candidates
 }
+
+const (
+	maxHostnameLength = 253
+	maxHostnameLabels = 127
+)
 
 func effectiveAccessForService(service domain.Service) (domain.AccessPolicy, string, domain.JSONObject, *domain.ServiceGroup) {
 	sort.Slice(service.ServiceGroups, func(i, j int) bool {

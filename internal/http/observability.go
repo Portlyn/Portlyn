@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
 	"portlyn/internal/auth"
@@ -47,10 +48,19 @@ func (s *Server) accessLogMiddleware(channel string) func(http.Handler) http.Han
 
 			s.logger.Info("request completed", args...)
 			if s.metrics != nil {
-				s.metrics.ObserveAPIRequest(r.URL.Path, statusCode, latency)
+				s.metrics.ObserveAPIRequest(routeLabel(r), statusCode, latency)
 			}
 		})
 	}
+}
+
+func routeLabel(r *http.Request) string {
+	if rctx := chi.RouteContext(r.Context()); rctx != nil {
+		if pattern := rctx.RoutePattern(); pattern != "" {
+			return pattern
+		}
+	}
+	return "unmatched"
 }
 
 func parseAuditTimeQuery(raw string) (*time.Time, bool) {

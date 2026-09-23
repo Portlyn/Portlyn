@@ -30,10 +30,14 @@ sha256sum -c checksums.txt --ignore-missing
 cosign verify-blob \
   --certificate checksums.txt.pem \
   --signature   checksums.txt.sig \
-  --certificate-identity-regexp 'https://github.com/[Pp]ortlyn/[Pp]ortlyn' \
+  --certificate-identity-regexp '^https://github\.com/Portlyn/Portlyn/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
   --certificate-oidc-issuer     https://token.actions.githubusercontent.com \
+  --certificate-github-workflow-repository Portlyn/Portlyn \
+  --certificate-github-workflow-trigger    push \
   checksums.txt
 ```
+
+This only accepts `release.yml` running on a pushed tag. If you downloaded a specific tag instead of `latest`, add `--certificate-github-workflow-ref refs/tags/<tag>` too.
 
 ## One line install (recommended)
 

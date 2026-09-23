@@ -57,6 +57,12 @@ func TestSanitizeNextRejectsExternalTargets(t *testing.T) {
 		"https://evil.example/test": "/services",
 		"//evil.example/test":       "/services",
 		"relative/path":             "/services",
+		"/\\evil.example":           "/services",
+		"/x\\y":                     "/services",
+		"/\t/evil.example":          "/services",
+		"/\n/evil.example":          "/services",
+		"/ /evil.example":           "/services",
+		"/services?tab=1#top":       "/services?tab=1#top",
 	}
 
 	for input, want := range tests {

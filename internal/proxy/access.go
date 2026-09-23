@@ -108,7 +108,18 @@ func routeEmailAllowed(email string, config domain.JSONObject) bool {
 }
 
 func (m *Manager) authenticateProxyRequest(r *http.Request) (*domain.User, []uint, int, bool) {
-	user, groupIDs, session, err := m.auth.AuthenticateRequest(r.Context(), r)
+	host := normalizeHost(r.Host)
+	var (
+		user     *domain.User
+		groupIDs []uint
+		session  *domain.Session
+		err      error
+	)
+	if m.isAdminHost(host) {
+		user, groupIDs, session, err = m.auth.AuthenticateRequest(r.Context(), r)
+	} else {
+		user, groupIDs, session, err = m.auth.AuthenticateHostRequest(r.Context(), r, host)
+	}
 	if err != nil {
 		return nil, nil, http.StatusUnauthorized, false
 	}

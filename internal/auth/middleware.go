@@ -78,6 +78,18 @@ func (s *Service) RequireBootstrapComplete(next http.Handler) http.Handler {
 	})
 }
 
+func RejectAPIToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if IsAPITokenAuth(r.Context()) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":"api_token_not_allowed","message":"api tokens cannot access this endpoint"}}`))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func RequireRole(roles ...string) func(http.Handler) http.Handler {
 	allowed := make(map[string]struct{}, len(roles))
 	for _, role := range roles {

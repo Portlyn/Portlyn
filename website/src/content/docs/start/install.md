@@ -52,10 +52,14 @@ but a binary you just downloaded must not verify itself, it would simply report 
 cosign verify-blob \
   --certificate checksums.txt.pem \
   --signature   checksums.txt.sig \
-  --certificate-identity-regexp 'https://github.com/[Pp]ortlyn/[Pp]ortlyn' \
+  --certificate-identity-regexp '^https://github\.com/Portlyn/Portlyn/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
   --certificate-oidc-issuer     https://token.actions.githubusercontent.com \
+  --certificate-github-workflow-repository Portlyn/Portlyn \
+  --certificate-github-workflow-trigger    push \
   checksums.txt
 ```
+
+Only `release.yml` running on a pushed tag passes this. For a specific tag, add `--certificate-github-workflow-ref refs/tags/<tag>` to `cosign`, or `--tag <tag>` to `verify-release`.
 
 ## Non-interactive setup
 

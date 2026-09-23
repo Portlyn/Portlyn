@@ -7,6 +7,11 @@ import { Suspense, useEffect, useState } from "react";
 import { useAuth } from "@/components/providers";
 import { finishOIDCLogin, verifyMFA } from "@/lib/auth";
 import { authCardStyle, authInfoAlertStyle, authShellStyle, buttonStyle, inputStyles, mergeAuthUI } from "@/lib/auth-ui";
+import { isSafeRelativePath } from "@/lib/safe-redirect";
+
+function safeNextPath(value: string | null | undefined): string {
+  return value && isSafeRelativePath(value) ? value : "/services";
+}
 
 function CallbackContent() {
   const params = useSearchParams();
@@ -33,7 +38,7 @@ function CallbackContent() {
     void verifyMFA(mfaToken, value)
       .then((response) => {
         completeAuth(response);
-        router.replace(nextPath);
+        router.replace(safeNextPath(nextPath));
       })
       .catch((err: Error) => {
         setError(err.message || "Unable to verify MFA.");
@@ -53,11 +58,11 @@ function CallbackContent() {
       .then((response) => {
         if (response.requires_mfa && response.mfa_token) {
           setMFAToken(response.mfa_token);
-          setNextPath(response.next || "/services");
+          setNextPath(safeNextPath(response.next));
           return;
         }
         completeAuth(response);
-        router.replace(response.next || "/services");
+        router.replace(safeNextPath(response.next));
       })
       .catch((err: Error) => {
         setError(err.message || "Unable to complete SSO login.");

@@ -32,7 +32,7 @@ func (c *fakeClient) ListenTCP(port int) (net.Listener, error) {
 
 func TestForwarderReconcileAddsAndRemoves(t *testing.T) {
 	client := &fakeClient{}
-	f := newForwarder(client)
+	f := newForwarder(client, &peerPolicy{})
 
 	f.reconcile([]targetSpec{
 		{ListenPort: 3000, LocalAddr: "127.0.0.1:3000"},
@@ -60,7 +60,7 @@ func TestForwarderReconcileAddsAndRemoves(t *testing.T) {
 
 func TestForwarderReconcileReopensOnLocalAddrChange(t *testing.T) {
 	client := &fakeClient{}
-	f := newForwarder(client)
+	f := newForwarder(client, &peerPolicy{})
 
 	f.reconcile([]targetSpec{{ListenPort: 3000, LocalAddr: "127.0.0.1:3000"}})
 	first := f.listeners[3000].listener.(*fakeListener)
@@ -76,7 +76,7 @@ func TestForwarderReconcileReopensOnLocalAddrChange(t *testing.T) {
 
 func TestForwarderReconcileSkipsInvalid(t *testing.T) {
 	client := &fakeClient{}
-	f := newForwarder(client)
+	f := newForwarder(client, &peerPolicy{})
 	f.reconcile([]targetSpec{
 		{ListenPort: 0, LocalAddr: "127.0.0.1:3000"},
 		{ListenPort: 3000, LocalAddr: ""},

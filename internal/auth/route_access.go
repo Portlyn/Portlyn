@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/http"
@@ -29,9 +31,22 @@ type RouteAccessClaims struct {
 	jwt.RegisteredClaims
 }
 
+const (
+	hostSessionTokenType  = "host_session"
+	sessionBridgeSubject  = "session_bridge"
+	hostSessionKeyContext = "portlyn host session v1"
+)
+
 type SessionBridgeClaims struct {
-	AccessToken string `json:"access_token"`
-	Host        string `json:"host"`
+	HostToken string `json:"host_token"`
+	Host      string `json:"host"`
+	jwt.RegisteredClaims
+}
+
+type HostSessionClaims struct {
+	UserID    uint   `json:"user_id"`
+	SessionID uint   `json:"session_id"`
+	TokenType string `json:"typ"`
 	jwt.RegisteredClaims
 }
 
@@ -393,10 +408,17 @@ func frontendBaseFromRedirect(redirectURL string) string {
 	return fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
 }
 
-func (s *Service) IssueSessionBridgeToken(accessToken, host string) (string, error) {
-	host = strings.TrimSpace(host)
-	if accessToken == "" || host == "" {
+func (s *Service) IssueSessionBridgeToken(user *domain.User, session *domain.Session, host string) (string, error) {
+	host = normalizeBridgeHost(host)
+	if user == nil || user.ID == 0 || host == "" {
 		return "", ErrInvalidToken
+	}
+	if s.sessions != nil && session == nil {
+		return "", ErrInvalidToken
+	}
+	hostToken, err := s.issueHostSessionToken(user, session, host)
+	if err != nil {
+		return "", err
 	}
 	jti, err := randomSessionID()
 	if err != nil {
@@ -404,17 +426,159 @@ func (s *Service) IssueSessionBridgeToken(accessToken, host string) (string, err
 	}
 	now := time.Now().UTC()
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, SessionBridgeClaims{
-		AccessToken: accessToken,
-		Host:        host,
+		HostToken: hostToken,
+		Host:      host,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			Issuer:    s.issuer,
-			Subject:   "session_bridge",
+			Subject:   sessionBridgeSubject,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(2 * time.Minute)),
 		},
 	})
 	return token.SignedString(s.sessionBridgeSecret)
+}
+
+func (s *Service) hostSessionSecret() []byte {
+	mac := hmac.New(sha256.New, s.jwtSigningSecret)
+	mac.Write([]byte(hostSessionKeyContext))
+	return mac.Sum(nil)
+}
+
+func (s *Service) issueHostSessionToken(user *domain.User, session *domain.Session, host string) (string, error) {
+	sessionID := uint(0)
+	if session != nil {
+		sessionID = session.ID
+	}
+	jti, err := randomSessionID()
+	if err != nil {
+		return "", err
+	}
+	now := time.Now().UTC()
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, HostSessionClaims{
+		UserID:    user.ID,
+		SessionID: sessionID,
+		TokenType: hostSessionTokenType,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
+			Issuer:    s.issuer,
+			Subject:   fmt.Sprintf("%d", user.ID),
+			Audience:  jwt.ClaimStrings{host},
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(s.tokenTTL)),
+		},
+	})
+	return token.SignedString(s.hostSessionSecret())
+}
+
+func (s *Service) parseHostSessionToken(tokenString, host string) (*HostSessionClaims, error) {
+	host = normalizeBridgeHost(host)
+	if host == "" {
+		return nil, ErrInvalidToken
+	}
+	token, err := jwt.ParseWithClaims(tokenString, &HostSessionClaims{}, func(token *jwt.Token) (any, error) {
+		if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+			return nil, fmt.Errorf("unexpected signing method: %s", token.Method.Alg())
+		}
+		return s.hostSessionSecret(), nil
+	}, jwt.WithAudience(host), jwt.WithExpirationRequired())
+	if err != nil {
+		return nil, err
+	}
+	claims, ok := token.Claims.(*HostSessionClaims)
+	if !ok || !token.Valid || claims.TokenType != hostSessionTokenType || claims.UserID == 0 {
+		return nil, ErrInvalidToken
+	}
+	return claims, nil
+}
+
+func (s *Service) AuthenticateHostSessionToken(ctx context.Context, tokenString, host string) (*domain.User, []uint, *domain.Session, error) {
+	claims, err := s.parseHostSessionToken(tokenString, host)
+	if err != nil {
+		return nil, nil, nil, ErrInvalidToken
+	}
+	session, err := s.hostSessionFor(ctx, claims)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if user, groupIDs, ok := s.getCachedAuthResult(ctx, tokenString); ok {
+		if user == nil || !user.Active {
+			return nil, nil, nil, ErrInactiveUser
+		}
+		return user, groupIDs, session, nil
+	}
+	user, err := s.GetUser(ctx, claims.UserID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if !user.Active {
+		return nil, nil, nil, ErrInactiveUser
+	}
+	groupIDs, err := s.GetUserGroupIDs(ctx, user.ID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	s.storeCachedAuthResult(tokenString, user, groupIDs, claims.ExpiresAt)
+	return user, groupIDs, session, nil
+}
+
+func (s *Service) hostSessionFor(ctx context.Context, claims *HostSessionClaims) (*domain.Session, error) {
+	if s.sessions == nil {
+		return nil, nil
+	}
+	if claims.SessionID == 0 {
+		return nil, ErrInvalidToken
+	}
+	session, err := s.sessions.GetByID(ctx, claims.SessionID)
+	if err != nil || session.UserID != claims.UserID {
+		return nil, ErrInvalidToken
+	}
+	if session.RevokedAt != nil {
+		return nil, ErrSessionRevoked
+	}
+	if session.ExpiresAt.Before(time.Now().UTC()) {
+		return nil, ErrRefreshExpired
+	}
+	return session, nil
+}
+
+func (s *Service) AuthenticateHostRequest(ctx context.Context, r *http.Request, host string) (*domain.User, []uint, *domain.Session, error) {
+	if bearer := strings.TrimSpace(bearerTokenFromHeader(r.Header.Get("Authorization"))); bearer != "" {
+		if s.apiTokens != nil && LooksLikeAPIToken(bearer) {
+			return s.authenticateAPIToken(ctx, bearer)
+		}
+		if user, groupIDs, session, err := s.AuthenticateHostSessionToken(ctx, bearer, host); err == nil {
+			return user, groupIDs, session, nil
+		}
+		return s.AuthenticateAccessToken(ctx, bearer)
+	}
+	cookie, err := r.Cookie(SessionCookieName)
+	if err != nil || strings.TrimSpace(cookie.Value) == "" {
+		return nil, nil, nil, ErrInvalidToken
+	}
+	return s.AuthenticateHostSessionToken(ctx, strings.TrimSpace(cookie.Value), host)
+}
+
+func (s *Service) IsPortlynCredential(token string) bool {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return false
+	}
+	if LooksLikeAPIToken(token) {
+		return true
+	}
+	for _, key := range [][]byte{s.jwtSigningSecret, s.hostSessionSecret()} {
+		_, err := jwt.Parse(token, func(token *jwt.Token) (any, error) {
+			if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+				return nil, fmt.Errorf("unexpected signing method: %s", token.Method.Alg())
+			}
+			return key, nil
+		}, jwt.WithoutClaimsValidation())
+		if err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) IssueRouteAccessBridgeToken(serviceID uint, host, method, email, returnTo string) (string, error) {
@@ -498,7 +662,7 @@ func (s *Service) ParseSessionBridgeToken(tokenString string) (*SessionBridgeCla
 		return nil, err
 	}
 	claims, ok := token.Claims.(*SessionBridgeClaims)
-	if !ok || !token.Valid {
+	if !ok || !token.Valid || claims.Subject != sessionBridgeSubject || strings.TrimSpace(claims.HostToken) == "" {
 		return nil, ErrInvalidToken
 	}
 	return claims, nil

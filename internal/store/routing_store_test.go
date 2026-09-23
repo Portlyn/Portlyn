@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"portlyn/internal/config"
@@ -85,5 +86,30 @@ func TestRoutingStoreResolvesServiceSubdomainHost(t *testing.T) {
 	}
 	if len(routes) != 1 {
 		t.Fatalf("expected the route to come back, got %d", len(routes))
+	}
+}
+
+func TestDomainCandidatesForHost(t *testing.T) {
+	got := domainCandidatesForHost("App.Example.com")
+	want := []string{"app.example.com", "example.com", "com"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestDomainCandidatesForHostRejectsAbusiveHosts(t *testing.T) {
+	hosts := []string{
+		"",
+		strings.Repeat("a", 250) + ".com",
+		strings.Repeat("a.", 127) + "com",
+		strings.Repeat(".", 1000),
+		"a..b",
+		".example.com",
+		"example.com.",
+	}
+	for i, host := range hosts {
+		if got := domainCandidatesForHost(host); got != nil {
+			t.Fatalf("case %d: expected no candidates, got %d", i, len(got))
+		}
 	}
 }

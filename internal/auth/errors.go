@@ -23,4 +23,5 @@ var (
 	ErrMFACodeInvalid      = errors.New("invalid mfa code")
 	ErrMFASetupRequired    = errors.New("mfa setup required")
 	ErrBreakGlassRejected  = errors.New("break-glass rejected")
+	ErrAccountSetupDone    = errors.New("account setup already completed")
 )

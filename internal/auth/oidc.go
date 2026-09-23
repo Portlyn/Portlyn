@@ -254,11 +254,16 @@ func sanitizeNext(value string) string {
 	if value == "" {
 		return "/services"
 	}
-	parsed, err := url.Parse(value)
-	if err != nil || parsed.IsAbs() || strings.HasPrefix(value, "//") {
+	if !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") {
 		return "/services"
 	}
-	if !strings.HasPrefix(value, "/") {
+	for _, r := range value {
+		if r <= ' ' || r == 0x7f || r == '\\' {
+			return "/services"
+		}
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.IsAbs() || parsed.Scheme != "" || parsed.Host != "" || parsed.User != nil {
 		return "/services"
 	}
 	return value

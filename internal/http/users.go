@@ -87,6 +87,7 @@ func (s *Server) handleUpdateUser(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 
 	originalRole := user.Role
 	originalActive := user.Active
+	var fields []string
 
 	if req.Email != nil {
 		email := strings.ToLower(strings.TrimSpace(*req.Email))
@@ -98,13 +99,16 @@ func (s *Server) handleUpdateUser(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 			return
 		}
 		user.Email = email
+		fields = append(fields, "email")
 	}
 
 	if req.Role != nil {
 		user.Role = *req.Role
+		fields = append(fields, "role")
 	}
 	if req.Active != nil {
 		user.Active = *req.Active
+		fields = append(fields, "active")
 	}
 
 	if err := s.preventRemovingLastActiveAdmin(r, user.ID, originalRole, originalActive, user.Role, user.Active); err != nil {
@@ -120,9 +124,10 @@ func (s *Server) handleUpdateUser(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		}
 		user.PasswordHash = hash
 		user.MustChangePassword = true
+		fields = append(fields, "password_hash", "must_change_password")
 	}
 
-	if err := s.users.Update(r.Context(), user); err != nil {
+	if err := s.users.UpdateFields(r.Context(), user, fields...); err != nil {
 		s.internalError(w, err)
 		return
 	}
@@ -165,6 +170,8 @@ func (s *Server) handleCompleteAccountSetup(w stdhttp.ResponseWriter, r *stdhttp
 		switch {
 		case errors.Is(err, store.ErrConflict):
 			writeError(w, stdhttp.StatusConflict, "email_in_use", "email is already in use")
+		case errors.Is(err, auth.ErrAccountSetupDone):
+			writeError(w, stdhttp.StatusForbidden, "account_setup_not_allowed", "account setup is only available while a password change is required")
 		case errors.Is(err, auth.ErrInvalidCredentials):
 			writeError(w, stdhttp.StatusBadRequest, "invalid_account_setup", "a valid email and password are required")
 		default:

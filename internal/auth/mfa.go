@@ -11,6 +11,7 @@ import (
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -18,11 +19,21 @@ import (
 
 	"portlyn/internal/domain"
 	"portlyn/internal/secureconfig"
+	"portlyn/internal/store"
 )
 
 const mfaLoginScope = "mfa_login"
 
 const maxMFAAttempts = 5
+
+var mfaColumns = []string{
+	"mfa_enabled",
+	"mfa_secret",
+	"mfa_pending_secret",
+	"mfa_recovery_codes",
+	"mfa_pending_recovery_codes",
+	"mfa_last_totp_counter",
+}
 
 type MFAStatus struct {
 	Enabled            bool   `json:"enabled"`
@@ -75,7 +86,7 @@ func (s *Service) BeginTOTPSetup(ctx context.Context, userID uint) (*MFASetup, e
 	}
 	user.MFAPendingSecret = encryptedSecret
 	user.MFAPendingRecoveryCodes = domain.JSONStringSlice(recoveryHashes)
-	if err := s.users.Update(ctx, user); err != nil {
+	if err := s.users.UpdateFields(ctx, user, "mfa_pending_secret", "mfa_pending_recovery_codes"); err != nil {
 		return nil, err
 	}
 	return &MFASetup{
@@ -98,13 +109,17 @@ func (s *Service) EnableTOTP(ctx context.Context, userID uint, code string) (*MF
 	if !ok {
 		return nil, ErrMFACodeInvalid
 	}
+	pendingSecret := user.MFAPendingSecret
 	user.MFALastTOTPCounter = counter
 	user.MFAEnabled = true
 	user.MFASecret = user.MFAPendingSecret
 	user.MFAPendingSecret = ""
 	user.MFARecoveryCodes = append(domain.JSONStringSlice{}, user.MFAPendingRecoveryCodes...)
 	user.MFAPendingRecoveryCodes = domain.JSONStringSlice{}
-	if err := s.users.Update(ctx, user); err != nil {
+	if err := s.users.UpdateFieldsIf(ctx, user, map[string]any{"mfa_pending_secret": pendingSecret}, mfaColumns...); err != nil {
+		if errors.Is(err, store.ErrStale) {
+			return nil, ErrInvalidToken
+		}
 		return nil, err
 	}
 	s.InvalidateUser(user.ID)
@@ -131,12 +146,16 @@ func (s *Service) DisableMFA(ctx context.Context, userID uint, code string) (*MF
 	if !ok {
 		return nil, ErrMFACodeInvalid
 	}
+	activeSecret := user.MFASecret
 	user.MFAEnabled = false
 	user.MFASecret = ""
 	user.MFAPendingSecret = ""
 	user.MFARecoveryCodes = remaining
 	user.MFAPendingRecoveryCodes = domain.JSONStringSlice{}
-	if err := s.users.Update(ctx, user); err != nil {
+	if err := s.users.UpdateFieldsIf(ctx, user, map[string]any{"mfa_secret": activeSecret, "mfa_enabled": true}, mfaColumns...); err != nil {
+		if errors.Is(err, store.ErrStale) {
+			return s.MFAStatusForUser(ctx, userID)
+		}
 		return nil, err
 	}
 	s.InvalidateUser(user.ID)
@@ -148,6 +167,8 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, userID uint, code
 	if err != nil {
 		return nil, err
 	}
+	activeSecret := user.MFASecret
+	prevCounter := user.MFALastTOTPCounter
 	ok, _, err := s.verifyMFAFactor(user, code)
 	if err != nil {
 		return nil, err
@@ -160,7 +181,11 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, userID uint, code
 		return nil, err
 	}
 	user.MFARecoveryCodes = domain.JSONStringSlice(recoveryHashes)
-	if err := s.users.Update(ctx, user); err != nil {
+	guard := map[string]any{"mfa_enabled": true, "mfa_secret": activeSecret, "mfa_last_totp_counter": prevCounter}
+	if err := s.users.UpdateFieldsIf(ctx, user, guard, "mfa_recovery_codes", "mfa_last_totp_counter"); err != nil {
+		if errors.Is(err, store.ErrStale) {
+			return nil, ErrMFACodeInvalid
+		}
 		return nil, err
 	}
 	return recoveryCodes, nil
@@ -176,7 +201,7 @@ func (s *Service) ResetUserMFA(ctx context.Context, userID uint) error {
 	user.MFAPendingSecret = ""
 	user.MFARecoveryCodes = domain.JSONStringSlice{}
 	user.MFAPendingRecoveryCodes = domain.JSONStringSlice{}
-	if err := s.users.Update(ctx, user); err != nil {
+	if err := s.users.UpdateFields(ctx, user, "mfa_enabled", "mfa_secret", "mfa_pending_secret", "mfa_recovery_codes", "mfa_pending_recovery_codes"); err != nil {
 		return err
 	}
 	s.InvalidateUser(user.ID)
@@ -247,6 +272,7 @@ func (s *Service) CompleteMFA(ctx context.Context, mfaToken, code string, meta R
 	if !user.Active {
 		return nil, ErrInactiveUser
 	}
+	activeSecret := user.MFASecret
 	prevCounter := user.MFALastTOTPCounter
 	ok, remaining, err := s.verifyMFAFactor(user, code)
 	if err != nil {
@@ -264,7 +290,12 @@ func (s *Service) CompleteMFA(ctx context.Context, mfaToken, code string, meta R
 	}
 	if len(remaining) != len(user.MFARecoveryCodes) || user.MFALastTOTPCounter != prevCounter {
 		user.MFARecoveryCodes = remaining
-		if err := s.users.Update(ctx, user); err != nil {
+		guard := map[string]any{"mfa_enabled": true, "mfa_secret": activeSecret, "mfa_last_totp_counter": prevCounter}
+		if err := s.users.UpdateFieldsIf(ctx, user, guard, "mfa_recovery_codes", "mfa_last_totp_counter"); err != nil {
+			if errors.Is(err, store.ErrStale) {
+				s.observeAuth("mfa", "invalid_code")
+				return nil, ErrMFACodeInvalid
+			}
 			return nil, err
 		}
 	}

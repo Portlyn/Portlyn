@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	stdhttp "net/http"
+	"portlyn/internal/clientcert"
 	"portlyn/internal/domain"
 	"strings"
 	"time"
@@ -138,6 +139,14 @@ func (s *Server) handleDeleteNode(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		return
 	}
 	_ = s.audit.Log(r.Context(), s.currentUserID(r), "delete", "node", &id, map[string]any{"id": id})
+	if s.tunnel != nil {
+		if err := s.tunnel.WriteServerConfig(r.Context()); err != nil {
+			s.logger.Warn("failed to write tunnel server config", "error", err)
+		}
+		if err := s.tunnel.ApplyPeers(r.Context()); err != nil {
+			s.logger.Warn("failed to apply tunnel peers after node delete", "node_id", id, "error", err)
+		}
+	}
 	w.WriteHeader(stdhttp.StatusNoContent)
 }
 
@@ -151,15 +160,6 @@ func (s *Server) handleHeartbeatNode(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		return
 	}
 	if !s.authorizeNodeHeartbeat(r, node) {
-		now := time.Now().UTC()
-		node.LastHeartbeatIP = s.clientIPForRequest(r)
-		node.LastHeartbeatCode = stdhttp.StatusUnauthorized
-		node.LastHeartbeatError = "invalid_token"
-		node.HeartbeatFailedAt = &now
-		if node.Status != domain.NodeStatusOffline {
-			node.Status = domain.NodeStatusOffline
-		}
-		_ = s.nodes.UpdateHeartbeat(r.Context(), node)
 		_ = s.audit.LogRequest(r.Context(), r, nil, "node_heartbeat_rejected", "node", &node.ID, map[string]any{
 			"node_id":      node.ID,
 			"remote_addr":  s.clientIPForRequest(r),
@@ -170,6 +170,7 @@ func (s *Server) handleHeartbeatNode(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		if !s.enforceNodeRateLimit(w, r, "node_heartbeat_auth_fail", s.cfg.NodeHeartbeatAuthFailRateLimit, s.cfg.NodeHeartbeatAuthFailRateWindow) {
 			return
 		}
+		_ = s.nodes.RecordHeartbeatFailure(r.Context(), node.ID, s.clientIPForRequest(r), stdhttp.StatusUnauthorized, "invalid_token", time.Now().UTC())
 		writeError(w, stdhttp.StatusUnauthorized, "unauthorized", "missing or invalid node token")
 		return
 	}
@@ -227,7 +228,7 @@ func (s *Server) handleHeartbeatNode(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	}
 
 	if err := s.nodes.UpdateHeartbeat(r.Context(), node); err != nil {
-		s.internalError(w, err)
+		s.handleStoreError(w, err)
 		return
 	}
 	_ = s.audit.LogRequest(r.Context(), r, nil, "node_heartbeat_accepted", "node", &node.ID, map[string]any{
@@ -245,7 +246,7 @@ func (s *Server) authorizeNodeHeartbeat(r *stdhttp.Request, node *domain.Node) b
 		headerFallback := s.cfg.NodeAllowMTLSHeaderFallback &&
 			s.cfg.NodeTrustForwardedProto &&
 			s.requestFromTrustedProxy(r)
-		return verifyNodeMTLS(r, node.MTLSCertSHA256, headerFallback)
+		return verifyNodeMTLS(r, node.MTLSCertSHA256, headerFallback, s.cfg.SessionBridgeSecret)
 	}
 	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
 	if strings.HasPrefix(authHeader, "Bearer ") {
@@ -262,7 +263,7 @@ func hashOpaqueToken(value string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func verifyNodeMTLS(r *stdhttp.Request, expectedFingerprint string, allowHeaderFallback bool) bool {
+func verifyNodeMTLS(r *stdhttp.Request, expectedFingerprint string, allowHeaderFallback bool, headerSecret string) bool {
 	expected := strings.ToLower(strings.TrimSpace(expectedFingerprint))
 	if expected == "" {
 		return false
@@ -275,6 +276,12 @@ func verifyNodeMTLS(r *stdhttp.Request, expectedFingerprint string, allowHeaderF
 	if !allowHeaderFallback {
 		return false
 	}
-	forwarded := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Portlyn-Client-Cert-SHA256")))
-	return forwarded != "" && forwarded == expected
+	forwarded := strings.ToLower(strings.TrimSpace(r.Header.Get(clientcert.FingerprintHeader)))
+	if forwarded == "" || forwarded != expected {
+		return false
+	}
+	if addr, ok := remoteAddrFromRequest(r); !ok || addr.Unmap().IsLoopback() {
+		return clientcert.Verify(headerSecret, forwarded, r.Header.Get(clientcert.SignatureHeader))
+	}
+	return true
 }

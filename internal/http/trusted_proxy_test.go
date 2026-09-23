@@ -73,3 +73,32 @@ func TestClientIPSkipsTrustedHopsInForwardedFor(t *testing.T) {
 		t.Fatalf("expected client ip before trusted hops, got %q", got)
 	}
 }
+
+func TestBreakGlassSourceUsesForwardedClientIP(t *testing.T) {
+	server, cleanup := newIntegrationServer(t)
+	defer cleanup()
+
+	server.cfg.BreakGlassAllowCIDRs = []string{"127.0.0.1/32", "::1/128"}
+	server.cfg.TrustedProxyCIDRs = []string{"127.0.0.1/32", "::1/128"}
+
+	proxied := httptest.NewRequest(http.MethodPost, "/api/v1/auth/break-glass/login", nil)
+	proxied.RemoteAddr = "127.0.0.1:40000"
+	proxied.Header.Set("X-Forwarded-For", "203.0.113.9")
+	if server.breakGlassAllowedSource(proxied) {
+		t.Fatal("expected remote client behind the internal proxy to be rejected")
+	}
+
+	local := httptest.NewRequest(http.MethodPost, "/api/v1/auth/break-glass/login", nil)
+	local.RemoteAddr = "127.0.0.1:40001"
+	if !server.breakGlassAllowedSource(local) {
+		t.Fatal("expected direct loopback request to be allowed")
+	}
+
+	server.cfg.TrustedProxyCIDRs = nil
+	untrusted := httptest.NewRequest(http.MethodPost, "/api/v1/auth/break-glass/login", nil)
+	untrusted.RemoteAddr = "127.0.0.1:40002"
+	untrusted.Header.Set("X-Forwarded-For", "203.0.113.9")
+	if server.breakGlassAllowedSource(untrusted) {
+		t.Fatal("expected forwarded request from an untrusted hop to be rejected")
+	}
+}

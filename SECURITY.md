@@ -68,19 +68,23 @@ Each arrow is a separate trust boundary:
 ## Supply chain
 
 - **Build.** Every release is built by `.github/workflows/release.yml` on a GitHub hosted runner. The workflow is the only entity that holds the keyless signing identity.
-- **Sign.** Cosign keyless via Sigstore Fulcio. The certificate identity is bound to the workflow URL.
+- **Sign.** Cosign keyless via Sigstore Fulcio. The certificate identity is bound to `release.yml` and the release tag.
 - **Verify.** Consumers can verify any release artifact with:
 
   ```bash
   cosign verify-blob \
     --certificate checksums.txt.pem \
     --signature   checksums.txt.sig \
-    --certificate-identity-regexp 'https://github.com/[Pp]ortlyn/[Pp]ortlyn' \
+    --certificate-identity-regexp '^https://github\.com/Portlyn/Portlyn/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
     --certificate-oidc-issuer     https://token.actions.githubusercontent.com \
+    --certificate-github-workflow-repository Portlyn/Portlyn \
+    --certificate-github-workflow-trigger    push \
     checksums.txt
   ```
 
-- **Self update.** `portlyn update` performs the same verification automatically using the embedded TUF trust root, then verifies the per binary SHA-256 against the signed checksum file before atomic swap.
+  Only `release.yml` running on a pushed `v*` tag in this repo matches. Other workflows here, like `ci.yml`, can be called from any repo, so their certificates are not accepted. If you know the tag, also pass `--certificate-github-workflow-ref refs/tags/v1.4.0` so an older signed release can't be passed off as that one.
+
+- **Self update.** `portlyn update` performs the same verification automatically using the embedded TUF trust root and also pins the tag it asked for, then verifies the per binary SHA-256 against the signed checksum file before atomic swap.
 
 ## Defaults that should not be weakened
 

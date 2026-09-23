@@ -20,15 +20,32 @@ import {
 import { sanitizeReturnTo } from "@/lib/safe-redirect";
 import type { AuthConfigResponse, RouteAuthService } from "@/lib/types";
 
-function buildReturnTarget(service: RouteAuthService | null, returnTo: string | null) {
-  const safeReturnTo = sanitizeReturnTo(returnTo, service?.domain_name);
-  if (safeReturnTo) {
-    return safeReturnTo;
-  }
+function buildReturnTarget(service: RouteAuthService | null, returnTo: string | null): URL | null {
   if (!service || typeof window === "undefined") {
-    return "/";
+    return null;
   }
-  return `${window.location.protocol}//${service.domain_name}${service.path}`;
+  const serviceHost = (service.domain_name || "").trim().toLowerCase();
+  if (!serviceHost) {
+    return null;
+  }
+  let origin: URL;
+  let target: URL;
+  try {
+    origin = new URL(`${window.location.protocol}//${serviceHost}`);
+    target = new URL(sanitizeReturnTo(returnTo, serviceHost) ?? (service.path || "/"), origin);
+  } catch {
+    return null;
+  }
+  if (target.hostname !== origin.hostname) {
+    return null;
+  }
+  if (target.protocol !== "http:" && target.protocol !== "https:") {
+    return null;
+  }
+  if (window.location.protocol === "https:") {
+    target.protocol = "https:";
+  }
+  return target;
 }
 
 function buildContinuePath(serviceId: string, returnTo: string | null) {
@@ -40,13 +57,18 @@ function buildContinuePath(serviceId: string, returnTo: string | null) {
 }
 
 async function bridgeSessionToTarget(service: RouteAuthService, returnTo: string | null) {
-  const target = new URL(buildReturnTarget(service, returnTo), window.location.origin);
-  const response = await createSessionBridgeToken(target.host);
+  const target = buildReturnTarget(service, returnTo);
+  if (!target) {
+    throw new Error("Invalid return target.");
+  }
+  const returnTarget = target.toString();
+  const response = await createSessionBridgeToken(target.hostname);
   target.pathname = "/_portlyn/session-bridge";
   target.search = new URLSearchParams({
     token: response.token,
-    returnTo: buildReturnTarget(service, returnTo)
+    returnTo: returnTarget
   }).toString();
+  target.hash = "";
   window.location.assign(target.toString());
 }
 
@@ -96,7 +118,7 @@ function RouteLoginContent() {
     if (service.access_method === "oidc_only" && isAuthenticated && user?.auth_provider === "oidc") {
       setIsBridging(true);
       void bridgeSessionToTarget(service, returnTo).catch((err) => {
-        setError(err instanceof ApiError ? err.message : "Unable to continue to the protected route.");
+        setError(err instanceof ApiError || err instanceof Error ? err.message : "Unable to continue to the protected route.");
         setIsBridging(false);
       });
       return;
@@ -104,7 +126,7 @@ function RouteLoginContent() {
     if (service.access_method === "session" && isAuthenticated) {
       setIsBridging(true);
       void bridgeSessionToTarget(service, returnTo).catch((err) => {
-        setError(err instanceof ApiError ? err.message : "Unable to continue to the protected route.");
+        setError(err instanceof ApiError || err instanceof Error ? err.message : "Unable to continue to the protected route.");
         setIsBridging(false);
       });
     }
@@ -115,7 +137,10 @@ function RouteLoginContent() {
     setIsSubmitting(true);
     setError(null);
     try {
-      const target = buildReturnTarget(service, returnTo);
+      const target = buildReturnTarget(service, returnTo)?.toString();
+      if (!target) {
+        throw new Error("Invalid return target.");
+      }
       const response = await verifyRoutePIN(service.id, pin, target);
       window.location.assign(response.bridge_url || target);
     } catch (err) {
@@ -147,7 +172,10 @@ function RouteLoginContent() {
     setIsSubmitting(true);
     setError(null);
     try {
-      const target = buildReturnTarget(service, returnTo);
+      const target = buildReturnTarget(service, returnTo)?.toString();
+      if (!target) {
+        throw new Error("Invalid return target.");
+      }
       const response = await verifyRouteEmailCode(service.id, email, verifyCode, target);
       window.location.assign(response.bridge_url || target);
     } catch (err) {

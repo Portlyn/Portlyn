@@ -64,8 +64,37 @@ func (s *SessionStore) ListByUser(ctx context.Context, userID uint) ([]domain.Se
 	return items, err
 }
 
-func (s *SessionStore) Update(ctx context.Context, item *domain.Session) error {
-	return s.db.WithContext(ctx).Omit("User").Save(item).Error
+func (s *SessionStore) Rotate(ctx context.Context, item *domain.Session, previousRefreshHash string) error {
+	result := s.db.WithContext(ctx).Model(&domain.Session{}).
+		Where("id = ? AND revoked_at IS NULL AND refresh_token_hash = ?", item.ID, previousRefreshHash).
+		Updates(map[string]any{
+			"token_id":           item.TokenID,
+			"refresh_token_hash": item.RefreshTokenHash,
+			"user_agent":         item.UserAgent,
+			"remote_addr":        item.RemoteAddr,
+			"last_seen_at":       item.LastSeenAt,
+			"expires_at":         item.ExpiresAt,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *SessionStore) Touch(ctx context.Context, id uint, at time.Time) error {
+	result := s.db.WithContext(ctx).Model(&domain.Session{}).
+		Where("id = ? AND revoked_at IS NULL", id).
+		Update("last_seen_at", at)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *SessionStore) MarkBootstrapDismissed(ctx context.Context, id uint, now time.Time) error {

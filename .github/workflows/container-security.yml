@@ -9,6 +9,9 @@ on:
     - cron: "0 5 * * 3"
   workflow_call:
 
+permissions:
+  contents: read
+
 concurrency:
   group: container-security-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

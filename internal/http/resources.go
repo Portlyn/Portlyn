@@ -110,7 +110,8 @@ func (s *Server) evaluateServiceHealth(ctx context.Context, item domain.Service)
 
 	probeURL := item.TargetURL
 	noRedirect := func(_ *stdhttp.Request, _ []*stdhttp.Request) error { return stdhttp.ErrUseLastResponse }
-	transport := &stdhttp.Transport{}
+	transport := &stdhttp.Transport{DisableKeepAlives: true}
+	defer transport.CloseIdleConnections()
 	if tlsConfig := upstreamTLSClientConfig(item); tlsConfig != nil {
 		transport.TLSClientConfig = tlsConfig
 	}
@@ -126,7 +127,8 @@ func (s *Server) evaluateServiceHealth(ctx context.Context, item domain.Service)
 				}
 				probeURL = u.String()
 			}
-			tunnelTransport := &stdhttp.Transport{DialContext: srv.DialContext}
+			tunnelTransport := &stdhttp.Transport{DialContext: srv.DialContext, DisableKeepAlives: true}
+			defer tunnelTransport.CloseIdleConnections()
 			if tlsConfig := upstreamTLSClientConfig(item); tlsConfig != nil {
 				tunnelTransport.TLSClientConfig = tlsConfig
 			}
@@ -245,11 +247,21 @@ func viewerServiceResponse(item domain.Service, health serviceHealthInfo, cert a
 		"last_deployed_at":               item.LastDeployedAt,
 		"deployment_revision":            item.DeploymentRevision,
 		"service_status":                 health.Status,
-		"service_status_error":           health.Error,
+		"service_status_error":           viewerHealthError(health),
 		"service_status_checked_at":      health.CheckedAt,
 		"created_at":                     item.CreatedAt,
 		"updated_at":                     item.UpdatedAt,
 	}
+}
+
+func viewerHealthError(health serviceHealthInfo) string {
+	if health.Error == "" {
+		return ""
+	}
+	if health.Reason != "" {
+		return health.Reason
+	}
+	return "unhealthy"
 }
 
 func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Request) {

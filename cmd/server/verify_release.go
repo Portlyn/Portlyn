@@ -14,6 +14,7 @@ func runVerifyRelease(args []string) error {
 	checksums := flags.String("checksums", "", "path to checksums.txt")
 	bundlePath := flags.String("bundle", "", "path to checksums.txt.bundle.json")
 	asset := flags.String("asset", "", "optional path to a downloaded asset to check against checksums.txt")
+	tag := flags.String("tag", "", "optional release tag the files belong to, e.g. v1.4.0")
 	assetName := flags.String("asset-name", "", "name of the asset as listed in checksums.txt (defaults to basename of --asset)")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -31,7 +32,7 @@ func runVerifyRelease(args []string) error {
 		return fmt.Errorf("read bundle: %w", err)
 	}
 
-	identity := selfupdate.CosignIdentity{SANRegex: updateSANRegex, OIDCIssuer: updateOIDCIssuer}
+	identity := selfupdate.ReleaseIdentity(*tag)
 	if err := selfupdate.VerifyCosignBundle(checksumsData, string(bundleData), identity); err != nil {
 		return err
 	}
