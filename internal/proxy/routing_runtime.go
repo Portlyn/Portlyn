@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -47,6 +48,9 @@ func (m *Manager) matchRoute(ctx context.Context, host, path string) (Route, boo
 
 func (m *Manager) resolveRoutesForHost(ctx context.Context, host string) ([]Route, error) {
 	host = normalizeHost(host)
+	if !validRouteHost(host) {
+		return nil, errInvalidRouteHost
+	}
 
 	if cached, ok := m.localCache.Get(host); ok {
 		if m.metrics != nil {
@@ -256,6 +260,20 @@ func stripRoutePrefix(routePath, requestPath string) string {
 		return trimmed
 	}
 	return requestPath
+}
+
+var errInvalidRouteHost = errors.New("invalid route host")
+
+func validRouteHost(host string) bool {
+	if host == "" || len(host) > 253 || strings.Count(host, ".")+1 > 127 {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if label == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeHost(value string) string {

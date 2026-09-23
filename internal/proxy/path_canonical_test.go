@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,5 +123,20 @@ func TestHandlerRejectsPathsThatEscapeTheMatchedRoute(t *testing.T) {
 	}
 	if seenPath != "/docs/guide/" {
 		t.Fatalf("expected the authorized path upstream, got %q", seenPath)
+	}
+}
+
+func TestValidRouteHost(t *testing.T) {
+	valid := []string{"app.example.com", "localhost", "a.b"}
+	invalid := []string{"", strings.Repeat("a", 254), strings.Repeat("a.", 127) + "b", "a..b", ".a", "a.", strings.Repeat(".", 500)}
+	for _, host := range valid {
+		if !validRouteHost(host) {
+			t.Errorf("expected %q to be valid", host)
+		}
+	}
+	for i, host := range invalid {
+		if validRouteHost(host) {
+			t.Errorf("case %d: expected host to be rejected", i)
+		}
 	}
 }

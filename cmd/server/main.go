@@ -463,6 +463,7 @@ func main() {
 		Handler:           proxyHTTPHandler,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    64 << 10,
 	}
 
 	var proxyHTTPSServer *http.Server
@@ -497,6 +498,7 @@ func main() {
 			Handler:           server.ProxyHandler(),
 			ReadHeaderTimeout: 10 * time.Second,
 			IdleTimeout:       120 * time.Second,
+			MaxHeaderBytes:    64 << 10,
 		}
 
 		go func() {
