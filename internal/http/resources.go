@@ -245,11 +245,21 @@ func viewerServiceResponse(item domain.Service, health serviceHealthInfo, cert a
 		"last_deployed_at":               item.LastDeployedAt,
 		"deployment_revision":            item.DeploymentRevision,
 		"service_status":                 health.Status,
-		"service_status_error":           health.Error,
+		"service_status_error":           viewerHealthError(health),
 		"service_status_checked_at":      health.CheckedAt,
 		"created_at":                     item.CreatedAt,
 		"updated_at":                     item.UpdatedAt,
 	}
+}
+
+func viewerHealthError(health serviceHealthInfo) string {
+	if health.Error == "" {
+		return ""
+	}
+	if health.Reason != "" {
+		return health.Reason
+	}
+	return "unhealthy"
 }
 
 func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Request) {
