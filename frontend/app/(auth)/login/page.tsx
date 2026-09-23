@@ -23,16 +23,14 @@ import { useAuth } from "@/components/providers";
 import { ApiError } from "@/lib/api";
 import { beginPasskeyLogin, finishPasskeyLogin, getAuthConfig, requestOTP, startOIDCLogin, verifyMFA, verifyOTP } from "@/lib/auth";
 import { authCardStyle, authInfoAlertStyle, authShellStyle, buttonStyle, inputStyles, mergeAuthUI } from "@/lib/auth-ui";
+import { isSafeRelativePath } from "@/lib/safe-redirect";
 
 function sanitizeNextPath(raw: string): string {
   const value = raw.trim();
   if (value === "") {
     return "/services";
   }
-  if (value.startsWith("//") || value.includes("\\")) {
-    return "/services";
-  }
-  if (!value.startsWith("/")) {
+  if (!isSafeRelativePath(value)) {
     return "/services";
   }
   return value;
