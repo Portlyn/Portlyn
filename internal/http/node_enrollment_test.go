@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"portlyn/internal/clientcert"
 	"portlyn/internal/domain"
 )
 
@@ -233,5 +234,54 @@ func TestNodeHeartbeatMTLSHeaderFallbackRequiresTrustedForwardedProto(t *testing
 	server.Router().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected heartbeat 200 when trusted proxy fallback is explicitly enabled, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestNodeHeartbeatMTLSHeaderFromLoopbackRequiresSignature(t *testing.T) {
+	server, cleanup := newIntegrationServer(t)
+	defer cleanup()
+
+	server.cfg.NodeAllowMTLSHeaderFallback = true
+	server.cfg.NodeTrustForwardedProto = true
+	server.cfg.NodeRequireHTTPS = true
+	server.cfg.AllowInsecureDevMode = false
+	server.cfg.TrustedProxyCIDRs = []string{"127.0.0.1/32", "::1/128"}
+
+	now := time.Now().UTC()
+	fingerprint := strings.Repeat("c", 64)
+	node := &domain.Node{
+		Name:              "edge-mtls-loopback",
+		Status:            domain.NodeStatusOnline,
+		LastSeenAt:        &now,
+		LastHeartbeatAt:   &now,
+		HeartbeatAuthMode: "mtls",
+		MTLSCertSHA256:    fingerprint,
+	}
+	if err := server.nodes.Create(context.Background(), node); err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+
+	send := func(signature string) int {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/nodes/"+strconv.FormatUint(uint64(node.ID), 10)+"/heartbeat", bytes.NewBufferString(`{"status":"online"}`))
+		req.RemoteAddr = "127.0.0.1:40000"
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-Proto", "https")
+		req.Header.Set(clientcert.FingerprintHeader, fingerprint)
+		if signature != "" {
+			req.Header.Set(clientcert.SignatureHeader, signature)
+		}
+		rec := httptest.NewRecorder()
+		server.Router().ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if code := send(""); code != http.StatusUnauthorized {
+		t.Fatalf("expected unsigned fingerprint header from loopback to be rejected, got %d", code)
+	}
+	if code := send(clientcert.Sign("some-other-secret", fingerprint)); code != http.StatusUnauthorized {
+		t.Fatalf("expected fingerprint signed with the wrong secret to be rejected, got %d", code)
+	}
+	if code := send(clientcert.Sign(server.cfg.SessionBridgeSecret, fingerprint)); code != http.StatusOK {
+		t.Fatalf("expected signed fingerprint header from loopback to be accepted, got %d", code)
 	}
 }
