@@ -1,11 +1,29 @@
-export function isSafeRelativePath(value: string): boolean {
-  if (!value.startsWith("/")) {
+const UNSAFE_URL_CHARS = /[\u0000- \u007f\\]/;
+const RELATIVE_BASE = "http://portlyn.invalid";
+
+function currentOrigin(): string {
+  if (typeof window !== "undefined" && window.location?.origin && window.location.origin !== "null") {
+    return window.location.origin;
+  }
+  return RELATIVE_BASE;
+}
+
+export function isSafeRelativePath(value: string, origin: string = currentOrigin()): boolean {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
     return false;
   }
-  if (value.startsWith("//") || value.startsWith("/\\")) {
+  if (UNSAFE_URL_CHARS.test(value)) {
     return false;
   }
-  return true;
+  let base: URL;
+  let parsed: URL;
+  try {
+    base = new URL(origin);
+    parsed = new URL(value, base);
+  } catch {
+    return false;
+  }
+  return parsed.origin === base.origin;
 }
 
 export function sanitizeReturnTo(raw: string | null | undefined, domainName?: string | null): string | null {
@@ -13,7 +31,7 @@ export function sanitizeReturnTo(raw: string | null | undefined, domainName?: st
     return null;
   }
   const value = raw.trim();
-  if (value === "") {
+  if (value === "" || UNSAFE_URL_CHARS.test(value)) {
     return null;
   }
   if (isSafeRelativePath(value)) {
@@ -28,9 +46,12 @@ export function sanitizeReturnTo(raw: string | null | undefined, domainName?: st
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return null;
   }
+  if (parsed.username || parsed.password) {
+    return null;
+  }
   const host = (domainName || "").trim().toLowerCase();
   if (host && parsed.host.toLowerCase() === host) {
-    return value;
+    return parsed.toString();
   }
   return null;
 }

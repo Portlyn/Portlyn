@@ -449,6 +449,7 @@ func (m *Manager) Handler() http.Handler {
 			writeProxyError(writer, http.StatusServiceUnavailable, "target_degraded", "target temporarily degraded after repeated upstream failures")
 			return
 		}
+		m.stripPortlynCredentials(r)
 		route.ReverseProxyHandler.ServeHTTP(writer, r)
 	})
 }
@@ -513,7 +514,7 @@ func (m *Manager) handleSessionBridge(w http.ResponseWriter, r *http.Request) bo
 		writeProxyError(w, http.StatusUnauthorized, "invalid_token", "session bridge token already used")
 		return true
 	}
-	m.auth.SetSessionCookieForHost(w, claims.AccessToken, normalizeHost(r.Host), m.forwardedProto(r) == "https")
+	m.auth.SetSessionCookieForHost(w, claims.HostToken, normalizeHost(r.Host), m.forwardedProto(r) == "https")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	http.Redirect(w, r, "/", http.StatusFound)
 	return true

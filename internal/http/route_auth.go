@@ -48,9 +48,13 @@ func (s *Server) handleCreateSessionBridgeToken(w stdhttp.ResponseWriter, r *std
 	if !s.decodeAndValidate(w, r, &req) {
 		return
 	}
-	token := s.auth.SessionTokenFromRequest(r)
-	if token == "" {
-		writeError(w, stdhttp.StatusUnauthorized, "unauthorized", "missing bearer token")
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user == nil {
+		writeError(w, stdhttp.StatusUnauthorized, "unauthorized", "missing session")
+		return
+	}
+	if auth.IsAPITokenAuth(r.Context()) {
+		writeError(w, stdhttp.StatusForbidden, "forbidden", "session bridge requires a browser session")
 		return
 	}
 	host := normalizeBridgeHost(req.Host)
@@ -58,12 +62,53 @@ func (s *Server) handleCreateSessionBridgeToken(w stdhttp.ResponseWriter, r *std
 		writeError(w, stdhttp.StatusBadRequest, "validation_error", "invalid bridge host")
 		return
 	}
-	bridgeToken, err := s.auth.IssueSessionBridgeToken(token, host)
+	groupIDs, _ := auth.GroupIDsFromContext(r.Context())
+	allowed, err := s.sessionBridgeHostAllowed(r, user, groupIDs, host)
 	if err != nil {
 		s.internalError(w, err)
 		return
 	}
+	if !allowed {
+		writeError(w, stdhttp.StatusForbidden, "forbidden", "bridge host is not a service you can access")
+		return
+	}
+	session, _ := auth.SessionFromContext(r.Context())
+	bridgeToken, err := s.auth.IssueSessionBridgeToken(user, session, host)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidToken) {
+			writeError(w, stdhttp.StatusUnauthorized, "unauthorized", "missing session")
+			return
+		}
+		s.internalError(w, err)
+		return
+	}
 	writeJSON(w, stdhttp.StatusOK, map[string]any{"token": bridgeToken})
+}
+
+func (s *Server) sessionBridgeHostAllowed(r *stdhttp.Request, user *domain.User, groupIDs []uint, host string) (bool, error) {
+	if adminHost := normalizeBridgeHost(s.cfg.FrontendBaseURL); adminHost != "" && adminHost == host {
+		return false, nil
+	}
+	services, err := s.services.List(r.Context())
+	if err != nil {
+		return false, err
+	}
+	for _, item := range services {
+		if !item.Enabled || strings.ToLower(domain.ServiceHost(item)) != host {
+			continue
+		}
+		policy, method, _, _ := proxy.EffectiveAccessForService(item)
+		if method != domain.AccessMethodSession && method != domain.AccessMethodOIDCOnly {
+			continue
+		}
+		if policy.AccessMode != domain.AccessModeAuthenticated && policy.AccessMode != domain.AccessModeRestricted {
+			continue
+		}
+		if viewerCanAccessService(user, groupIDs, item) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *Server) handleRoutePIN(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -269,7 +314,7 @@ func validateRouteEmailDomain(email string, config domain.JSONObject) error {
 }
 
 func normalizeBridgeHost(value string) string {
-	trimmed := strings.TrimSpace(value)
+	trimmed := strings.ToLower(strings.TrimSpace(value))
 	if trimmed == "" {
 		return ""
 	}

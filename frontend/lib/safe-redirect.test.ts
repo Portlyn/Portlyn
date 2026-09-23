@@ -13,6 +13,15 @@ describe("isSafeRelativePath", () => {
     expect(isSafeRelativePath("/\\evil.example")).toBe(false);
   });
 
+  it("rejects control characters, whitespace and backslashes anywhere in the value", () => {
+    expect(isSafeRelativePath("/\t/evil.example")).toBe(false);
+    expect(isSafeRelativePath("/\n/evil.example")).toBe(false);
+    expect(isSafeRelativePath("/\r/evil.example")).toBe(false);
+    expect(isSafeRelativePath("/ /evil.example")).toBe(false);
+    expect(isSafeRelativePath("/app\\..\\x")).toBe(false);
+    expect(isSafeRelativePath("/\u0000x")).toBe(false);
+  });
+
   it("rejects anything that is not rooted", () => {
     expect(isSafeRelativePath("services")).toBe(false);
     expect(isSafeRelativePath("https://evil.example/")).toBe(false);
@@ -50,6 +59,13 @@ describe("sanitizeReturnTo", () => {
   it("rejects a host that only looks like the expected one", () => {
     expect(sanitizeReturnTo("https://app.example.com.evil.test/x", "app.example.com")).toBeNull();
     expect(sanitizeReturnTo("https://evil.test/?x=app.example.com", "app.example.com")).toBeNull();
+  });
+
+  it("rejects tab and newline tricks that resolve to another host", () => {
+    expect(sanitizeReturnTo("/\t/evil.example", "app.example.com")).toBeNull();
+    expect(sanitizeReturnTo("/\n/evil.example")).toBeNull();
+    expect(sanitizeReturnTo("https://evil.example\t/", "app.example.com")).toBeNull();
+    expect(sanitizeReturnTo("https://app.example.com\\@evil.test/", "app.example.com")).toBeNull();
   });
 
   it("treats userinfo tricks as a foreign host", () => {

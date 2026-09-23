@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"net/netip"
 	"net/url"
+	"portlyn/internal/auth"
 	"portlyn/internal/domain"
 	"portlyn/internal/netguard"
 	"strings"
@@ -136,6 +137,60 @@ func reverseProxyForTarget(target *url.URL, transport *http.Transport, routePath
 	}
 
 	return proxy
+}
+
+func (m *Manager) stripPortlynCredentials(r *http.Request) {
+	if token := bearerToken(r.Header.Get("Authorization")); token != "" && m.auth != nil && m.auth.IsPortlynCredential(token) {
+		r.Header.Del("Authorization")
+	}
+	stripPortlynCookies(r.Header)
+}
+
+func bearerToken(header string) string {
+	header = strings.TrimSpace(header)
+	if len(header) < 7 || !strings.EqualFold(header[:7], "Bearer ") {
+		return ""
+	}
+	return strings.TrimSpace(header[7:])
+}
+
+func stripPortlynCookies(headers http.Header) {
+	lines := headers.Values("Cookie")
+	if len(lines) == 0 {
+		return
+	}
+	kept := make([]string, 0, len(lines))
+	removed := false
+	for _, line := range lines {
+		for _, part := range strings.Split(line, ";") {
+			trimmed := strings.TrimSpace(part)
+			if trimmed == "" {
+				continue
+			}
+			name, _, _ := strings.Cut(trimmed, "=")
+			if isPortlynCookieName(name) {
+				removed = true
+				continue
+			}
+			kept = append(kept, trimmed)
+		}
+	}
+	if !removed {
+		return
+	}
+	headers.Del("Cookie")
+	if len(kept) > 0 {
+		headers.Set("Cookie", strings.Join(kept, "; "))
+	}
+}
+
+func isPortlynCookieName(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	switch name {
+	case auth.SessionCookieName, auth.RefreshCookieName, auth.CSRFCookieName:
+		return true
+	}
+	return strings.HasPrefix(name, "portlyn_route_access_")
 }
 
 func (m *Manager) isTargetDegraded(target string) (bool, string) {
