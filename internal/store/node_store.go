@@ -126,6 +126,24 @@ func (s *NodeStore) Update(ctx context.Context, node *domain.Node) error {
 	return nil
 }
 
+func (s *NodeStore) RecordHeartbeatFailure(ctx context.Context, id uint, ip string, code int, reason string, at time.Time) error {
+	result := s.db.WithContext(ctx).Model(&domain.Node{}).
+		Where("id = ?", id).
+		UpdateColumns(map[string]any{
+			"last_heartbeat_ip":    ip,
+			"last_heartbeat_code":  code,
+			"last_heartbeat_error": reason,
+			"heartbeat_failed_at":  at,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *NodeStore) UpdateHeartbeat(ctx context.Context, node *domain.Node) error {
 	node.UpdatedAt = time.Now().UTC()
 	result := s.db.WithContext(ctx).Model(&domain.Node{}).

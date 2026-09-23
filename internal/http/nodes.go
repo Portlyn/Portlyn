@@ -170,6 +170,7 @@ func (s *Server) handleHeartbeatNode(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		if !s.enforceNodeRateLimit(w, r, "node_heartbeat_auth_fail", s.cfg.NodeHeartbeatAuthFailRateLimit, s.cfg.NodeHeartbeatAuthFailRateWindow) {
 			return
 		}
+		_ = s.nodes.RecordHeartbeatFailure(r.Context(), node.ID, s.clientIPForRequest(r), stdhttp.StatusUnauthorized, "invalid_token", time.Now().UTC())
 		writeError(w, stdhttp.StatusUnauthorized, "unauthorized", "missing or invalid node token")
 		return
 	}

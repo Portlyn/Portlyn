@@ -125,8 +125,11 @@ func TestNodeHeartbeatRejectsInvalidToken(t *testing.T) {
 	if reloaded.Status != domain.NodeStatusOnline {
 		t.Fatalf("expected invalid heartbeat to leave node status untouched, got %q", reloaded.Status)
 	}
-	if reloaded.LastHeartbeatCode != 0 || reloaded.HeartbeatFailedAt != nil {
-		t.Fatalf("expected invalid heartbeat to persist nothing, got code=%d failed_at=%v", reloaded.LastHeartbeatCode, reloaded.HeartbeatFailedAt)
+	if reloaded.LastHeartbeatCode != http.StatusUnauthorized || reloaded.LastHeartbeatError != "invalid_token" || reloaded.HeartbeatFailedAt == nil {
+		t.Fatalf("expected invalid heartbeat to record the failure, got code=%d error=%q failed_at=%v", reloaded.LastHeartbeatCode, reloaded.LastHeartbeatError, reloaded.HeartbeatFailedAt)
+	}
+	if reloaded.HeartbeatTokenHash != node.HeartbeatTokenHash || reloaded.LastHeartbeatAt == nil {
+		t.Fatalf("expected invalid heartbeat to leave the rest of the node untouched")
 	}
 }
 
