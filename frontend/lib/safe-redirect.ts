@@ -1,4 +1,12 @@
-const UNSAFE_URL_CHARS = /[\u0000- \u007f\\]/;
+function hasUnsafeUrlChars(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x20 || code === 0x7f || code === 0x5c) {
+      return true;
+    }
+  }
+  return false;
+}
 const RELATIVE_BASE = "http://portlyn.invalid";
 
 function currentOrigin(): string {
@@ -12,7 +20,7 @@ export function isSafeRelativePath(value: string, origin: string = currentOrigin
   if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
     return false;
   }
-  if (UNSAFE_URL_CHARS.test(value)) {
+  if (hasUnsafeUrlChars(value)) {
     return false;
   }
   let base: URL;
@@ -31,7 +39,7 @@ export function sanitizeReturnTo(raw: string | null | undefined, domainName?: st
     return null;
   }
   const value = raw.trim();
-  if (value === "" || UNSAFE_URL_CHARS.test(value)) {
+  if (value === "" || hasUnsafeUrlChars(value)) {
     return null;
   }
   if (isSafeRelativePath(value)) {
