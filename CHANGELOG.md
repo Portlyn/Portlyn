@@ -4,6 +4,80 @@ All notable changes to this project should be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning for tagged releases.
 
+## [1.5.0] - 2026-09-23
+
+This release is almost entirely security fixes from a review of the whole
+codebase. Please read the upgrade notes before updating.
+
+### Upgrade notes
+
+- Update the hub first, then the nodes. A new node agent learns the hub's
+  tunnel address from the hub. Against an older hub it falls back to the first
+  address of the tunnel network, which is right unless you changed the hub's
+  tunnel IP in the tunnel settings.
+- Anyone logged in to a service through the route login has to log in once
+  more. Old service-host cookies are no longer accepted.
+- The `route` label on the API metrics is now the route pattern
+  (`/api/v1/services/{id}`) and `unmatched` for everything else. The bundled
+  Grafana dashboard does not use it, but check your own queries.
+- No config changes and no database migration.
+
+### Security
+
+- The session bridge put the dashboard access token into the link it sent to a
+  service host, and it would mint that link for any host the request named.
+  Together with a tab character slipping through the `returnTo` check on the
+  route login page, one link was enough to send an admin's token to a foreign
+  domain. Bridge tokens are now only issued for enabled services the user can
+  reach, and they carry a separate token that only works on that host and is
+  refused by the API. The `returnTo`, login `next` and OIDC `next` checks reject
+  control characters and backslashes and compare the parsed origin.
+- The proxy now strips Portlyn's own cookies and bearer tokens before
+  forwarding to an upstream. Upstream apps used to receive a token that worked
+  against the admin API.
+- API tokens were treated as the admin who created them on the `/me` routes,
+  so a viewer token could change that admin's email, password or MFA. Tokens
+  are now refused on `/me/*`, sessions, MFA, passkeys and the session bridge.
+- `/me/account-setup` changed email and password without the current password
+  at any time. It now only works while a password change is pending, which is
+  the only place the UI uses it.
+- Paths with `.` or `..` segments are rejected by the proxy, and the path that
+  was checked against the access policy is the one forwarded upstream. Before,
+  `..` could pick a looser route while the backend resolved it to a stricter
+  one.
+- Hosts longer than 253 bytes or with empty labels are rejected before the
+  route lookup. A very long `Host` header could run the process out of memory.
+- `X-Portlyn-*` headers are removed in every spelling, including underscores,
+  and on the admin host as well. The client certificate fingerprint the proxy
+  passes to the API is now signed, so it can no longer be set by the client.
+- Tunnel clients can only reach the nodes they are assigned to. The hub used to
+  forward traffic between any two peers. Nodes only accept relay connections
+  from the hub, and the subnet proxy stays inside the advertised subnets.
+- Deleting a node removes its peer from the running tunnel right away instead
+  of at the next restart.
+- Release signatures are pinned to `release.yml` on a version tag in
+  `Portlyn/Portlyn`. Any workflow in the repo used to be accepted, including
+  ones that other repositories can call. `portlyn update` also checks the tag,
+  and the install scripts and docs use the stricter check. Installs on 1.4.0
+  and older still use the old check for this one update.
+- Several store updates wrote back the whole row from an earlier read, which
+  could undo a session revocation, a role change or a node deletion. They now
+  only write the columns they own.
+- The break-glass source check looked at the internal proxy hop, which is
+  always loopback, so it never restricted anything. It now uses the real client
+  address.
+- API metrics used the raw request path as a label, which allowed injecting
+  lines into `/metrics` and growing memory without limit.
+- Password login now takes the same time whether the email exists or not.
+- Viewers no longer see the upstream address in service health errors.
+- Health probes no longer leave an idle connection behind on every
+  `/healthz` call.
+
+### Changed
+
+- CI workflows default to a read-only token.
+- `verify-release` takes an optional `--tag`.
+
 ## [1.4.0] - 2026-09-19
 
 ### Added
