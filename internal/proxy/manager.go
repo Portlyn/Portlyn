@@ -356,6 +356,14 @@ func (m *Manager) Handler() http.Handler {
 			m.logAccess(r, writer, startedAt, matchedRoute, user, outcome, reason)
 		}()
 
+		canonicalPath, ok := canonicalRequestPath(r.URL.Path)
+		if !ok {
+			outcome = "denied"
+			reason = "non_canonical_path"
+			writeProxyError(writer, http.StatusBadRequest, "invalid_path", "request path must not contain dot segments")
+			return
+		}
+
 		if m.handleSessionBridge(writer, r) {
 			outcome = "session_bridge"
 			reason = "session_bridge"
@@ -396,6 +404,15 @@ func (m *Manager) Handler() http.Handler {
 			reason = "route_miss"
 			http.NotFound(writer, r)
 			return
+		}
+		if strings.Contains(path, ";") {
+			paramRoute, found := m.matchRoute(r.Context(), host, normalizePath(stripPathParams(path)))
+			if !found || paramRoute.ServiceID != route.ServiceID || paramRoute.Path != route.Path {
+				outcome = "denied"
+				reason = "ambiguous_path"
+				writeProxyError(writer, http.StatusBadRequest, "invalid_path", "request path parameters change the matched route")
+				return
+			}
 		}
 		matchedRoute = &route
 		sanitizePortlynIdentityHeaders(r.Header)
@@ -450,6 +467,10 @@ func (m *Manager) Handler() http.Handler {
 			return
 		}
 		m.stripPortlynCredentials(r)
+		if strings.HasPrefix(r.URL.Path, "/") && canonicalPath != r.URL.Path {
+			r.URL.Path = canonicalPath
+			r.URL.RawPath = ""
+		}
 		route.ReverseProxyHandler.ServeHTTP(writer, r)
 	})
 }
@@ -708,6 +729,37 @@ func normalizePath(value string) string {
 		return "/"
 	}
 	return "/" + strings.Join(segments, "/")
+}
+
+func canonicalRequestPath(value string) (string, bool) {
+	cleaned := strings.ReplaceAll(value, `\`, "/")
+	segments := make([]string, 0, 8)
+	for _, segment := range strings.Split(cleaned, "/") {
+		if segment == "" {
+			continue
+		}
+		name, _, _ := strings.Cut(segment, ";")
+		if name == "." || name == ".." {
+			return "", false
+		}
+		segments = append(segments, segment)
+	}
+	if len(segments) == 0 {
+		return "/", true
+	}
+	canonical := "/" + strings.Join(segments, "/")
+	if strings.HasSuffix(cleaned, "/") {
+		canonical += "/"
+	}
+	return canonical, true
+}
+
+func stripPathParams(value string) string {
+	segments := strings.Split(value, "/")
+	for i, segment := range segments {
+		segments[i], _, _ = strings.Cut(segment, ";")
+	}
+	return strings.Join(segments, "/")
 }
 
 func (m *Manager) forwardedProto(r *http.Request) string {
