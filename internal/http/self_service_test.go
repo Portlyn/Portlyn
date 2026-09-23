@@ -2,11 +2,54 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"portlyn/internal/domain"
 )
+
+func TestAccountSetupOnlyWhilePasswordChangeRequired(t *testing.T) {
+	server, cleanup := newIntegrationServer(t)
+	defer cleanup()
+
+	adminToken := loginAsAdmin(t, server, "setup-admin@example.com", "StrongPass123!")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/me/account-setup", bytes.NewBufferString(`{"email":"attacker@example.com","password":"AttackerPass123!"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec := httptest.NewRecorder()
+	server.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected account setup to be rejected after setup, got %d: %s", rec.Code, rec.Body.String())
+	}
+	user, err := server.users.GetByEmail(context.Background(), "setup-admin@example.com")
+	if err != nil {
+		t.Fatalf("expected original email to remain: %v", err)
+	}
+	if err := server.users.UpdateColumns(context.Background(), user.ID, map[string]any{"must_change_password": true}); err != nil {
+		t.Fatalf("flag password change: %v", err)
+	}
+	server.auth.InvalidateUser(user.ID)
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/me/account-setup", bytes.NewBufferString(`{"email":"setup-new@example.com","password":"NewStrongPass123!"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	server.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected account setup to succeed while required, got %d: %s", rec.Code, rec.Body.String())
+	}
+	updated, err := server.users.GetByID(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	if updated.Email != "setup-new@example.com" || updated.MustChangePassword || updated.Role != domain.RoleAdmin || !updated.Active {
+		t.Fatalf("unexpected user after setup: %+v", updated)
+	}
+}
 
 func TestAPITokenRejectedOnSelfServiceRoutes(t *testing.T) {
 	server, cleanup := newIntegrationServer(t)

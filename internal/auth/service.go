@@ -474,6 +474,9 @@ func (s *Service) CompleteAccountSetup(ctx context.Context, userID uint, email, 
 	if err != nil {
 		return nil, err
 	}
+	if !user.MustChangePassword {
+		return nil, ErrAccountSetupDone
+	}
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" {
 		return nil, ErrInvalidCredentials

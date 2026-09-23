@@ -165,6 +165,8 @@ func (s *Server) handleCompleteAccountSetup(w stdhttp.ResponseWriter, r *stdhttp
 		switch {
 		case errors.Is(err, store.ErrConflict):
 			writeError(w, stdhttp.StatusConflict, "email_in_use", "email is already in use")
+		case errors.Is(err, auth.ErrAccountSetupDone):
+			writeError(w, stdhttp.StatusForbidden, "account_setup_not_allowed", "account setup is only available while a password change is required")
 		case errors.Is(err, auth.ErrInvalidCredentials):
 			writeError(w, stdhttp.StatusBadRequest, "invalid_account_setup", "a valid email and password are required")
 		default:
