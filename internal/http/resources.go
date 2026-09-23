@@ -110,7 +110,8 @@ func (s *Server) evaluateServiceHealth(ctx context.Context, item domain.Service)
 
 	probeURL := item.TargetURL
 	noRedirect := func(_ *stdhttp.Request, _ []*stdhttp.Request) error { return stdhttp.ErrUseLastResponse }
-	transport := &stdhttp.Transport{}
+	transport := &stdhttp.Transport{DisableKeepAlives: true}
+	defer transport.CloseIdleConnections()
 	if tlsConfig := upstreamTLSClientConfig(item); tlsConfig != nil {
 		transport.TLSClientConfig = tlsConfig
 	}
@@ -126,7 +127,8 @@ func (s *Server) evaluateServiceHealth(ctx context.Context, item domain.Service)
 				}
 				probeURL = u.String()
 			}
-			tunnelTransport := &stdhttp.Transport{DialContext: srv.DialContext}
+			tunnelTransport := &stdhttp.Transport{DialContext: srv.DialContext, DisableKeepAlives: true}
+			defer tunnelTransport.CloseIdleConnections()
 			if tlsConfig := upstreamTLSClientConfig(item); tlsConfig != nil {
 				tunnelTransport.TLSClientConfig = tlsConfig
 			}
