@@ -50,6 +50,7 @@ type Manager struct {
 	geoIPFailOpen             bool
 	crowdSecFailOpen          bool
 	clientCertHeaderSecret    string
+	deniedAudit               *denialThrottle
 }
 
 type RuntimeRoute struct {
@@ -223,6 +224,7 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 		geoIPFailOpen:             options.GeoIPFailOpen,
 		crowdSecFailOpen:          options.CrowdSecFailOpen,
 		clientCertHeaderSecret:    options.ClientCertHeaderSecret,
+		deniedAudit:               newDenialThrottle(time.Minute, 60),
 	}
 }
 
@@ -439,6 +441,9 @@ func (m *Manager) Handler() http.Handler {
 		if !ok {
 			outcome = "denied"
 			reason = "authz"
+			if writer.Status() == http.StatusFound {
+				reason = "login_required"
+			}
 			return
 		}
 
@@ -627,7 +632,15 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 		}
 		m.metrics.ObserveProxyRequest(serviceName, outcome, statusCode, latency)
 	}
-	if m.audit != nil && outcome == "denied" {
+	if m.audit != nil && outcome == "denied" && reason != "login_required" {
+		key := remoteAddr + "|" + normalizeHost(r.Host) + "|" + reason
+		allowed, suppressed := m.deniedAudit.allow(key, time.Now())
+		if !allowed {
+			return
+		}
+		if suppressed > 0 {
+			details["suppressed"] = suppressed
+		}
 		_ = m.audit.LogHTTPAccess(r.Context(), audit.HTTPAccessEvent{
 			Request:      r,
 			UserID:       userID,
