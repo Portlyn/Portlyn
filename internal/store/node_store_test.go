@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -143,5 +144,76 @@ func TestEnrollWithTokenRollsBackClaimOnNodeFailure(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("expected no extra node, got %d", count)
+	}
+}
+
+func TestNodeUpdateHeartbeatTouchesOnlyHeartbeatColumns(t *testing.T) {
+	nodes, _, _ := newNodeTestStores(t)
+	ctx := context.Background()
+
+	node := &domain.Node{Name: "node-a", Status: domain.NodeStatusOnline, HeartbeatAuthMode: "token", HeartbeatTokenHash: "old-hash", WGPublicKey: "old-key"}
+	if err := nodes.Create(ctx, node); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	stale, err := nodes.GetByID(ctx, node.ID)
+	if err != nil {
+		t.Fatalf("get stale: %v", err)
+	}
+	fresh, err := nodes.GetByID(ctx, node.ID)
+	if err != nil {
+		t.Fatalf("get fresh: %v", err)
+	}
+	fresh.HeartbeatTokenHash = "new-hash"
+	fresh.WGPublicKey = ""
+	if err := nodes.Update(ctx, fresh); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	now := time.Now().UTC()
+	stale.LastHeartbeatAt = &now
+	stale.Status = domain.NodeStatusOffline
+	stale.Load = 0.5
+	if err := nodes.UpdateHeartbeat(ctx, stale); err != nil {
+		t.Fatalf("update heartbeat: %v", err)
+	}
+
+	stored, err := nodes.GetByID(ctx, node.ID)
+	if err != nil {
+		t.Fatalf("get stored: %v", err)
+	}
+	if stored.HeartbeatTokenHash != "new-hash" || stored.WGPublicKey != "" {
+		t.Fatalf("heartbeat overwrote credential columns: hash=%q key=%q", stored.HeartbeatTokenHash, stored.WGPublicKey)
+	}
+	if stored.Status != domain.NodeStatusOffline || stored.Load != 0.5 || stored.LastHeartbeatAt == nil {
+		t.Fatalf("heartbeat columns not persisted: status=%q load=%v", stored.Status, stored.Load)
+	}
+	if stored.Name != "node-a" || stored.CreatedAt.IsZero() {
+		t.Fatalf("unexpected row after update: name=%q created_at=%v", stored.Name, stored.CreatedAt)
+	}
+}
+
+func TestNodeUpdatesDoNotRecreateDeletedNode(t *testing.T) {
+	nodes, _, _ := newNodeTestStores(t)
+	ctx := context.Background()
+
+	node := &domain.Node{Name: "node-a", Status: domain.NodeStatusOnline, HeartbeatAuthMode: "token"}
+	if err := nodes.Create(ctx, node); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := nodes.Delete(ctx, node.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if err := nodes.UpdateHeartbeat(ctx, node); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound from heartbeat update, got %v", err)
+	}
+	if err := nodes.Update(ctx, node); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound from update, got %v", err)
+	}
+	count, err := nodes.Count(ctx)
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected deleted node to stay deleted, found %d rows", count)
 	}
 }

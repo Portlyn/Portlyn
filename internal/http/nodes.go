@@ -151,15 +151,6 @@ func (s *Server) handleHeartbeatNode(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		return
 	}
 	if !s.authorizeNodeHeartbeat(r, node) {
-		now := time.Now().UTC()
-		node.LastHeartbeatIP = s.clientIPForRequest(r)
-		node.LastHeartbeatCode = stdhttp.StatusUnauthorized
-		node.LastHeartbeatError = "invalid_token"
-		node.HeartbeatFailedAt = &now
-		if node.Status != domain.NodeStatusOffline {
-			node.Status = domain.NodeStatusOffline
-		}
-		_ = s.nodes.UpdateHeartbeat(r.Context(), node)
 		_ = s.audit.LogRequest(r.Context(), r, nil, "node_heartbeat_rejected", "node", &node.ID, map[string]any{
 			"node_id":      node.ID,
 			"remote_addr":  s.clientIPForRequest(r),
@@ -227,7 +218,7 @@ func (s *Server) handleHeartbeatNode(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	}
 
 	if err := s.nodes.UpdateHeartbeat(r.Context(), node); err != nil {
-		s.internalError(w, err)
+		s.handleStoreError(w, err)
 		return
 	}
 	_ = s.audit.LogRequest(r.Context(), r, nil, "node_heartbeat_accepted", "node", &node.ID, map[string]any{

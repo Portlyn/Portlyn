@@ -112,11 +112,50 @@ func (s *NodeStore) GetByHeartbeatTokenHash(ctx context.Context, tokenHash strin
 }
 
 func (s *NodeStore) Update(ctx context.Context, node *domain.Node) error {
-	return s.db.WithContext(ctx).Save(node).Error
+	result := s.db.WithContext(ctx).Model(&domain.Node{}).
+		Where("id = ?", node.ID).
+		Select("*").
+		Omit("id", "created_at").
+		Updates(node)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *NodeStore) UpdateHeartbeat(ctx context.Context, node *domain.Node) error {
-	return s.db.WithContext(ctx).Save(node).Error
+	node.UpdatedAt = time.Now().UTC()
+	result := s.db.WithContext(ctx).Model(&domain.Node{}).
+		Where("id = ?", node.ID).
+		UpdateColumns(map[string]any{
+			"last_heartbeat_at":    node.LastHeartbeatAt,
+			"last_seen_at":         node.LastSeenAt,
+			"status":               node.Status,
+			"last_heartbeat_ip":    node.LastHeartbeatIP,
+			"last_heartbeat_code":  node.LastHeartbeatCode,
+			"last_heartbeat_error": node.LastHeartbeatError,
+			"heartbeat_failed_at":  node.HeartbeatFailedAt,
+			"heartbeat_version":    node.HeartbeatVersion,
+			"version":              node.Version,
+			"load":                 node.Load,
+			"bandwidth_in_kbps":    node.BandwidthInKbps,
+			"bandwidth_out_kbps":   node.BandwidthOutKbps,
+			"wg_last_handshake":    node.WGLastHandshake,
+			"wg_rx_bytes":          node.WGRxBytes,
+			"wg_tx_bytes":          node.WGTxBytes,
+			"tunnel_status":        node.TunnelStatus,
+			"updated_at":           node.UpdatedAt,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *NodeStore) Delete(ctx context.Context, id uint) error {

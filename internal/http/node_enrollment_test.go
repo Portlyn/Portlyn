@@ -121,11 +121,39 @@ func TestNodeHeartbeatRejectsInvalidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload node: %v", err)
 	}
-	if reloaded.Status != domain.NodeStatusOffline {
-		t.Fatalf("expected invalid heartbeat to mark node offline, got %q", reloaded.Status)
+	if reloaded.Status != domain.NodeStatusOnline {
+		t.Fatalf("expected invalid heartbeat to leave node status untouched, got %q", reloaded.Status)
 	}
-	if reloaded.LastHeartbeatCode != http.StatusUnauthorized {
-		t.Fatalf("expected last heartbeat code 401, got %d", reloaded.LastHeartbeatCode)
+	if reloaded.LastHeartbeatCode != 0 || reloaded.HeartbeatFailedAt != nil {
+		t.Fatalf("expected invalid heartbeat to persist nothing, got code=%d failed_at=%v", reloaded.LastHeartbeatCode, reloaded.HeartbeatFailedAt)
+	}
+}
+
+func TestNodeHeartbeatForDeletedNodeDoesNotRecreateIt(t *testing.T) {
+	server, cleanup := newIntegrationServer(t)
+	defer cleanup()
+
+	now := time.Now().UTC()
+	node := &domain.Node{
+		Name:               "edge-deleted",
+		Status:             domain.NodeStatusOnline,
+		LastSeenAt:         &now,
+		HeartbeatAuthMode:  "token",
+		HeartbeatTokenHash: hashOpaqueToken("REALTOKEN"),
+	}
+	if err := server.nodes.Create(context.Background(), node); err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+	if err := server.nodes.Delete(context.Background(), node.ID); err != nil {
+		t.Fatalf("delete node: %v", err)
+	}
+
+	node.LastHeartbeatAt = &now
+	if err := server.nodes.UpdateHeartbeat(context.Background(), node); err == nil {
+		t.Fatal("expected heartbeat update of a deleted node to fail")
+	}
+	if _, err := server.nodes.GetByID(context.Background(), node.ID); err == nil {
+		t.Fatal("expected deleted node to stay deleted")
 	}
 }
 
