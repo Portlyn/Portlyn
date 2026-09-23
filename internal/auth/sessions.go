@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"portlyn/internal/domain"
 	"portlyn/internal/store"
@@ -75,8 +76,10 @@ func (s *Service) AuthenticateAccessToken(ctx context.Context, tokenString strin
 		if s2.ExpiresAt.Before(now) {
 			return nil, nil, nil, ErrRefreshExpired
 		}
+		if err := s.sessions.Touch(ctx, s2.ID, now); errors.Is(err, store.ErrNotFound) {
+			return nil, nil, nil, ErrSessionRevoked
+		}
 		s2.LastSeenAt = &now
-		_ = s.sessions.Update(ctx, s2)
 		session = s2
 	}
 	groupIDs, err := s.GetUserGroupIDs(ctx, user.ID)
@@ -172,13 +175,17 @@ func (s *Service) RefreshSession(ctx context.Context, refreshToken string, meta 
 	if err != nil {
 		return nil, err
 	}
+	previousRefreshHash := session.RefreshTokenHash
 	session.TokenID = newTokenID
 	session.RefreshTokenHash = hashToken(newRefreshToken)
 	session.UserAgent = firstNonEmpty(strings.TrimSpace(meta.UserAgent), session.UserAgent)
 	session.RemoteAddr = firstNonEmpty(rateLimitRemoteAddr(meta.RemoteAddr), session.RemoteAddr)
 	session.LastSeenAt = &now
 	session.ExpiresAt = now.Add(s.refreshTokenTTL)
-	if err := s.sessions.Update(ctx, session); err != nil {
+	if err := s.sessions.Rotate(ctx, session, previousRefreshHash); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, ErrSessionRevoked
+		}
 		return nil, err
 	}
 	s.InvalidateUser(user.ID)
