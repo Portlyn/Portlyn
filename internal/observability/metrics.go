@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const maxSeriesPerFamily = 2000
+
 type Registry struct {
 	mu         sync.Mutex
 	counters   map[string]*metricFamily
@@ -55,7 +57,11 @@ func (r *Registry) IncCounter(name, help string, labels map[string]string, delta
 		family = &metricFamily{help: help, values: make(map[string]float64)}
 		r.counters[name] = family
 	}
-	family.values[labelKey(labels)] += delta
+	key := labelKey(labels)
+	if _, ok := family.values[key]; !ok && len(family.values) >= maxSeriesPerFamily {
+		return
+	}
+	family.values[key] += delta
 }
 
 func (r *Registry) SetGauge(name, help string, labels map[string]string, value float64) {
@@ -66,7 +72,11 @@ func (r *Registry) SetGauge(name, help string, labels map[string]string, value f
 		family = &gaugeFamily{help: help, values: make(map[string]float64)}
 		r.gauges[name] = family
 	}
-	family.values[labelKey(labels)] = value
+	key := labelKey(labels)
+	if _, ok := family.values[key]; !ok && len(family.values) >= maxSeriesPerFamily {
+		return
+	}
+	family.values[key] = value
 }
 
 func (r *Registry) ObserveHistogram(name, help string, labels map[string]string, value float64, buckets []float64) {
@@ -80,6 +90,9 @@ func (r *Registry) ObserveHistogram(name, help string, labels map[string]string,
 	key := labelKey(labels)
 	entry := family.values[key]
 	if entry == nil {
+		if len(family.values) >= maxSeriesPerFamily {
+			return
+		}
 		entry = &histogramValue{buckets: make([]uint64, len(family.buckets))}
 		family.values[key] = entry
 	}
@@ -250,12 +263,14 @@ func labelKey(labels map[string]string) string {
 	}
 	keys := make([]string, 0, len(labels))
 	for key := range labels {
-		keys = append(keys, key)
+		if validLabelName(key) {
+			keys = append(keys, key)
+		}
 	}
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
-		parts = append(parts, key+"="+labels[key])
+		parts = append(parts, formatLabel(key, labels[key]))
 	}
 	return strings.Join(parts, ",")
 }
@@ -264,30 +279,44 @@ func labelsFromKey(key string) string {
 	if key == "" {
 		return ""
 	}
-	parts := strings.Split(key, ",")
-	labels := make([]string, 0, len(parts))
-	for _, part := range parts {
-		pair := strings.SplitN(part, "=", 2)
-		if len(pair) != 2 {
-			continue
-		}
-		labels = append(labels, fmt.Sprintf(`%s=%q`, pair[0], pair[1]))
-	}
-	return "{" + strings.Join(labels, ",") + "}"
+	return "{" + key + "}"
 }
 
 func mergeLabelString(existing, key, value string) string {
 	if existing == "" {
-		return fmt.Sprintf(`{%s=%q}`, key, value)
+		return "{" + formatLabel(key, value) + "}"
 	}
-	return strings.TrimRight(labelsFromKey(existing), "}") + fmt.Sprintf(`,%s=%q}`, key, value)
+	return "{" + existing + "," + formatLabel(key, value) + "}"
+}
+
+func formatLabel(name, value string) string {
+	return name + `="` + labelValueEscaper.Replace(value) + `"`
+}
+
+var labelValueEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)
+
+var helpEscaper = strings.NewReplacer(`\`, `\\`, "\n", `\n`)
+
+func validLabelName(name string) bool {
+	if name == "" || strings.HasPrefix(name, "__") {
+		return false
+	}
+	for i, c := range name {
+		switch {
+		case c == '_', c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		case c >= '0' && c <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func sanitizeHelp(help string) string {
 	if strings.TrimSpace(help) == "" {
 		return "Portlyn metric."
 	}
-	return strings.TrimSpace(help)
+	return helpEscaper.Replace(strings.TrimSpace(help))
 }
 
 func sortedKeys[T any](items map[string]T) []string {
