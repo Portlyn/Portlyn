@@ -57,5 +57,7 @@ Checks that `checksums.txt` is really signed by the release workflow, using the 
 This only means something when the `portlyn` doing the checking is one you already trust, meaning an installed binary checking a *new* download. Never use a freshly downloaded binary to verify itself; for a first install use `cosign` (the installer does).
 
 ```bash
-portlyn verify-release --checksums checksums.txt --bundle checksums.txt.bundle.json --asset portlyn-linux-amd64
+portlyn verify-release --checksums checksums.txt --bundle checksums.txt.bundle.json --asset portlyn-linux-amd64 --tag v1.4.0
 ```
+
+`--tag` is optional. With it, the signature also has to come from that exact tag.

@@ -16,8 +16,6 @@ const (
 	updateRepo        = "portlyn/Portlyn"
 	updateAssetPrefix = "portlyn-nodeagent"
 	updateDefaultUnit = "portlyn-nodeagent.service"
-	updateSANRegex    = `^https://github\.com/[Pp]ortlyn/[Pp]ortlyn/`
-	updateOIDCIssuer  = "https://token.actions.githubusercontent.com"
 )
 
 func runUpdate(args []string) error {
@@ -96,8 +94,7 @@ func runUpdate(args []string) error {
 	if err != nil {
 		return fmt.Errorf("fetch sigstore bundle: %w", err)
 	}
-	identity := selfupdate.CosignIdentity{SANRegex: updateSANRegex, OIDCIssuer: updateOIDCIssuer}
-	if err := selfupdate.VerifyCosignBundle([]byte(checksums), bundleJSON, identity); err != nil {
+	if err := selfupdate.VerifyCosignBundle([]byte(checksums), bundleJSON, selfupdate.ReleaseIdentity(rel.Tag)); err != nil {
 		return fmt.Errorf("sigstore verification failed: %w", err)
 	}
 	fmt.Println("Sigstore signature OK.")

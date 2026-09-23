@@ -19,7 +19,8 @@ SERVICE_NAME="portlyn"
 SERVICE_USER="portlyn"
 REQUIRE_SIGNATURE="1"
 ALLOW_UNSIGNED="${ALLOW_UNSIGNED:-0}"
-SAN_REGEXP='^https://github\.com/[Pp]ortlyn/[Pp]ortlyn/'
+SAN_REGEXP='^https://github\.com/Portlyn/Portlyn/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+SIGNER_REPO="Portlyn/Portlyn"
 OIDC_ISSUER="https://token.actions.githubusercontent.com"
 
 # The digests below are pinned here, so a bootstrapped cosign is checked against
@@ -145,11 +146,16 @@ if [ -n "$COSIGN" ]; then
   echo "Verifying signature (cosign) ..."
   $DL "$sig" "${release_base}/checksums.txt.sig" || err "could not fetch checksums.txt.sig"
   $DL "$cert" "${release_base}/checksums.txt.pem" || err "could not fetch checksums.txt.pem"
+  signer_ref=""
+  [ "$VERSION" = "latest" ] || signer_ref="refs/tags/${VERSION}"
   "$COSIGN" verify-blob \
     --certificate "$cert" \
     --signature "$sig" \
     --certificate-identity-regexp "$SAN_REGEXP" \
     --certificate-oidc-issuer "$OIDC_ISSUER" \
+    --certificate-github-workflow-repository "$SIGNER_REPO" \
+    --certificate-github-workflow-trigger push \
+    --certificate-github-workflow-ref "$signer_ref" \
     "$sums" >/dev/null 2>&1 || err "cosign signature verification failed for checksums.txt"
   echo "Signature OK."
 else

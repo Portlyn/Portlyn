@@ -564,7 +564,7 @@ Usage:
   portlyn audit compact prune high-volume access rows and re-chain security events (flags: --yes, --no-vacuum)
   portlyn migrate       apply pending schema migrations ('status' to list, 'down <id>' to roll one back)
   portlyn update        download, verify and install the latest release (flags: --check, --version, --no-restart, --unit)
-  portlyn verify-release verify a release signature in-process (--checksums, --bundle, --asset, --asset-name)
+  portlyn verify-release verify a release signature in-process (--checksums, --bundle, --asset, --asset-name, --tag)
   portlyn version       print version and exit
   portlyn help          show this help
 

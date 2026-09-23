@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/sigstore/sigstore-go/pkg/bundle"
+	"github.com/sigstore/sigstore-go/pkg/fulcio/certificate"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore-go/pkg/verify"
 )
@@ -43,9 +44,32 @@ func lookupChecksum(checksumsTxt, assetName string) (string, error) {
 	return "", fmt.Errorf("no checksum entry for %s", assetName)
 }
 
+const (
+	ReleaseOIDCIssuer    = "https://token.actions.githubusercontent.com"
+	ReleaseRepositoryURI = "https://github.com/Portlyn/Portlyn"
+	ReleaseSANRegex      = `^https://github\.com/Portlyn/Portlyn/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`
+	ReleaseTrigger       = "push"
+)
+
 type CosignIdentity struct {
-	SANRegex   string
-	OIDCIssuer string
+	SANRegex            string
+	OIDCIssuer          string
+	SourceRepositoryURI string
+	Trigger             string
+	SourceRef           string
+}
+
+func ReleaseIdentity(tag string) CosignIdentity {
+	id := CosignIdentity{
+		SANRegex:            ReleaseSANRegex,
+		OIDCIssuer:          ReleaseOIDCIssuer,
+		SourceRepositoryURI: ReleaseRepositoryURI,
+		Trigger:             ReleaseTrigger,
+	}
+	if tag = strings.TrimSpace(tag); tag != "" {
+		id.SourceRef = "refs/tags/" + tag
+	}
+	return id
 }
 
 func VerifyCosignBundle(payload []byte, bundleJSON string, identity CosignIdentity) error {
@@ -74,7 +98,22 @@ func VerifyCosignBundle(payload []byte, bundleJSON string, identity CosignIdenti
 		verify.WithTransparencyLog(1),
 		verify.WithObserverTimestamps(1),
 	}
-	certID, err := verify.NewShortCertificateIdentity(identity.OIDCIssuer, "", "", identity.SANRegex)
+	if identity.SANRegex == "" || identity.OIDCIssuer == "" || identity.SourceRepositoryURI == "" || identity.Trigger == "" {
+		return fmt.Errorf("incomplete signer identity")
+	}
+	sanMatcher, err := verify.NewSANMatcher("", identity.SANRegex)
+	if err != nil {
+		return fmt.Errorf("certificate identity: %w", err)
+	}
+	issuerMatcher, err := verify.NewIssuerMatcher(identity.OIDCIssuer, "")
+	if err != nil {
+		return fmt.Errorf("certificate identity: %w", err)
+	}
+	certID, err := verify.NewCertificateIdentity(sanMatcher, issuerMatcher, certificate.Extensions{
+		SourceRepositoryURI: identity.SourceRepositoryURI,
+		BuildTrigger:        identity.Trigger,
+		SourceRepositoryRef: identity.SourceRef,
+	})
 	if err != nil {
 		return fmt.Errorf("certificate identity: %w", err)
 	}
