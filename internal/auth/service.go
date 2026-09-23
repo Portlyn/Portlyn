@@ -259,13 +259,15 @@ func (s *Service) Login(ctx context.Context, email, password string, meta Reques
 	user, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
+			burnPasswordCheck(password)
 			s.observeAuth("password", "invalid_credentials")
 			return nil, ErrInvalidCredentials
 		}
 		return nil, err
 	}
 
-	if user.AuthProvider != "" && user.AuthProvider != domain.AuthProviderLocal && user.PasswordHash == "" {
+	if user.PasswordHash == "" {
+		burnPasswordCheck(password)
 		s.observeAuth("password", "invalid_credentials")
 		return nil, ErrInvalidCredentials
 	}
@@ -546,6 +548,18 @@ const PasswordHashCost = 12
 func HashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), PasswordHashCost)
 	return string(hash), err
+}
+
+var (
+	dummyPasswordHashOnce sync.Once
+	dummyPasswordHash     []byte
+)
+
+func burnPasswordCheck(password string) {
+	dummyPasswordHashOnce.Do(func() {
+		dummyPasswordHash, _ = bcrypt.GenerateFromPassword([]byte("portlyn-dummy-password"), PasswordHashCost)
+	})
+	_ = bcrypt.CompareHashAndPassword(dummyPasswordHash, []byte(password))
 }
 
 func CheckPassword(hash, password string) error {
