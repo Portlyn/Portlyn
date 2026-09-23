@@ -17,6 +17,7 @@ import (
 
 	"portlyn/internal/audit"
 	"portlyn/internal/auth"
+	"portlyn/internal/clientcert"
 	"portlyn/internal/domain"
 	"portlyn/internal/observability"
 )
@@ -48,6 +49,7 @@ type Manager struct {
 	reputation                ReputationBlocklist
 	geoIPFailOpen             bool
 	crowdSecFailOpen          bool
+	clientCertHeaderSecret    string
 }
 
 type RuntimeRoute struct {
@@ -123,6 +125,7 @@ type ManagerOptions struct {
 	GeoIPFailOpen               bool
 	CrowdSecFailOpen            bool
 	BlockPrivateUpstreams       bool
+	ClientCertHeaderSecret      string
 }
 
 type TunnelDialer interface {
@@ -219,6 +222,7 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 		reputation:                options.Reputation,
 		geoIPFailOpen:             options.GeoIPFailOpen,
 		crowdSecFailOpen:          options.CrowdSecFailOpen,
+		clientCertHeaderSecret:    options.ClientCertHeaderSecret,
 	}
 }
 
@@ -386,7 +390,10 @@ func (m *Manager) Handler() http.Handler {
 		if m.allowAdminHost(host, r) {
 			sanitizePortlynIdentityHeaders(r.Header)
 			if fingerprint := clientCertSHA256(r); fingerprint != "" {
-				r.Header.Set("X-Portlyn-Client-Cert-SHA256", fingerprint)
+				r.Header.Set(clientcert.FingerprintHeader, fingerprint)
+				if m.clientCertHeaderSecret != "" {
+					r.Header.Set(clientcert.SignatureHeader, clientcert.Sign(m.clientCertHeaderSecret, fingerprint))
+				}
 			}
 			if m.handleAdminHost(writer, r, path) {
 				outcome = "admin"

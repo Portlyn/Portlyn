@@ -357,6 +357,7 @@ func main() {
 			GeoIPFailOpen:               cfg.GeoIPFailOpen,
 			CrowdSecFailOpen:            cfg.CrowdSecFailOpen,
 			BlockPrivateUpstreams:       !cfg.AllowPrivateUpstreams,
+			ClientCertHeaderSecret:      cfg.SessionBridgeSecret,
 		},
 	)
 
