@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -458,11 +459,22 @@ func splitCSV(value string) []string {
 }
 
 func (m *Manager) BuildPeerSpecs(ctx context.Context) ([]PeerSpec, error) {
+	specs, _, err := m.buildPeerState(ctx)
+	return specs, err
+}
+
+func (m *Manager) BuildForwardRules(ctx context.Context) ([]ForwardRule, error) {
+	_, rules, err := m.buildPeerState(ctx)
+	return rules, err
+}
+
+func (m *Manager) buildPeerState(ctx context.Context) ([]PeerSpec, []ForwardRule, error) {
 	nodes, err := m.nodes.List(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	specs := make([]PeerSpec, 0, len(nodes))
+	nodeRanges := make(map[uint][]netip.Prefix, len(nodes))
 	for _, node := range nodes {
 		pub := strings.TrimSpace(node.WGPublicKey)
 		ip := strings.TrimSpace(node.WGTunnelIP)
@@ -472,11 +484,13 @@ func (m *Manager) BuildPeerSpecs(ctx context.Context) ([]PeerSpec, error) {
 		allowed := []string{ip + "/32"}
 		allowed = append(allowed, splitCSV(node.AdvertisedSubnets)...)
 		specs = append(specs, PeerSpec{PublicKey: pub, PresharedKey: strings.TrimSpace(node.WGPresharedKey), AllowedIPs: allowed})
+		nodeRanges[node.ID] = parsePrefixes(allowed)
 	}
+	var rules []ForwardRule
 	if m.clients != nil {
 		clients, err := m.clients.List(ctx)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, client := range clients {
 			pub := strings.TrimSpace(client.WGPublicKey)
@@ -485,32 +499,96 @@ func (m *Manager) BuildPeerSpecs(ctx context.Context) ([]PeerSpec, error) {
 				continue
 			}
 			specs = append(specs, PeerSpec{PublicKey: pub, AllowedIPs: []string{ip + "/32"}})
+			clientAddr, err := netip.ParseAddr(ip)
+			if err != nil {
+				continue
+			}
+			clientPrefix := []netip.Prefix{netip.PrefixFrom(clientAddr, clientAddr.BitLen())}
+			for _, nodeID := range parseUintCSV(client.AllowedNodeIDs) {
+				ranges := nodeRanges[nodeID]
+				if len(ranges) == 0 {
+					continue
+				}
+				rules = append(rules,
+					ForwardRule{Sources: clientPrefix, Destinations: ranges},
+					ForwardRule{Sources: ranges, Destinations: clientPrefix},
+				)
+			}
 		}
 	}
-	return specs, nil
+	return specs, rules, nil
+}
+
+func (m *Manager) ClientSourcesForNode(ctx context.Context, nodeID uint) ([]string, error) {
+	out := make([]string, 0)
+	if m.clients == nil {
+		return out, nil
+	}
+	clients, err := m.clients.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, client := range clients {
+		ip := strings.TrimSpace(client.WGTunnelIP)
+		if ip == "" || strings.TrimSpace(client.WGPublicKey) == "" || !client.Enabled {
+			continue
+		}
+		for _, id := range parseUintCSV(client.AllowedNodeIDs) {
+			if id == nodeID {
+				out = append(out, ip)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+func parsePrefixes(values []string) []netip.Prefix {
+	out := make([]netip.Prefix, 0, len(values))
+	for _, value := range values {
+		if prefix, err := netip.ParsePrefix(strings.TrimSpace(value)); err == nil {
+			out = append(out, prefix.Masked())
+		}
+	}
+	return out
+}
+
+func parseUintCSV(value string) []uint {
+	parts := splitCSV(value)
+	out := make([]uint, 0, len(parts))
+	for _, part := range parts {
+		id, err := strconv.ParseUint(part, 10, strconv.IntSize)
+		if err != nil || id == 0 {
+			continue
+		}
+		out = append(out, uint(id))
+	}
+	return out
 }
 
 func (m *Manager) applyPeersLocked(ctx context.Context) {
 	if m.server == nil || !m.server.Started() {
 		return
 	}
-	specs, err := m.BuildPeerSpecs(ctx)
+	specs, rules, err := m.buildPeerState(ctx)
 	if err != nil {
 		return
 	}
+	m.server.SetForwardRules(rules)
 	_ = m.server.ApplyPeerSpecs(specs)
 }
 
 func (m *Manager) ApplyPeers(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	specs, err := m.BuildPeerSpecs(ctx)
+	specs, rules, err := m.buildPeerState(ctx)
 	if err != nil {
 		return err
 	}
 	if m.server == nil || !m.server.Started() {
 		return nil
 	}
+	m.server.SetForwardRules(rules)
 	return m.server.ApplyPeerSpecs(specs)
 }
 

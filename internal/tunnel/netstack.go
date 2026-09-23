@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -29,6 +30,8 @@ const nicID = 1
 
 type DialFunc func(network, address string) (net.Conn, error)
 
+type PacketFilter func(src, dst netip.Addr) bool
+
 type NetStack struct {
 	ep             *channel.Endpoint
 	stack          *stack.Stack
@@ -37,6 +40,7 @@ type NetStack struct {
 	closed         chan struct{}
 	closeOnce      sync.Once
 	mtu            int
+	inboundFilter  atomic.Pointer[PacketFilter]
 }
 
 type SubnetProxy struct {
@@ -135,10 +139,35 @@ func (n *NetStack) Write(buf [][]byte, offset int) (int, error) {
 		if packet[0]>>4 != 4 {
 			return 0, syscall.EAFNOSUPPORT
 		}
+		if !n.allowInbound(packet) {
+			continue
+		}
 		pkb := stack.NewPacketBuffer(stack.PacketBufferOptions{Payload: buffer.MakeWithData(packet)})
 		n.ep.InjectInbound(header.IPv4ProtocolNumber, pkb)
 	}
 	return len(buf), nil
+}
+
+func (n *NetStack) SetInboundFilter(filter PacketFilter) {
+	if filter == nil {
+		n.inboundFilter.Store(nil)
+		return
+	}
+	n.inboundFilter.Store(&filter)
+}
+
+func (n *NetStack) allowInbound(packet []byte) bool {
+	filter := n.inboundFilter.Load()
+	if filter == nil {
+		return true
+	}
+	if len(packet) < header.IPv4MinimumSize {
+		return false
+	}
+	ip := header.IPv4(packet)
+	src := netip.AddrFrom4(ip.SourceAddress().As4())
+	dst := netip.AddrFrom4(ip.DestinationAddress().As4())
+	return (*filter)(src, dst)
 }
 
 func (n *NetStack) WriteNotify() {
