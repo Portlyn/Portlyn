@@ -75,8 +75,29 @@ func (s *UserStore) GetByID(ctx context.Context, id uint) (*domain.User, error) 
 	return &user, nil
 }
 
-func (s *UserStore) Update(ctx context.Context, user *domain.User) error {
-	return s.db.WithContext(ctx).Save(user).Error
+func (s *UserStore) UpdateFields(ctx context.Context, user *domain.User, fields ...string) error {
+	return s.UpdateFieldsIf(ctx, user, nil, fields...)
+}
+
+func (s *UserStore) UpdateFieldsIf(ctx context.Context, user *domain.User, guard map[string]any, fields ...string) error {
+	if len(fields) == 0 {
+		return nil
+	}
+	query := s.db.WithContext(ctx).Model(user).Select(fields)
+	if len(guard) > 0 {
+		query = query.Where(guard)
+	}
+	result := query.Updates(user)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		if len(guard) > 0 {
+			return ErrStale
+		}
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *UserStore) UpdateColumns(ctx context.Context, id uint, values map[string]any) error {

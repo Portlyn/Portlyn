@@ -493,7 +493,10 @@ func (s *Service) CompleteAccountSetup(ctx context.Context, userID uint, email, 
 	user.Email = email
 	user.PasswordHash = hash
 	user.MustChangePassword = false
-	if err := s.users.Update(ctx, user); err != nil {
+	if err := s.users.UpdateFieldsIf(ctx, user, map[string]any{"must_change_password": true}, "email", "password_hash", "must_change_password"); err != nil {
+		if errors.Is(err, store.ErrStale) {
+			return nil, ErrAccountSetupDone
+		}
 		return nil, err
 	}
 	s.InvalidateUser(user.ID)
@@ -520,9 +523,13 @@ func (s *Service) ChangeOwnPassword(ctx context.Context, userID uint, currentPas
 	if err != nil {
 		return err
 	}
+	previousHash := user.PasswordHash
 	user.PasswordHash = hash
 	user.MustChangePassword = false
-	if err := s.users.Update(ctx, user); err != nil {
+	if err := s.users.UpdateFieldsIf(ctx, user, map[string]any{"password_hash": previousHash}, "password_hash", "must_change_password"); err != nil {
+		if errors.Is(err, store.ErrStale) {
+			return ErrInvalidCredentials
+		}
 		return err
 	}
 	s.InvalidateUser(user.ID)

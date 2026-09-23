@@ -87,6 +87,7 @@ func (s *Server) handleUpdateUser(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 
 	originalRole := user.Role
 	originalActive := user.Active
+	var fields []string
 
 	if req.Email != nil {
 		email := strings.ToLower(strings.TrimSpace(*req.Email))
@@ -98,13 +99,16 @@ func (s *Server) handleUpdateUser(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 			return
 		}
 		user.Email = email
+		fields = append(fields, "email")
 	}
 
 	if req.Role != nil {
 		user.Role = *req.Role
+		fields = append(fields, "role")
 	}
 	if req.Active != nil {
 		user.Active = *req.Active
+		fields = append(fields, "active")
 	}
 
 	if err := s.preventRemovingLastActiveAdmin(r, user.ID, originalRole, originalActive, user.Role, user.Active); err != nil {
@@ -120,9 +124,10 @@ func (s *Server) handleUpdateUser(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		}
 		user.PasswordHash = hash
 		user.MustChangePassword = true
+		fields = append(fields, "password_hash", "must_change_password")
 	}
 
-	if err := s.users.Update(r.Context(), user); err != nil {
+	if err := s.users.UpdateFields(r.Context(), user, fields...); err != nil {
 		s.internalError(w, err)
 		return
 	}

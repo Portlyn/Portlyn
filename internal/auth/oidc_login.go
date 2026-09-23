@@ -117,11 +117,13 @@ func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity
 				user.AuthProviderRef = ref
 			}
 			user.AuthIssuer = authenticator.Issuer()
+			fields := []string{"display_name", "username", "auth_provider", "auth_provider_ref", "auth_issuer"}
 			if authenticator.cfg.ManageRoles {
 				s.logOIDCRoleChange(user, role)
 				user.Role = role
+				fields = append(fields, "role")
 			}
-			if err := s.users.Update(ctx, user); err != nil {
+			if err := s.users.UpdateFields(ctx, user, fields...); err != nil {
 				return nil, err
 			}
 			return user, nil
