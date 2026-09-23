@@ -51,6 +51,7 @@ type selfBootstrapResponse struct {
 	TunnelIP          string   `json:"tunnel_ip"`
 	ServerPublicKey   string   `json:"server_public_key"`
 	ServerEndpoint    string   `json:"server_endpoint"`
+	ServerTunnelIP    string   `json:"server_tunnel_ip"`
 	PresharedKey      string   `json:"preshared_key"`
 	AllowedIPs        []string `json:"allowed_ips"`
 	Keepalive         int      `json:"keepalive"`
@@ -60,6 +61,8 @@ type selfBootstrapResponse struct {
 type tunnelTargetsResponse struct {
 	Targets           []targetSpec `json:"targets"`
 	AdvertisedSubnets []string     `json:"advertised_subnets"`
+	ServerTunnelIP    string       `json:"server_tunnel_ip"`
+	AllowedSources    []string     `json:"allowed_sources"`
 }
 
 var version = "dev-agent"
@@ -148,6 +151,10 @@ func main() {
 		log.Fatalf("parse tunnel ip: %v", err)
 	}
 	subnets := parseCIDRs(state.Subnets)
+	peers := &peerPolicy{}
+	if state.ServerTunnelIP != "" && !peers.setHub(state.ServerTunnelIP) {
+		log.Printf("ignoring invalid saved hub tunnel ip %q", state.ServerTunnelIP)
+	}
 	wgClient := tunnel.NewClient(tunnel.ClientOptions{
 		PrivateKey:      state.WGPrivateKey,
 		ServerPublicKey: state.ServerPublicKey,
@@ -156,6 +163,7 @@ func main() {
 		TunnelIP:        tunnelIP,
 		AllowedIPs:      state.AllowedIPs,
 		Subnets:         subnets,
+		AllowSource:     peers.allowSubnetSource,
 		Keepalive:       state.Keepalive,
 	})
 	if err := wgClient.Start(ctx); err != nil {
@@ -168,16 +176,28 @@ func main() {
 		log.Printf("subnet proxy active for %v", state.Subnets)
 	}
 
-	fwd := newForwarder(wgClient)
+	fwd := newForwarder(wgClient, peers)
 	defer fwd.stop()
 
 	refreshTargets := func() {
-		targets, err := fetchTargets(client, api, state.NodeID, state.HeartbeatToken)
+		result, err := fetchTargets(client, api, state.NodeID, state.HeartbeatToken)
 		if err != nil {
 			log.Printf("fetch tunnel targets: %v", err)
 			return
 		}
-		fwd.reconcile(targets)
+		if hubIP := strings.TrimSpace(result.ServerTunnelIP); hubIP != "" && hubIP != state.ServerTunnelIP {
+			if peers.setHub(hubIP) {
+				state.ServerTunnelIP = hubIP
+				if err := saveState(resolvedStatePath, state); err != nil {
+					log.Printf("save state: %v", err)
+				}
+			}
+		}
+		if peers.hub.Load() == nil {
+			log.Print("hub tunnel ip unknown; relay connections are rejected until the hub reports it")
+		}
+		peers.setSources(result.AllowedSources)
+		fwd.reconcile(result.Targets)
 	}
 	refreshTargets()
 
@@ -227,6 +247,7 @@ func provision(client *http.Client, api, token, name, description, version strin
 		TunnelIP:        boot.TunnelIP,
 		ServerPublicKey: boot.ServerPublicKey,
 		ServerEndpoint:  boot.ServerEndpoint,
+		ServerTunnelIP:  strings.TrimSpace(boot.ServerTunnelIP),
 		PresharedKey:    boot.PresharedKey,
 		AllowedIPs:      boot.AllowedIPs,
 		Subnets:         boot.AdvertisedSubnets,
@@ -290,7 +311,7 @@ func selfBootstrap(client *http.Client, api, heartbeatToken string, nodeID uint,
 	return &result, nil
 }
 
-func fetchTargets(client *http.Client, api string, nodeID uint, heartbeatToken string) ([]targetSpec, error) {
+func fetchTargets(client *http.Client, api string, nodeID uint, heartbeatToken string) (*tunnelTargetsResponse, error) {
 	url := fmt.Sprintf("%s/api/v1/nodes/%d/tunnel-targets", api, nodeID)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -310,7 +331,7 @@ func fetchTargets(client *http.Client, api string, nodeID uint, heartbeatToken s
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
-	return result.Targets, nil
+	return &result, nil
 }
 
 func sendHeartbeat(client *http.Client, endpoint, heartbeatToken, version string, wgClient *tunnel.Client) {

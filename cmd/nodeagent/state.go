@@ -14,6 +14,7 @@ type agentState struct {
 	TunnelIP        string   `json:"tunnel_ip"`
 	ServerPublicKey string   `json:"server_public_key"`
 	ServerEndpoint  string   `json:"server_endpoint"`
+	ServerTunnelIP  string   `json:"server_tunnel_ip,omitempty"`
 	PresharedKey    string   `json:"preshared_key"`
 	AllowedIPs      []string `json:"allowed_ips"`
 	Subnets         []string `json:"subnets"`

@@ -157,6 +157,8 @@ type tunnelTargetItem struct {
 type tunnelTargetsResponse struct {
 	Targets           []tunnelTargetItem `json:"targets"`
 	AdvertisedSubnets []string           `json:"advertised_subnets"`
+	ServerTunnelIP    string             `json:"server_tunnel_ip,omitempty"`
+	AllowedSources    []string           `json:"allowed_sources"`
 }
 
 func (s *Server) handleNodeSelfBootstrap(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -220,6 +222,7 @@ func (s *Server) handleNodeSelfBootstrap(w stdhttp.ResponseWriter, r *stdhttp.Re
 		"tunnel_ip":          result.Node.WGTunnelIP,
 		"server_public_key":  result.ClientBundle.ServerPublicKey,
 		"server_endpoint":    result.ClientBundle.ServerEndpoint,
+		"server_tunnel_ip":   result.ServerTunnelIP,
 		"preshared_key":      result.ClientBundle.PresharedKey,
 		"allowed_ips":        result.ClientBundle.AllowedIPs,
 		"keepalive":          result.ClientBundle.Keepalive,
@@ -281,9 +284,24 @@ func (s *Server) handleNodeTunnelTargets(w stdhttp.ResponseWriter, r *stdhttp.Re
 			LocalAddr:  net.JoinHostPort(host, portStr),
 		})
 	}
+	settings, err := s.appSettings.Get(r.Context())
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	allowedSources := []string{}
+	if s.tunnel != nil {
+		allowedSources, err = s.tunnel.ClientSourcesForNode(r.Context(), node.ID)
+		if err != nil {
+			s.internalError(w, err)
+			return
+		}
+	}
 	writeJSON(w, stdhttp.StatusOK, tunnelTargetsResponse{
 		Targets:           targets,
 		AdvertisedSubnets: splitSubnetCSV(node.AdvertisedSubnets),
+		ServerTunnelIP:    strings.TrimSpace(settings.TunnelServerTunnelIP),
+		AllowedSources:    allowedSources,
 	})
 }
 

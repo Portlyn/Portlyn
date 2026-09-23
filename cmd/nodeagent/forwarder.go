@@ -3,7 +3,10 @@ package main
 import (
 	"log"
 	"net"
+	"net/netip"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -19,7 +22,69 @@ type targetSpec struct {
 type forwarder struct {
 	mu        sync.Mutex
 	client    tunnelClient
+	peers     *peerPolicy
 	listeners map[int]*activeListener
+}
+
+type peerPolicy struct {
+	hub     atomic.Pointer[netip.Addr]
+	sources atomic.Pointer[[]netip.Addr]
+}
+
+func (p *peerPolicy) setHub(value string) bool {
+	addr, err := netip.ParseAddr(strings.TrimSpace(value))
+	if err != nil {
+		return false
+	}
+	addr = addr.Unmap()
+	p.hub.Store(&addr)
+	return true
+}
+
+func (p *peerPolicy) setSources(values []string) {
+	out := make([]netip.Addr, 0, len(values))
+	for _, value := range values {
+		if addr, err := netip.ParseAddr(strings.TrimSpace(value)); err == nil {
+			out = append(out, addr.Unmap())
+		}
+	}
+	p.sources.Store(&out)
+}
+
+func (p *peerPolicy) isHub(addr netip.Addr) bool {
+	hub := p.hub.Load()
+	return hub != nil && addr.IsValid() && *hub == addr.Unmap()
+}
+
+func (p *peerPolicy) allowSubnetSource(addr netip.Addr) bool {
+	if p.isHub(addr) {
+		return true
+	}
+	sources := p.sources.Load()
+	if sources == nil {
+		return false
+	}
+	addr = addr.Unmap()
+	for _, allowed := range *sources {
+		if allowed == addr {
+			return true
+		}
+	}
+	return false
+}
+
+func remoteAddrOf(conn net.Conn) netip.Addr {
+	if conn == nil || conn.RemoteAddr() == nil {
+		return netip.Addr{}
+	}
+	if tcp, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+		return tcp.AddrPort().Addr().Unmap()
+	}
+	parsed, err := netip.ParseAddrPort(conn.RemoteAddr().String())
+	if err != nil {
+		return netip.Addr{}
+	}
+	return parsed.Addr().Unmap()
 }
 
 type activeListener struct {
@@ -27,8 +92,8 @@ type activeListener struct {
 	localAddr string
 }
 
-func newForwarder(client tunnelClient) *forwarder {
-	return &forwarder{client: client, listeners: make(map[int]*activeListener)}
+func newForwarder(client tunnelClient, peers *peerPolicy) *forwarder {
+	return &forwarder{client: client, peers: peers, listeners: make(map[int]*activeListener)}
 }
 
 func (f *forwarder) reconcile(targets []targetSpec) {
@@ -72,6 +137,11 @@ func (f *forwarder) accept(active *activeListener) {
 		conn, err := active.listener.Accept()
 		if err != nil {
 			return
+		}
+		if remote := remoteAddrOf(conn); !f.peers.isHub(remote) {
+			log.Printf("forwarder: rejected relay connection from %s", remote)
+			_ = conn.Close()
+			continue
 		}
 		go handleConn(conn, active.localAddr)
 	}

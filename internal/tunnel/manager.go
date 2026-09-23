@@ -240,6 +240,7 @@ type BootstrapResult struct {
 	ClientConfig      string
 	ClientBundle      ClientBundle
 	ServerPublicKey   string
+	ServerTunnelIP    string
 	AdvertisedSubnets []string
 }
 
@@ -349,6 +350,7 @@ func (m *Manager) BootstrapNode(ctx context.Context, nodeID uint, opts Bootstrap
 		ClientConfig:      RenderClientConfig(bundle),
 		ClientBundle:      bundle,
 		ServerPublicKey:   settings.TunnelServerPublicKey,
+		ServerTunnelIP:    strings.TrimSpace(settings.TunnelServerTunnelIP),
 		AdvertisedSubnets: splitCSV(node.AdvertisedSubnets),
 	}, nil
 }

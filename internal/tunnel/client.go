@@ -29,6 +29,7 @@ type ClientOptions struct {
 	TunnelIP        netip.Addr
 	AllowedIPs      []string
 	Subnets         []netip.Prefix
+	AllowSource     func(netip.Addr) bool
 	MTU             int
 	Keepalive       int
 	LogLevel        int
@@ -88,7 +89,7 @@ func (c *Client) Start(ctx context.Context) error {
 
 	var proxy *SubnetProxy
 	if len(c.options.Subnets) > 0 {
-		proxy = &SubnetProxy{Subnets: c.options.Subnets, Dial: net.Dial}
+		proxy = &SubnetProxy{Subnets: c.options.Subnets, Dial: net.Dial, AllowSource: c.options.AllowSource}
 	}
 	tunDevice, netStack, err := CreateNetStackWithProxy([]netip.Addr{c.tunnelIP}, c.options.MTU, proxy)
 	if err != nil {
