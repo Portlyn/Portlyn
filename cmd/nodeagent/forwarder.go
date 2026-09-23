@@ -41,6 +41,21 @@ func (p *peerPolicy) setHub(value string) bool {
 	return true
 }
 
+func guessHubIP(tunnelIP netip.Addr, allowedIPs []string) (netip.Addr, bool) {
+	for _, entry := range allowedIPs {
+		prefix, err := netip.ParsePrefix(strings.TrimSpace(entry))
+		if err != nil || prefix.Bits() >= prefix.Addr().BitLen()-1 || !prefix.Contains(tunnelIP) {
+			continue
+		}
+		hub := prefix.Masked().Addr().Next()
+		if hub == tunnelIP {
+			return netip.Addr{}, false
+		}
+		return hub, true
+	}
+	return netip.Addr{}, false
+}
+
 func (p *peerPolicy) setSources(values []string) {
 	out := make([]netip.Addr, 0, len(values))
 	for _, value := range values {

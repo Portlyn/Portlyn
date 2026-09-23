@@ -113,3 +113,30 @@ func TestPeerPolicySubnetSources(t *testing.T) {
 		t.Fatal("expected other node source to be rejected")
 	}
 }
+
+func TestGuessHubIP(t *testing.T) {
+	cases := []struct {
+		tunnel  string
+		allowed []string
+		want    string
+	}{
+		{"10.42.0.5", []string{"10.42.0.0/16"}, "10.42.0.1"},
+		{"10.42.0.5", []string{"192.168.1.0/24", "10.42.0.0/16"}, "10.42.0.1"},
+		{"10.99.3.7", []string{"10.99.0.0/16"}, "10.99.0.1"},
+		{"10.42.0.1", []string{"10.42.0.0/16"}, ""},
+		{"10.42.0.5", []string{"10.42.0.5/32"}, ""},
+		{"10.42.0.5", nil, ""},
+	}
+	for _, tc := range cases {
+		got, ok := guessHubIP(netip.MustParseAddr(tc.tunnel), tc.allowed)
+		if tc.want == "" {
+			if ok {
+				t.Errorf("guessHubIP(%s, %v) = %s, want none", tc.tunnel, tc.allowed, got)
+			}
+			continue
+		}
+		if !ok || got.String() != tc.want {
+			t.Errorf("guessHubIP(%s, %v) = %s, %v, want %s", tc.tunnel, tc.allowed, got, ok, tc.want)
+		}
+	}
+}

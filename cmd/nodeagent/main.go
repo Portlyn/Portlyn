@@ -155,6 +155,12 @@ func main() {
 	if state.ServerTunnelIP != "" && !peers.setHub(state.ServerTunnelIP) {
 		log.Printf("ignoring invalid saved hub tunnel ip %q", state.ServerTunnelIP)
 	}
+	if peers.hub.Load() == nil {
+		if guess, ok := guessHubIP(tunnelIP, state.AllowedIPs); ok {
+			peers.setHub(guess.String())
+			log.Printf("hub did not report its tunnel ip; assuming %s until it does", guess)
+		}
+	}
 	wgClient := tunnel.NewClient(tunnel.ClientOptions{
 		PrivateKey:      state.WGPrivateKey,
 		ServerPublicKey: state.ServerPublicKey,
