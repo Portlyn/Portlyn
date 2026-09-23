@@ -138,6 +138,14 @@ func (s *Server) handleDeleteNode(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		return
 	}
 	_ = s.audit.Log(r.Context(), s.currentUserID(r), "delete", "node", &id, map[string]any{"id": id})
+	if s.tunnel != nil {
+		if err := s.tunnel.WriteServerConfig(r.Context()); err != nil {
+			s.logger.Warn("failed to write tunnel server config", "error", err)
+		}
+		if err := s.tunnel.ApplyPeers(r.Context()); err != nil {
+			s.logger.Warn("failed to apply tunnel peers after node delete", "node_id", id, "error", err)
+		}
+	}
 	w.WriteHeader(stdhttp.StatusNoContent)
 }
 
