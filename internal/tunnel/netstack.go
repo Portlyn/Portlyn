@@ -44,8 +44,9 @@ type NetStack struct {
 }
 
 type SubnetProxy struct {
-	Subnets []netip.Prefix
-	Dial    DialFunc
+	Subnets     []netip.Prefix
+	Dial        DialFunc
+	AllowSource func(netip.Addr) bool
 }
 
 func CreateNetStack(localAddrs []netip.Addr, mtu int) (tun.Device, *NetStack, error) {
@@ -71,7 +72,7 @@ func CreateNetStackWithProxy(localAddrs []netip.Addr, mtu int, proxy *SubnetProx
 		return nil, nil, fmt.Errorf("enable TCP SACK: %v", err)
 	}
 	if proxy != nil && len(proxy.Subnets) > 0 {
-		dev.registerSubnetProxyHandlers(proxy.Dial)
+		dev.registerSubnetProxyHandlers(proxy)
 	}
 	dev.ep.AddNotify(dev)
 	if err := dev.stack.CreateNIC(nicID, dev.ep); err != nil {
@@ -222,12 +223,35 @@ func (n *NetStack) EnableForwarding() error {
 	return nil
 }
 
-func (n *NetStack) registerSubnetProxyHandlers(dial DialFunc) {
+func (proxy *SubnetProxy) permits(id stack.TransportEndpointID) bool {
+	dst := netip.AddrFrom4(id.LocalAddress.As4())
+	inSubnet := false
+	for _, subnet := range proxy.Subnets {
+		if subnet.Contains(dst) {
+			inSubnet = true
+			break
+		}
+	}
+	if !inSubnet {
+		return false
+	}
+	if proxy.AllowSource == nil {
+		return true
+	}
+	return proxy.AllowSource(netip.AddrFrom4(id.RemoteAddress.As4()))
+}
+
+func (n *NetStack) registerSubnetProxyHandlers(proxy *SubnetProxy) {
+	dial := proxy.Dial
 	if dial == nil {
 		dial = net.Dial
 	}
 	tcpFwd := tcp.NewForwarder(n.stack, 0, 2048, func(req *tcp.ForwarderRequest) {
 		id := req.ID()
+		if !proxy.permits(id) {
+			req.Complete(true)
+			return
+		}
 		target := net.JoinHostPort(addrToIP(id.LocalAddress), strconv.Itoa(int(id.LocalPort)))
 		var wq waiter.Queue
 		ep, tErr := req.CreateEndpoint(&wq)
@@ -242,6 +266,9 @@ func (n *NetStack) registerSubnetProxyHandlers(dial DialFunc) {
 
 	udpFwd := udp.NewForwarder(n.stack, func(req *udp.ForwarderRequest) {
 		id := req.ID()
+		if !proxy.permits(id) {
+			return
+		}
 		target := net.JoinHostPort(addrToIP(id.LocalAddress), strconv.Itoa(int(id.LocalPort)))
 		var wq waiter.Queue
 		ep, tErr := req.CreateEndpoint(&wq)
