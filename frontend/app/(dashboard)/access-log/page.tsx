@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Button, Code, Drawer, Group, Paper, Select, Skeleton, Stack, Switch, Table, Text, TextInput } from "@mantine/core";
+import { Badge, Button, Code, Drawer, Group, Paper, Select, SimpleGrid, Skeleton, Stack, Switch, Table, Text, TextInput } from "@mantine/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AdminOnly } from "@/components/admin-only";
@@ -102,7 +102,7 @@ export default function AccessLogPage() {
   return (
     <AdminOnly>
       <Stack gap="lg">
-        <Group grow align="flex-end">
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 5 }}>
           <TextInput placeholder="Host" value={draft.host} onChange={(event) => setDraftValue("host")(event.currentTarget.value)} />
           <TextInput placeholder="Status, e.g. 404 or 4xx" value={draft.status} onChange={(event) => setDraftValue("status")(event.currentTarget.value)} />
           <TextInput placeholder="Client IP" value={draft.ip} onChange={(event) => setDraftValue("ip")(event.currentTarget.value)} />
@@ -118,7 +118,7 @@ export default function AccessLogPage() {
             value={draft.outcome}
             onChange={(value) => setDraftValue("outcome")(value || "")}
           />
-        </Group>
+        </SimpleGrid>
         <Group justify="space-between">
           <Switch label="Live" checked={live} onChange={(event) => setLive(event.currentTarget.checked)} />
           <Group gap="xs">
