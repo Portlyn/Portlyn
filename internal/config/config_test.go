@@ -115,3 +115,25 @@ func TestLoadGeneratesSecretsInDevMode(t *testing.T) {
 		t.Fatal("expected generated non-empty secrets in insecure dev mode")
 	}
 }
+
+func TestTrustedProxyCIDRsAlwaysIncludeLoopback(t *testing.T) {
+	setStrongSecrets(t)
+	t.Setenv("TRUSTED_PROXY_CIDRS", "10.10.11.14/32")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	want := []string{"10.10.11.14/32", "127.0.0.1/32", "::1/128"}
+	if strings.Join(cfg.TrustedProxyCIDRs, ",") != strings.Join(want, ",") {
+		t.Fatalf("expected %v, got %v", want, cfg.TrustedProxyCIDRs)
+	}
+
+	t.Setenv("TRUSTED_PROXY_CIDRS", "")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if strings.Join(cfg.TrustedProxyCIDRs, ",") != "127.0.0.1/32,::1/128" {
+		t.Fatalf("expected loopback defaults, got %v", cfg.TrustedProxyCIDRs)
+	}
+}
