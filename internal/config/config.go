@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -169,7 +170,7 @@ func Load() (Config, error) {
 		RefreshTokenTTL:                 getEnvDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),
 		LogLevel:                        getEnvLogLevel("LOG_LEVEL", slog.LevelInfo),
 		AllowedOrigins:                  getEnvList("CORS_ALLOWED_ORIGINS", []string{"http://localhost", "http://127.0.0.1"}),
-		TrustedProxyCIDRs:               getEnvList("TRUSTED_PROXY_CIDRS", []string{"127.0.0.1/32", "::1/128"}),
+		TrustedProxyCIDRs:               withLoopbackCIDRs(getEnvList("TRUSTED_PROXY_CIDRS", nil)),
 		ExposeAuthTokens:                getEnvBool("EXPOSE_AUTH_TOKENS", false),
 		AdminEmail:                      strings.TrimSpace(os.Getenv("ADMIN_EMAIL")),
 		AdminPassword:                   os.Getenv("ADMIN_PASSWORD"),
@@ -549,6 +550,16 @@ func getEnvLogLevel(key string, fallback slog.Level) slog.Level {
 		}
 		return fallback
 	}
+}
+
+func withLoopbackCIDRs(cidrs []string) []string {
+	out := append([]string(nil), cidrs...)
+	for _, loopback := range []string{"127.0.0.1/32", "::1/128"} {
+		if !slices.Contains(out, loopback) {
+			out = append(out, loopback)
+		}
+	}
+	return out
 }
 
 func getEnvList(key string, fallback []string) []string {
