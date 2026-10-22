@@ -3,8 +3,10 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	stdhttp "net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -132,7 +134,7 @@ func NewServer(
 		db:               db,
 		healthChecks:     healthChecks,
 		metrics:          metrics,
-		validate:         validator.New(validator.WithRequiredStructEnabled()),
+		validate:         newRequestValidator(),
 		auth:             authService,
 		audit:            auditLogger,
 		acme:             acmeManager,
@@ -473,6 +475,18 @@ func (s *Server) decodeAndValidate(w stdhttp.ResponseWriter, r *stdhttp.Request,
 	return true
 }
 
+func newRequestValidator() *validator.Validate {
+	v := validator.New(validator.WithRequiredStructEnabled())
+	v.RegisterTagNameFunc(func(field reflect.StructField) string {
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		if name == "" || name == "-" {
+			return field.Name
+		}
+		return name
+	})
+	return v
+}
+
 func formatValidationError(err error) string {
 	var verrs validator.ValidationErrors
 	if !errors.As(err, &verrs) || len(verrs) == 0 {
@@ -480,6 +494,9 @@ func formatValidationError(err error) string {
 	}
 	fields := make([]string, 0, len(verrs))
 	for _, fe := range verrs {
+		if fe.Field() == "name" && fe.Tag() == "hostname_rfc1123" && strings.Contains(fmt.Sprint(fe.Value()), "*") {
+			return "wildcard hostnames are not supported; add the base domain and create a wildcard certificate for it"
+		}
 		fields = append(fields, fe.Field())
 	}
 	return "invalid or missing fields: " + strings.Join(fields, ", ")
