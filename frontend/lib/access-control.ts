@@ -54,6 +54,7 @@ export function defaultServicePayload(service?: Partial<Service>): ServicePayloa
     blocked_countries: [...(service?.blocked_countries || [])],
     access_windows: [...(service?.access_windows || [])],
     access_rules: (service?.access_rules || []).map((rule) => ({ ...rule, sources: [...rule.sources], paths: [...rule.paths] })),
+    login_hosts: [...(service?.login_hosts || [])],
     node_id: service?.node_id ?? null
   };
 }

@@ -337,6 +337,7 @@ export interface Service {
   blocked_countries: string[];
   access_windows: AccessWindow[];
   access_rules?: AccessRule[];
+  login_hosts?: string[];
   service_groups?: ServiceGroup[];
   inherited_from_group?: { id: number; name: string } | null;
   service_overrides_group?: boolean;
@@ -684,6 +685,7 @@ export interface ServicePayload {
   blocked_countries: string[];
   access_windows: AccessWindow[];
   access_rules: AccessRule[];
+  login_hosts: string[];
   node_id?: number | null;
 }
 
