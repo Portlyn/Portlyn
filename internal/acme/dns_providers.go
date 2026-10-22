@@ -35,7 +35,11 @@ func buildDNSProvider(secrets []string, item *domain.DNSProvider) (libdns.Record
 	}
 	switch item.Type {
 	case domain.DNSProviderTypeCloudflare:
-		provider := &cloudflareProvider{apiToken: strings.TrimSpace(config["api_token"]), client: &http.Client{Timeout: 15 * time.Second}}
+		token := normalizeAPIToken(config["api_token"])
+		if token == "" {
+			return nil, nil, fmt.Errorf("cloudflare api token is empty")
+		}
+		provider := &cloudflareProvider{apiToken: token, client: &http.Client{Timeout: 15 * time.Second}}
 		return provider, provider, nil
 	case domain.DNSProviderTypeHetzner:
 		provider := &hetznerProvider{apiToken: strings.TrimSpace(config["dns_api_token"]), client: &http.Client{Timeout: 15 * time.Second}}
@@ -58,6 +62,15 @@ func buildDNSProvider(secrets []string, item *domain.DNSProvider) (libdns.Record
 	default:
 		return nil, nil, fmt.Errorf("unsupported dns provider type %q", item.Type)
 	}
+}
+
+func normalizeAPIToken(raw string) string {
+	token := strings.TrimSpace(raw)
+	token = strings.Trim(token, `"'`)
+	if len(token) > 7 && strings.EqualFold(token[:7], "bearer ") {
+		token = token[7:]
+	}
+	return strings.TrimSpace(token)
 }
 
 type cloudflareProvider struct {
@@ -201,6 +214,9 @@ func (p *cloudflareProvider) request(ctx context.Context, method, endpoint strin
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		raw, _ := io.ReadAll(resp.Body)
+		if bytes.Contains(raw, []byte(`"code":6111`)) {
+			return fmt.Errorf("cloudflare rejected the api token format; use an API token with Zone.DNS edit permission, not the Global API Key: %s", strings.TrimSpace(string(raw)))
+		}
 		return fmt.Errorf("cloudflare api error: %s", strings.TrimSpace(string(raw)))
 	}
 	if out == nil {

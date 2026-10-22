@@ -3,6 +3,7 @@ package http
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	stdhttp "net/http"
 	"net/url"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"portlyn/internal/domain"
+	"portlyn/internal/tunnel"
 )
 
 func (s *Server) handleListNodeEnrollmentTokens(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -97,6 +99,16 @@ func (s *Server) handleEnrollNode(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 	if err != nil {
 		writeError(w, stdhttp.StatusUnauthorized, "invalid_enrollment_token", "invalid or expired enrollment token")
 		return
+	}
+	if s.tunnel != nil {
+		if err := s.tunnel.ServerReady(r.Context()); err != nil {
+			if errors.Is(err, tunnel.ErrInvalidServerSettings) {
+				writeError(w, stdhttp.StatusPreconditionFailed, "tunnel_not_configured", "enable the tunnel in settings before enrolling nodes; the enrollment token was not used")
+				return
+			}
+			s.internalError(w, err)
+			return
+		}
 	}
 	heartbeatToken, err := randomEnrollmentToken()
 	if err != nil {
