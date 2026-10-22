@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
+	"portlyn/internal/accesslog"
 	"portlyn/internal/audit"
 	"portlyn/internal/auth"
 	"portlyn/internal/clientcert"
@@ -50,6 +51,7 @@ type Manager struct {
 	geoIPFailOpen             bool
 	crowdSecFailOpen          bool
 	clientCertHeaderSecret    string
+	accessLog                 *accesslog.Recorder
 	deniedAudit               *denialThrottle
 }
 
@@ -128,6 +130,7 @@ type ManagerOptions struct {
 	CrowdSecFailOpen            bool
 	BlockPrivateUpstreams       bool
 	ClientCertHeaderSecret      string
+	AccessLog                   *accesslog.Recorder
 }
 
 type TunnelDialer interface {
@@ -225,6 +228,7 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 		geoIPFailOpen:             options.GeoIPFailOpen,
 		crowdSecFailOpen:          options.CrowdSecFailOpen,
 		clientCertHeaderSecret:    options.ClientCertHeaderSecret,
+		accessLog:                 options.AccessLog,
 		deniedAudit:               newDenialThrottle(time.Minute, 60),
 	}
 }
@@ -656,6 +660,32 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 	}
 	if m.logger != nil {
 		m.logger.Info("proxy request completed", args...)
+	}
+	if m.accessLog != nil && outcome != "admin" {
+		entry := accesslog.Entry{
+			Time:       startedAt.UTC(),
+			RequestID:  requestID,
+			Method:     r.Method,
+			Host:       normalizeHost(r.Host),
+			Path:       r.URL.Path,
+			Status:     statusCode,
+			LatencyMs:  latency.Milliseconds(),
+			Bytes:      writer.BytesWritten(),
+			RemoteAddr: remoteAddr,
+			UserAgent:  r.UserAgent(),
+			Referer:    r.Referer(),
+			Outcome:    outcome,
+			Reason:     reason,
+		}
+		if route != nil {
+			entry.ServiceID = route.ServiceID
+			entry.ServiceName = route.ServiceName
+		}
+		if user != nil {
+			entry.UserID = &user.ID
+			entry.UserEmail = user.Email
+		}
+		m.accessLog.Record(entry)
 	}
 	if m.metrics != nil {
 		serviceName := "unknown"

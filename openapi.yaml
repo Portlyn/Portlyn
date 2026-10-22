@@ -1003,6 +1003,21 @@ paths:
       responses:
         "200": { description: List }
 
+  /access-logs:
+    get:
+      summary: Recent proxied requests, newest first (admin only)
+      parameters:
+        - { in: query, name: host, schema: { type: string } }
+        - { in: query, name: service_id, schema: { type: integer } }
+        - { in: query, name: status, schema: { type: string }, description: "Exact code or a class like 4xx" }
+        - { in: query, name: ip, schema: { type: string }, description: Client IP prefix }
+        - { in: query, name: q, schema: { type: string }, description: Matches path, user agent or user email }
+        - { in: query, name: outcome, schema: { type: string } }
+        - { in: query, name: before, schema: { type: string, format: date-time } }
+        - { in: query, name: limit, schema: { type: integer, default: 200, maximum: 1000 } }
+      responses:
+        "200": { description: List }
+
   /system/overview:
     get:
       summary: System overview, health, counts and warnings

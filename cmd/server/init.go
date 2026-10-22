@@ -272,6 +272,12 @@ const optionalEnvReference = `
 #NODE_HEARTBEAT_AUTH_FAIL_RATE_LIMIT=20
 #NODE_HEARTBEAT_AUTH_FAIL_RATE_WINDOW=1m
 
+# Access log of proxied requests, kept in memory for the dashboard and optionally written to a file
+#ACCESS_LOG_BUFFER=2000
+#ACCESS_LOG_PATH=/data/logs/access.log
+#ACCESS_LOG_MAX_SIZE_MB=100
+#ACCESS_LOG_MAX_FILES=5
+
 # Audit log
 #AUDIT_BUFFER_SIZE=1024
 #AUDIT_BATCH_SIZE=128
