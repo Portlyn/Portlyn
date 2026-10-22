@@ -3,6 +3,7 @@
 import { Alert, Button, Checkbox, NumberInput, Select, Stack, TagsInput, Text, TextInput } from "@mantine/core";
 import { useEffect, useState } from "react";
 
+import { hasDate } from "@/lib/format";
 import type { Certificate, CertificatePayload, DNSProvider, Domain } from "@/lib/types";
 
 const defaults: CertificatePayload = {
@@ -41,7 +42,7 @@ export function CertificateForm({
     challenge_type: initialValues?.challenge_type || defaults.challenge_type,
     issuer: initialValues?.issuer || defaults.issuer,
     sans: initialValues?.sans?.map((item) => item.domain_name) || defaults.sans,
-    expires_at: initialValues?.expires_at ? initialValues.expires_at.slice(0, 10) : defaults.expires_at,
+    expires_at: hasDate(initialValues?.expires_at) ? initialValues.expires_at.slice(0, 10) : defaults.expires_at,
     renewal_window_days: initialValues?.renewal_window_days ?? defaults.renewal_window_days,
     is_auto_renew: initialValues?.is_auto_renew ?? defaults.is_auto_renew,
     dns_provider_id: initialValues?.dns_provider_id ?? defaults.dns_provider_id
@@ -51,6 +52,11 @@ export function CertificateForm({
   useEffect(() => {
     setValues(getInitialState());
   }, [initialValues, domains]);
+
+  const wildcardNames = (domainId: number) => {
+    const base = (domainLookup.get(domainId) || "").replace(/^\*\./, "");
+    return { primary: base ? `*.${base}` : "", base };
+  };
 
   const wildcardNeedsDNS = values.type === "wildcard" || values.primary_domain?.startsWith("*.");
   const providerRequired = values.challenge_type === "dns-01";
@@ -64,6 +70,11 @@ export function CertificateForm({
         value={String(values.domain_id)}
         onChange={(value) => {
           const nextDomainId = Number(value || 0);
+          if (values.type === "wildcard") {
+            const { primary, base } = wildcardNames(nextDomainId);
+            setValues({ ...values, domain_id: nextDomainId, primary_domain: primary, sans: base ? [base] : [] });
+            return;
+          }
           setValues({
             ...values,
             domain_id: nextDomainId,
@@ -87,15 +98,28 @@ export function CertificateForm({
         value={values.type}
         onChange={(value) => {
           const nextType = (value || "single") as CertificatePayload["type"];
+          if (nextType === "wildcard") {
+            const { primary, base } = wildcardNames(values.domain_id);
+            setValues({
+              ...values,
+              type: nextType,
+              challenge_type: "dns-01",
+              primary_domain: primary || values.primary_domain,
+              sans: base && !values.sans.includes(base) ? [base, ...values.sans.filter((name) => name !== primary)] : values.sans
+            });
+            return;
+          }
           setValues({
             ...values,
             type: nextType,
-            challenge_type: nextType === "wildcard" ? "dns-01" : values.challenge_type
+            primary_domain: (values.primary_domain || "").replace(/^\*\./, ""),
+            sans: values.sans.filter((name) => !name.startsWith("*."))
           });
         }}
       />
       <TagsInput
         label="Additional SANs"
+        description={values.type === "wildcard" ? "Keep the base domain here so it is covered next to its subdomains." : undefined}
         placeholder="api.example.com"
         value={values.sans}
         onChange={(next) => setValues({ ...values, sans: next })}
@@ -133,7 +157,10 @@ export function CertificateForm({
         value={values.renewal_window_days}
         onChange={(value) => setValues({ ...values, renewal_window_days: Number(value) || 30 })}
       />
-      <TextInput label="Expected expiry override" type="date" value={values.expires_at || ""} onChange={(event) => setValues({ ...values, expires_at: event.currentTarget.value })} />
+      <TextInput
+        label="Expected expiry override"
+        description="Only for certificates issued outside Portlyn. Leave empty otherwise."
+        type="date" value={values.expires_at || ""} onChange={(event) => setValues({ ...values, expires_at: event.currentTarget.value })} />
       <Checkbox checked={values.is_auto_renew} onChange={(event) => setValues({ ...values, is_auto_renew: event.currentTarget.checked })} label="Auto renew" />
       {wildcardNeedsDNS ? (
         <Alert color={values.challenge_type === "dns-01" ? "brand" : "warning"} variant="light" title="Wildcard validation">
