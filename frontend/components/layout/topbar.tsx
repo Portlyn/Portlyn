@@ -18,6 +18,7 @@ const titles: Record<string, string> = {
   "/service-groups": "Service Groups",
   "/users": "Users",
   "/exposure": "Exposure",
+  "/access-log": "Access Log",
   "/audit-logs": "Audit Logs",
   "/audit-webhooks": "Audit Webhooks",
   "/access-tester": "Access Tester",
