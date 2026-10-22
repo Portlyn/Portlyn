@@ -187,13 +187,21 @@ func filterRoutesByHost(routes []routing.RouteConfig, host string) []routing.Rou
 	if normalizedHost == "" {
 		return routes
 	}
-	filtered := make([]routing.RouteConfig, 0, len(routes))
+	exact := make([]routing.RouteConfig, 0, len(routes))
+	wildcard := make([]routing.RouteConfig, 0)
 	for _, route := range routes {
-		if strings.ToLower(strings.TrimSpace(route.Host)) == normalizedHost {
-			filtered = append(filtered, route)
+		routeHost := strings.ToLower(strings.TrimSpace(route.Host))
+		switch {
+		case routeHost == normalizedHost:
+			exact = append(exact, route)
+		case domain.IsWildcardHost(routeHost) && domain.HostMatches(routeHost, normalizedHost):
+			wildcard = append(wildcard, route)
 		}
 	}
-	return filtered
+	if len(exact) > 0 {
+		return exact
+	}
+	return wildcard
 }
 
 func domainCandidatesForHost(host string) []string {

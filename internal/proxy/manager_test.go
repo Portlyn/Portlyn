@@ -327,3 +327,29 @@ func testRouteConfig(id, host, path string) routing.RouteConfig {
 		EffectivePolicy: domain.AccessPolicy{AccessMode: domain.AccessModePublic},
 	}
 }
+
+func TestManagerWildcardInvalidationClearsConcreteHosts(t *testing.T) {
+	ctx := context.Background()
+	store := newFakeRoutingStore(testRouteConfig("1", "app.example.com", "/"))
+	cache := NewInMemoryConfigCache()
+	manager := NewManager(store, cache, NewInMemoryConfigBus(), nil, nil, nil, nil, ManagerOptions{
+		LocalCacheTTL:      time.Hour,
+		LocalCacheCapacity: 16,
+	})
+
+	if _, err := manager.resolveRoutesForHost(ctx, "app.example.com"); err != nil {
+		t.Fatalf("initial resolve failed: %v", err)
+	}
+	if err := manager.InvalidateHost(ctx, "*.example.com"); err != nil {
+		t.Fatalf("invalidate wildcard failed: %v", err)
+	}
+	if _, ok, _ := cache.GetRoutesForHost(ctx, "app.example.com"); ok {
+		t.Fatal("expected shared cache entries to be dropped")
+	}
+	if _, err := manager.resolveRoutesForHost(ctx, "app.example.com"); err != nil {
+		t.Fatalf("resolve after invalidate failed: %v", err)
+	}
+	if got := store.Calls(); got != 2 {
+		t.Fatalf("expected a fresh store fetch after wildcard invalidation, got %d", got)
+	}
+}
