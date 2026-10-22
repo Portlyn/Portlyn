@@ -138,8 +138,18 @@ func FirstMatchingAccessRule(rules []domain.AccessRule, ip netip.Addr, path stri
 }
 
 func matchAccessRule(rules []compiledAccessRule, ip netip.Addr, path string) *compiledAccessRule {
+	stripped := stripPathParams(path)
 	for i := range rules {
-		if rules[i].matches(ip, path) {
+		raw := rules[i].matches(ip, path)
+		plain := raw
+		if stripped != path {
+			plain = rules[i].matches(ip, stripped)
+		}
+		hit := raw || plain
+		if rules[i].Action == domain.AccessRuleAllow {
+			hit = raw && plain
+		}
+		if hit {
 			return &rules[i]
 		}
 	}
