@@ -17,7 +17,7 @@ func TestAccessRulePathMatching(t *testing.T) {
 	rules, err := compileAccessRules([]domain.AccessRule{
 		{Name: "pub", Action: domain.AccessRuleAllow, Paths: []string{"/pub/*/pub"}},
 		{Name: "admin", Action: domain.AccessRuleAuthenticate, Paths: []string{"/admin/"}},
-		{Name: "deny", Action: domain.AccessRuleDeny, Paths: []string{"deny"}},
+		{Name: "deny", Action: domain.AccessRuleDeny, Paths: []string{"deny", "//double//slash/"}},
 	})
 	if err != nil {
 		t.Fatalf("compile: %v", err)
@@ -33,6 +33,7 @@ func TestAccessRulePathMatching(t *testing.T) {
 		"/Admin/users":     "admin",
 		"/administrator":   "",
 		"/deny":            "deny",
+		"/double/slash/x":  "deny",
 		"/":                "",
 	}
 	for path, want := range cases {
@@ -129,5 +130,66 @@ func TestProxyAppliesAccessRules(t *testing.T) {
 	}
 	if rec.Header().Get("Location") != "" {
 		t.Fatal("deny must not redirect")
+	}
+}
+
+func TestAccessRulesSeePastPathParameters(t *testing.T) {
+	rules, err := compileAccessRules([]domain.AccessRule{
+		{Name: "pub", Action: domain.AccessRuleAllow, Paths: []string{"/pub"}},
+		{Name: "admin", Action: domain.AccessRuleDeny, Paths: []string{"/admin", "/actuator"}},
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	ip := netip.MustParseAddr("203.0.113.5")
+	cases := map[string]string{
+		"/admin;x":          "admin",
+		"/actuator;x/env":   "admin",
+		"/ADMIN;jsessionid": "admin",
+		"/pub/a.txt":        "pub",
+		"/pub;x/a.txt":      "",
+		"/x;/pub":           "",
+	}
+	for path, want := range cases {
+		got := ""
+		if rule := matchAccessRule(rules, ip, path); rule != nil {
+			got = rule.Name
+		}
+		if got != want {
+			t.Errorf("path %q: expected rule %q, got %q", path, want, got)
+		}
+	}
+}
+
+func TestProxyDenyRuleCannotBeSkippedWithPathParameters(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "upstream-ok")
+	}))
+	defer upstream.Close()
+
+	manager := NewManager(newFakeRoutingStore(routing.RouteConfig{
+		ID:              "1",
+		ServiceID:       1,
+		ServiceName:     "svc",
+		Host:            "app.example.com",
+		Path:            "/",
+		TargetURL:       upstream.URL,
+		Service:         domain.Service{ID: 1, Name: "svc", Domain: domain.Domain{Name: "app.example.com"}},
+		EffectivePolicy: domain.AccessPolicy{AccessMode: domain.AccessModePublic},
+		AccessRules:     []domain.AccessRule{{Name: "no admin", Action: domain.AccessRuleDeny, Paths: []string{"/admin"}}},
+	}), NewInMemoryConfigCache(), NewInMemoryConfigBus(), nil, nil, nil, nil, ManagerOptions{
+		LocalCacheTTL:      time.Hour,
+		LocalCacheCapacity: 16,
+	})
+
+	for _, path := range []string{"/admin", "/admin;x", "/admin%3Bx", "/admin;jsessionid=1/users"} {
+		req := httptest.NewRequest(http.MethodGet, "http://app.example.com"+path, nil)
+		req.Host = "app.example.com"
+		req.RemoteAddr = "203.0.113.5:12345"
+		rec := httptest.NewRecorder()
+		manager.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected %s to be denied, got %d: %s", path, rec.Code, rec.Body.String())
+		}
 	}
 }

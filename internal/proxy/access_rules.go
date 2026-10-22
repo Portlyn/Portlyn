@@ -78,14 +78,7 @@ func compileAccessRulePath(raw string) ([]string, bool) {
 	if value == "" {
 		return nil, false
 	}
-	if !strings.HasPrefix(value, "/") {
-		value = "/" + value
-	}
-	value = strings.TrimRight(value, "/")
-	if value == "" {
-		return []string{}, true
-	}
-	return strings.Split(strings.TrimPrefix(value, "/"), "/"), true
+	return strings.FieldsFunc(value, func(r rune) bool { return r == '/' }), true
 }
 
 func (r compiledAccessRule) matches(ip netip.Addr, path string) bool {
@@ -138,8 +131,18 @@ func FirstMatchingAccessRule(rules []domain.AccessRule, ip netip.Addr, path stri
 }
 
 func matchAccessRule(rules []compiledAccessRule, ip netip.Addr, path string) *compiledAccessRule {
+	stripped := stripPathParams(path)
 	for i := range rules {
-		if rules[i].matches(ip, path) {
+		raw := rules[i].matches(ip, path)
+		plain := raw
+		if stripped != path {
+			plain = rules[i].matches(ip, stripped)
+		}
+		hit := raw || plain
+		if rules[i].Action == domain.AccessRuleAllow {
+			hit = raw && plain
+		}
+		if hit {
 			return &rules[i]
 		}
 	}
