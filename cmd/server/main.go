@@ -518,14 +518,25 @@ func main() {
 		}
 	}()
 
-	if acmeManager.HasHTTPS() {
+	var httpsListener net.Listener
+	if cfg.ProxyHTTPSAddr != "" {
 		listener, err := net.Listen("tcp", cfg.ProxyHTTPSAddr)
-		if err != nil {
+		switch {
+		case err == nil:
+			httpsListener = listener
+		case acmeManager.HasHTTPS():
 			logger.Error("failed to listen on https proxy addr", "error", err)
 			os.Exit(1)
+		default:
+			logger.Warn("https proxy listener not started", "addr", cfg.ProxyHTTPSAddr, "error", err)
 		}
+		if httpsListener != nil && !acmeManager.HasHTTPS() {
+			logger.Info("acme is disabled; https serves stored or self-signed certificates", "addr", cfg.ProxyHTTPSAddr)
+		}
+	}
 
-		proxyTLSListener = tls.NewListener(listener, acmeManager.TLSConfig())
+	if httpsListener != nil {
+		proxyTLSListener = tls.NewListener(httpsListener, acmeManager.TLSConfig())
 		proxyHTTPSServer = &http.Server{
 			Addr:              cfg.ProxyHTTPSAddr,
 			Handler:           server.ProxyHandler(),

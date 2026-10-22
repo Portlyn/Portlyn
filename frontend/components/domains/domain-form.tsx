@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Select, Stack, TextInput, Textarea } from "@mantine/core";
+import { Button, Checkbox, Select, Stack, TextInput, Textarea } from "@mantine/core";
 import { useEffect, useState } from "react";
 
 import { linesToList, listToLines } from "@/lib/access-control";
@@ -29,6 +29,11 @@ export function DomainForm({
   const [values, setValues] = useState<DomainPayload>(defaults);
   const [allowlistText, setAllowlistText] = useState("");
   const [blocklistText, setBlocklistText] = useState("");
+  const [autoCertificate, setAutoCertificate] = useState(true);
+  const isNew = !initialValues?.id;
+  const nameError = values.name.includes("*")
+    ? "Wildcard hostnames are not supported. Add the base domain and create a wildcard certificate for it."
+    : null;
 
   useEffect(() => {
     const next = {
@@ -46,7 +51,12 @@ export function DomainForm({
 
   return (
     <Stack gap="md">
-      <TextInput label="Hostname" value={values.name} onChange={(event) => setValues({ ...values, name: event.currentTarget.value })} />
+      <TextInput
+        label="Hostname"
+        value={values.name}
+        error={nameError}
+        onChange={(event) => setValues({ ...values, name: event.currentTarget.value })}
+      />
       <Select
         label="Type"
         data={[
@@ -72,16 +82,25 @@ export function DomainForm({
         onChange={(event) => setBlocklistText(event.currentTarget.value)}
         minRows={4}
       />
+      {isNew ? (
+        <Checkbox
+          label="Request a certificate"
+          description="Needs exactly one active DNS provider. Skipped when an existing certificate already covers this hostname."
+          checked={autoCertificate}
+          onChange={(event) => setAutoCertificate(event.currentTarget.checked)}
+        />
+      ) : null}
       <Button
         loading={isLoading}
         onClick={() =>
           void onSubmit({
             ...values,
             ip_allowlist: linesToList(allowlistText),
-            ip_blocklist: linesToList(blocklistText)
+            ip_blocklist: linesToList(blocklistText),
+            ...(isNew ? { auto_certificate: autoCertificate } : {})
           })
         }
-        disabled={!values.name}
+        disabled={!values.name || Boolean(nameError)}
       >
         {submitLabel}
       </Button>

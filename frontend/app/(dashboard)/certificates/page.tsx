@@ -13,7 +13,7 @@ import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { useAuth } from "@/components/providers";
 import { apiFetch, ApiError } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, hasDate } from "@/lib/format";
 import type { Certificate, CertificatePayload, DNSProvider, Domain } from "@/lib/types";
 
 export default function CertificatesPage() {
@@ -149,8 +149,7 @@ export default function CertificatesPage() {
   };
 
   const expiringSoon = certificates.filter((item) => {
-    const expiresAt = new Date(item.expires_at).getTime();
-    return Number.isFinite(expiresAt) && expiresAt < Date.now() + 14 * 24 * 60 * 60 * 1000;
+    return hasDate(item.expires_at) && new Date(item.expires_at).getTime() < Date.now() + 14 * 24 * 60 * 60 * 1000;
   });
   const failedCertificates = certificates.filter((item) => item.status === "failed");
   return (
@@ -249,7 +248,7 @@ export default function CertificatesPage() {
               </Stack>
               <Stack gap={2}>
                 <Text size="xs" tt="uppercase" c="dimmed">Expires</Text>
-                <Text>{formatDateTime(inspectedCertificate.expires_at)}</Text>
+                <Text>{formatDateTime(inspectedCertificate.expires_at, "-")}</Text>
               </Stack>
               <Stack gap={2}>
                 <Text size="xs" tt="uppercase" c="dimmed">Next Renewal</Text>
