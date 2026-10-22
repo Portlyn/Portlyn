@@ -280,6 +280,8 @@ Tokens are stored only as a SHA-256 hash. Revoking one takes effect immediately.
 ## Observability
 
 - Structured logs cover API and proxy requests with request id, method, path, host, latency, status, user context, matched service, access mode and method, and outcome.
+- The dashboard's Access Log page lists the last `ACCESS_LOG_BUFFER` proxied requests (default 2000) with client IP, user and user agent. It is kept in memory and starts empty after a restart.
+- Set `ACCESS_LOG_PATH` to also write them as JSON lines to a file, for example `/data/logs/access.log` inside the default `portlyn_data` volume. The file rotates at `ACCESS_LOG_MAX_SIZE_MB` and keeps `ACCESS_LOG_MAX_FILES` old files. Mount a host folder at `/data/logs` if you want to read it outside the container.
 - Metrics at `GET /metrics` (admin authenticated unless `METRICS_PUBLIC=true`).
 - Health endpoints: `GET /livez`, `GET /readyz`, `GET /healthz`.
 - Bundled Grafana dashboards in [`deploy/grafana/dashboards/`](../deploy/grafana/dashboards/).
