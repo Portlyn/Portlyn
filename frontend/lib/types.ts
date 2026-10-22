@@ -72,6 +72,15 @@ export interface AccessWindow {
   timezone: string;
 }
 
+export type AccessRuleAction = "allow" | "authenticate" | "deny";
+
+export interface AccessRule {
+  name: string;
+  action: AccessRuleAction;
+  sources: string[];
+  paths: string[];
+}
+
 export interface AccessPolicy {
   access_mode: AccessMode;
   allowed_roles: UserRole[];
@@ -306,6 +315,7 @@ export interface Service {
   allowed_countries: string[];
   blocked_countries: string[];
   access_windows: AccessWindow[];
+  access_rules?: AccessRule[];
   service_groups?: ServiceGroup[];
   inherited_from_group?: { id: number; name: string } | null;
   service_overrides_group?: boolean;
@@ -639,6 +649,7 @@ export interface ServicePayload {
   allowed_countries: string[];
   blocked_countries: string[];
   access_windows: AccessWindow[];
+  access_rules: AccessRule[];
   node_id?: number | null;
 }
 

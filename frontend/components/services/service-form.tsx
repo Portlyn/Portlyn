@@ -19,6 +19,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { AccessPolicyFields } from "@/components/access-policy-fields";
+import { AccessRulesEditor, cleanAccessRules } from "@/components/services/access-rules-editor";
 import { RiskyChangeModal } from "@/components/services/risky-change-modal";
 import { accessWindowLabel, defaultServicePayload, linesToList, listToLines } from "@/lib/access-control";
 import { countryOptions } from "@/lib/countries";
@@ -99,7 +100,8 @@ export function ServiceForm({
       allowed_emails: linesToList(emailWhitelistText)
     },
     ip_allowlist: linesToList(allowlistText),
-    ip_blocklist: linesToList(blocklistText)
+    ip_blocklist: linesToList(blocklistText),
+    access_rules: cleanAccessRules(values.access_rules)
   });
 
   const handleSubmit = async () => {
@@ -133,6 +135,9 @@ export function ServiceForm({
         <Tabs.List>
           <Tabs.Tab value="general">General</Tabs.Tab>
           <Tabs.Tab value="access">Access</Tabs.Tab>
+          <Tabs.Tab value="rules">
+            {values.access_rules.length > 0 ? `Access rules (${values.access_rules.length})` : "Access rules"}
+          </Tabs.Tab>
           <Tabs.Tab value="network">Network</Tabs.Tab>
           <Tabs.Tab value="windows">Windows</Tabs.Tab>
         </Tabs.List>
@@ -326,6 +331,12 @@ export function ServiceForm({
               </Stack>
             </Paper>
           </Stack>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="rules" pt="md">
+          <Paper withBorder radius="md" p="md">
+            <AccessRulesEditor value={values.access_rules} onChange={(next) => update("access_rules", next)} />
+          </Paper>
         </Tabs.Panel>
 
         <Tabs.Panel value="network" pt="md">
