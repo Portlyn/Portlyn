@@ -85,6 +85,7 @@ type Route struct {
 	AllowedCountries      []string
 	BlockedCountries      []string
 	CompiledWindows       []compiledAccessWindow
+	AccessRules           []compiledAccessRule
 	DeploymentRevision    uint64
 	ReverseProxyHandler   http.Handler
 }
@@ -354,12 +355,13 @@ func (m *Manager) Handler() http.Handler {
 		startedAt := time.Now()
 		writer := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		var matchedRoute *Route
+		var matchedRule *compiledAccessRule
 		var user *domain.User
 		outcome := "proxied"
 		reason := "upstream"
 
 		defer func() {
-			m.logAccess(r, writer, startedAt, matchedRoute, user, outcome, reason)
+			m.logAccess(r, writer, startedAt, matchedRoute, matchedRule, user, outcome, reason)
 		}()
 
 		canonicalPath, ok := canonicalRequestPath(r.URL.Path)
@@ -436,8 +438,32 @@ func (m *Manager) Handler() http.Handler {
 			return
 		}
 
+		if len(route.AccessRules) > 0 {
+			if clientIP, err := m.realClientIP(r); err == nil {
+				matchedRule = matchAccessRule(route.AccessRules, clientIP, path)
+			}
+		}
+		if matchedRule != nil {
+			switch matchedRule.Action {
+			case domain.AccessRuleDeny:
+				outcome = "denied"
+				reason = "access_rule_deny"
+				writeAccessDenied(writer, r)
+				return
+			case domain.AccessRuleAuthenticate:
+				if route.EffectivePolicy.AccessMode == "" || route.EffectivePolicy.AccessMode == domain.AccessModePublic {
+					route.EffectivePolicy.AccessMode = domain.AccessModeAuthenticated
+				}
+			}
+		}
+		allowedByRule := matchedRule != nil && matchedRule.Action == domain.AccessRuleAllow
+
 		var groupIDs []uint
-		user, groupIDs, ok = m.authorizeRequest(writer, r, route)
+		if allowedByRule {
+			ok = true
+		} else {
+			user, groupIDs, ok = m.authorizeRequest(writer, r, route)
+		}
 		if !ok {
 			outcome = "denied"
 			reason = "authz"
@@ -453,11 +479,11 @@ func (m *Manager) Handler() http.Handler {
 			return
 		}
 
-		if route.EffectivePolicy.AccessMode == domain.AccessModeRestricted {
+		if route.EffectivePolicy.AccessMode == domain.AccessModeRestricted && !allowedByRule {
 			if !isAllowedByRestrictedPolicy(user, groupIDs, route.EffectivePolicy) {
 				outcome = "denied"
 				reason = "restricted_policy"
-				if expectsTokenAuth(r) {
+				if expectsTokenAuth(r) || !wantsHTML(r) {
 					writeProxyError(writer, http.StatusForbidden, "forbidden", "restricted service policy denied access")
 				} else {
 					m.redirectToRouteForbidden(writer, r, route)
@@ -557,7 +583,7 @@ func (m *Manager) handleSessionBridge(w http.ResponseWriter, r *http.Request) bo
 	return true
 }
 
-func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWriter, startedAt time.Time, route *Route, user *domain.User, outcome, reason string) {
+func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWriter, startedAt time.Time, route *Route, rule *compiledAccessRule, user *domain.User, outcome, reason string) {
 	if writer == nil {
 		return
 	}
@@ -616,6 +642,12 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 		details["service_name"] = route.ServiceName
 		details["target_host"] = targetHostForLogs(route.TargetURL)
 		details["route_path"] = route.Path
+	}
+	if rule != nil {
+		args = append(args, "access_rule", rule.Index, "access_rule_name", rule.Name, "access_rule_action", rule.Action)
+		details["access_rule"] = rule.Index
+		details["access_rule_name"] = rule.Name
+		details["access_rule_action"] = rule.Action
 	}
 	if user != nil {
 		userID = &user.ID
@@ -853,6 +885,37 @@ func clientIPFromForwardedChain(header string, trustedCIDRs []string) (netip.Add
 	}
 	return netip.Addr{}, false
 }
+
+func wantsHTML(r *http.Request) bool {
+	return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html")
+}
+
+func writeAccessDenied(w http.ResponseWriter, r *http.Request) {
+	if !wantsHTML(r) {
+		writeProxyError(w, http.StatusForbidden, "forbidden", "access denied")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusForbidden)
+	_, _ = w.Write([]byte(accessDeniedHTML))
+}
+
+const accessDeniedHTML = `<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>403 Forbidden</title>
+<style>
+body{background:#0f1117;color:#e6e9ef;font:15px/1.6 system-ui,sans-serif;margin:0;padding:48px 20px}
+main{max-width:520px;margin:0 auto}
+h1{font-size:20px;margin:0 0 12px}
+p{color:#b6bdcc}
+</style>
+<main>
+<h1>Access denied</h1>
+<p>You are not allowed to open this page.</p>
+</main>
+`
 
 func expectsTokenAuth(r *http.Request) bool {
 	return strings.TrimSpace(r.Header.Get("Authorization")) != ""

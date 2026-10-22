@@ -143,6 +143,13 @@ type accessWindowRequest struct {
 	Timezone   string   `json:"timezone"`
 }
 
+type accessRuleRequest struct {
+	Name    string   `json:"name" validate:"max=255"`
+	Action  string   `json:"action" validate:"required,oneof=allow authenticate deny"`
+	Sources []string `json:"sources" validate:"max=256"`
+	Paths   []string `json:"paths" validate:"max=256"`
+}
+
 type accessPolicyRequest struct {
 	AccessMode           string   `json:"access_mode" validate:"required,oneof=public authenticated restricted"`
 	AllowedRoles         []string `json:"allowed_roles"`
@@ -180,6 +187,7 @@ type createServiceRequest struct {
 	AllowedCountries   []string                  `json:"allowed_countries"`
 	BlockedCountries   []string                  `json:"blocked_countries"`
 	AccessWindows      []accessWindowRequest     `json:"access_windows"`
+	AccessRules        []accessRuleRequest       `json:"access_rules" validate:"max=100,dive"`
 	NodeID             *uint                     `json:"node_id"`
 	Node               string                    `json:"node" validate:"omitempty,max=255"`
 	ClearNodeID        *bool                     `json:"clear_node_id"`
@@ -209,6 +217,7 @@ type updateServiceRequest struct {
 	AllowedCountries   *[]string                  `json:"allowed_countries"`
 	BlockedCountries   *[]string                  `json:"blocked_countries"`
 	AccessWindows      *[]accessWindowRequest     `json:"access_windows"`
+	AccessRules        *[]accessRuleRequest       `json:"access_rules" validate:"omitempty,max=100,dive"`
 	NodeID             *uint                      `json:"node_id"`
 	Node               *string                    `json:"node" validate:"omitempty,max=255"`
 	ClearNodeID        *bool                      `json:"clear_node_id"`
