@@ -1,7 +1,7 @@
 "use client";
 
 import { Anchor, Button, Code, CopyButton, Group, Modal, Stack, Text } from "@mantine/core";
-import { IconArrowUpCircle, IconCheck, IconCopy } from "@tabler/icons-react";
+import { IconCheck, IconCopy, IconDownload } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/providers";
@@ -43,9 +43,9 @@ export function UpdateNotice() {
 
   return (
     <>
-      <Button variant="light" leftSection={<IconArrowUpCircle size={16} />} onClick={() => setOpened(true)} px={{ base: 8, sm: "md" }}>
+      <Button variant="light" leftSection={<IconDownload size={16} />} onClick={() => setOpened(true)} px={{ base: 8, sm: "md" }}>
         <Text span visibleFrom="xs">
-          {status.latest_version}
+          Update {status.latest_version}
         </Text>
       </Button>
       <Modal opened={opened} onClose={() => setOpened(false)} title={`Portlyn ${status.latest_version} is available`} centered>
