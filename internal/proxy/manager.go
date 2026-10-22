@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -684,6 +685,12 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 		if user != nil {
 			entry.UserID = &user.ID
 			entry.UserEmail = user.Email
+		}
+		if rule != nil {
+			entry.AccessRule = "#" + strconv.Itoa(rule.Index)
+			if rule.Name != "" {
+				entry.AccessRule += " " + rule.Name
+			}
 		}
 		m.accessLog.Record(entry)
 	}

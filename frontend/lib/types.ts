@@ -99,6 +99,7 @@ export interface AccessLogEntry {
   service_name?: string;
   user_id?: number;
   user_email?: string;
+  access_rule?: string;
 }
 
 export interface AccessPolicy {

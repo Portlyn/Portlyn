@@ -28,6 +28,7 @@ type Entry struct {
 	ServiceName string    `json:"service_name,omitempty"`
 	UserID      *uint     `json:"user_id,omitempty"`
 	UserEmail   string    `json:"user_email,omitempty"`
+	AccessRule  string    `json:"access_rule,omitempty"`
 }
 
 type Filter struct {

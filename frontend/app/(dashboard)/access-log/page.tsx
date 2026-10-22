@@ -210,6 +210,7 @@ export default function AccessLogPage() {
                 ["Status", String(selected.status)],
                 ["Outcome", selected.outcome],
                 ["Reason", selected.reason],
+                ["Access rule", selected.access_rule || "-"],
                 ["Method", selected.method],
                 ["Host", selected.host],
                 ["Path", selected.path],
