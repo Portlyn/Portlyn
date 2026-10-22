@@ -222,6 +222,8 @@ ACME_DNS_CLOUDFLARE_API_TOKEN=...
 
 **DNS-01 only.** With a DNS provider configured, the hub also enqueues the admin/dashboard certificate over DNS-01 automatically, so the first certificate succeeds without any inbound connectivity.
 
+With `ACME_ENABLED=false` the hub still listens on `PROXY_HTTPS_ADDR` and serves imported certificates, or a self-signed one when nothing matches the requested host.
+
 ## Configuration
 
 All runtime settings are environment driven. `portlyn init` writes a complete `.env` with strong random secrets.

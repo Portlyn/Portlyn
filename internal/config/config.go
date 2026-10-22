@@ -151,7 +151,7 @@ func Load() (Config, error) {
 		BootstrapAdminEnabled:           getEnvBool("BOOTSTRAP_ADMIN_ENABLED", false),
 		BootstrapAdminAllowRemote:       getEnvBool("BOOTSTRAP_ADMIN_ALLOW_REMOTE", false),
 		ProxyHTTPAddr:                   getEnv("PROXY_HTTP_ADDR", ":80"),
-		ProxyHTTPSAddr:                  getEnv("PROXY_HTTPS_ADDR", ":443"),
+		ProxyHTTPSAddr:                  getEnvAllowEmpty("PROXY_HTTPS_ADDR", ":443"),
 		RedisURL:                        strings.TrimSpace(os.Getenv("REDIS_URL")),
 		DatabaseDriver:                  strings.ToLower(getEnv("DATABASE_DRIVER", "")),
 		DatabaseURL:                     strings.TrimSpace(os.Getenv("DATABASE_URL")),
@@ -493,6 +493,14 @@ func getEnv(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func getEnvAllowEmpty(key, fallback string) string {
+	value, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback
+	}
+	return strings.TrimSpace(value)
 }
 
 func getSecretEnv(key string, generated map[string]string, allowInsecureDevMode bool) string {

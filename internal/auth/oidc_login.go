@@ -62,7 +62,7 @@ func (s *Service) findOrCreateOIDCUser(ctx context.Context, claims *OIDCIdentity
 	}
 	email := strings.ToLower(strings.TrimSpace(claims.Email))
 	role := domain.RoleViewer
-	if authenticator.IsAdmin(claims.Claims) {
+	if authenticator.IsAdmin(claims.Claims, claims.AccessClaims) {
 		role = domain.RoleAdmin
 	}
 
