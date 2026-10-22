@@ -1,8 +1,10 @@
 "use client";
 
-import { ActionIcon, Badge, Button, Grid, Group, Paper, Select, Stack, Text, Textarea, TextInput } from "@mantine/core";
+import { ActionIcon, Badge, Button, Grid, Group, Paper, Select, Stack, Text, TextInput } from "@mantine/core";
 import { IconArrowDown, IconArrowUp, IconPlus, IconTrash } from "@tabler/icons-react";
 
+import { RuleTagsInput } from "@/components/services/rule-tags-input";
+import { parsePath, parseSource } from "@/lib/access-rules";
 import type { AccessRule, AccessRuleAction } from "@/lib/types";
 
 export const accessRuleActions: { value: AccessRuleAction; label: string; color: string }[] = [
@@ -50,13 +52,13 @@ export function AccessRulesEditor({ value, onChange }: { value: AccessRule[]; on
         <div>
           <Text fw={600}>Access rules</Text>
           <Text size="sm" c="dimmed">
-            First match wins. Empty fields match anything. Prefix an IP with ! to exclude it, * stands for one path segment.
+            Checked top to bottom, the first matching rule decides.
           </Text>
         </div>
         <Button
           variant="default"
           leftSection={<IconPlus size={16} />}
-          onClick={() => onChange([...value, { name: "", action: "deny", sources: [], paths: [] }])}
+          onClick={() => onChange([...value, { name: "", action: "authenticate", sources: [], paths: [] }])}
         >
           Add rule
         </Button>
@@ -104,30 +106,36 @@ export function AccessRulesEditor({ value, onChange }: { value: AccessRule[]; on
                   data={accessRuleActions.map(({ value: action, label }) => ({ value: action, label }))}
                   value={rule.action}
                   allowDeselect={false}
-                  onChange={(next) => updateRule(index, { action: (next || "deny") as AccessRuleAction })}
+                  onChange={(next) => updateRule(index, { action: (next || "authenticate") as AccessRuleAction })}
                 />
               </Grid.Col>
               <Grid.Col span={{ base: 12, md: 6 }}>
-                <Textarea
+                <RuleTagsInput
                   label="Source IPs"
-                  placeholder={"Any IP\n8.8.8.0/24\n!8.8.8.8"}
-                  minRows={3}
-                  autosize
-                  value={rule.sources.join("\n")}
-                  onChange={(event) => updateRule(index, { sources: event.currentTarget.value.split("\n") })}
+                  description="Enter or comma to add. Prefix with ! to exclude."
+                  emptyPlaceholder="Any IP"
+                  value={rule.sources}
+                  onChange={(next) => updateRule(index, { sources: next })}
+                  parse={parseSource}
+                  isNegative={(tag) => tag.startsWith("!")}
                 />
               </Grid.Col>
               <Grid.Col span={{ base: 12, md: 6 }}>
-                <Textarea
+                <RuleTagsInput
                   label="Paths"
-                  placeholder={"Any path\n/admin\n/api/*/export"}
-                  minRows={3}
-                  autosize
-                  value={rule.paths.join("\n")}
-                  onChange={(event) => updateRule(index, { paths: event.currentTarget.value.split("\n") })}
+                  description="/admin covers everything below it. * matches one segment."
+                  emptyPlaceholder="Any path"
+                  value={rule.paths}
+                  onChange={(next) => updateRule(index, { paths: next })}
+                  parse={parsePath}
                 />
               </Grid.Col>
             </Grid>
+            {rule.sources.length === 0 && rule.paths.length === 0 ? (
+              <Text size="sm" c="dimmed">
+                Without IPs or paths this rule matches every request.
+              </Text>
+            ) : null}
           </Stack>
         </Paper>
       ))}
