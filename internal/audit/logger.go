@@ -72,6 +72,7 @@ type HTTPAccessEvent struct {
 type Logger struct {
 	sink       AuditSink
 	dispatcher *WebhookDispatcher
+	clientIP   func(*stdhttp.Request) string
 }
 
 type AuditBatchWriter interface {
@@ -213,6 +214,19 @@ func (l *Logger) SetWebhookDispatcher(dispatcher *WebhookDispatcher) {
 	l.dispatcher = dispatcher
 }
 
+func (l *Logger) SetClientIPResolver(resolve func(*stdhttp.Request) string) {
+	l.clientIP = resolve
+}
+
+func (l *Logger) remoteAddr(r *stdhttp.Request) string {
+	if l.clientIP != nil {
+		if addr := l.clientIP(r); addr != "" {
+			return addr
+		}
+	}
+	return r.RemoteAddr
+}
+
 func (l *Logger) Log(ctx context.Context, userID *uint, action, resourceType string, resourceID *uint, details any) error {
 	return l.write(ctx, AuditEvent{
 		Timestamp:    time.Now().UTC(),
@@ -231,7 +245,7 @@ func (l *Logger) LogRequest(ctx context.Context, r *stdhttp.Request, userID *uin
 		Action:       action,
 		ResourceType: resourceType,
 		ResourceID:   resourceID,
-		RemoteAddr:   r.RemoteAddr,
+		RemoteAddr:   l.remoteAddr(r),
 		UserAgent:    r.UserAgent(),
 		Method:       r.Method,
 		Host:         r.Host,
@@ -253,7 +267,7 @@ func (l *Logger) LogHTTPAccess(ctx context.Context, event HTTPAccessEvent) error
 			requestID = middleware.GetReqID(event.Request.Context())
 		}
 		if remoteAddr == "" {
-			remoteAddr = event.Request.RemoteAddr
+			remoteAddr = l.remoteAddr(event.Request)
 		}
 		if userAgent == "" {
 			userAgent = event.Request.UserAgent()
