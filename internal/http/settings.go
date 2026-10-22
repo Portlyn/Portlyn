@@ -340,6 +340,9 @@ func (s *Server) validateAuthSettings(item *domain.AppSettings) string {
 			}
 		}
 	}
+	if from := strings.TrimSpace(item.SMTPFromEmail); from != "" && s.validate.Var(from, "email") != nil {
+		return "smtp from email is not a valid email address"
+	}
 	if item.SMTPEnabled {
 		if strings.TrimSpace(item.SMTPHost) == "" || item.SMTPPort <= 0 || strings.TrimSpace(item.SMTPFromEmail) == "" {
 			return "enabled smtp requires host, port and from email"

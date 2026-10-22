@@ -1,4 +1,4 @@
-FROM node:24.19.0-alpine AS frontend
+FROM node:24.22.1-alpine AS frontend
 
 WORKDIR /src
 COPY frontend/package.json frontend/package-lock.json ./
@@ -7,7 +7,7 @@ COPY frontend/ ./
 ENV PORTLYN_STATIC_EXPORT=1
 RUN npm run build
 
-FROM golang:1.26.6-alpine AS backend
+FROM golang:1.27.3-alpine AS backend
 
 RUN apk add --no-cache git
 WORKDIR /src

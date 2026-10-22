@@ -128,7 +128,7 @@ func NewServer(
 			return sqlDB.PingContext(ctx)
 		})}
 	}
-	return &Server{
+	server := &Server{
 		cfg:              cfg,
 		logger:           logger,
 		db:               db,
@@ -167,6 +167,10 @@ func NewServer(
 			expiresAt: time.Now().UTC().Add(cfg.BreakGlassTTL),
 		},
 	}
+	if auditLogger != nil {
+		auditLogger.SetClientIPResolver(server.clientIPForRequest)
+	}
+	return server
 }
 
 func (s *Server) ProxyHandler() stdhttp.Handler {
