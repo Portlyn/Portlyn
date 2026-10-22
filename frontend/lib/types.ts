@@ -603,6 +603,7 @@ export interface DomainPayload {
   notes: string;
   ip_allowlist: string[];
   ip_blocklist: string[];
+  auto_certificate?: boolean;
 }
 
 export interface NodePayload {

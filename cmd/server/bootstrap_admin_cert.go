@@ -15,29 +15,6 @@ func skippableCertHost(host string) bool {
 	return host == "" || host == "localhost" || strings.HasPrefix(host, "127.")
 }
 
-func wildcardForHost(host string) string {
-	labels := strings.Split(host, ".")
-	if len(labels) < 3 {
-		return ""
-	}
-	return "*." + strings.Join(labels[1:], ".")
-}
-
-func hostCoveredByCertificate(host string, certs []domain.Certificate) bool {
-	host = strings.ToLower(strings.TrimSpace(host))
-	wildcard := wildcardForHost(host)
-	for i := range certs {
-		primary := strings.ToLower(strings.TrimSpace(certs[i].PrimaryDomain))
-		if primary == host {
-			return true
-		}
-		if wildcard != "" && primary == wildcard {
-			return true
-		}
-	}
-	return false
-}
-
 func activeCertChallenge(ctx context.Context, dnsProviders *store.DNSProviderStore, logger *slog.Logger) (string, *uint) {
 	if providers, err := dnsProviders.List(ctx); err != nil {
 		logger.Warn("certificate dns provider lookup failed", "error", err)
@@ -102,7 +79,7 @@ func bootstrapAdminCertificate(ctx context.Context, cfg config.Config, domains *
 		logger.Warn("certificate list failed", "error", err)
 		return
 	}
-	if hostCoveredByCertificate(host, certs) {
+	if domain.HostCoveredByCertificates(host, certs) {
 		return
 	}
 
@@ -135,7 +112,7 @@ func ensureServiceCertificates(ctx context.Context, cfg config.Config, services 
 		if skippableCertHost(host) || service.DomainID == 0 {
 			continue
 		}
-		if hostCoveredByCertificate(host, certs) {
+		if domain.HostCoveredByCertificates(host, certs) {
 			continue
 		}
 		enqueuePendingCertificate(ctx, certificates, service.DomainID, host, challengeType, dnsProviderID, logger)

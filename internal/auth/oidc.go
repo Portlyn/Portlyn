@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,6 +26,7 @@ type OIDCAuthenticator struct {
 	cfg         config.OIDCConfig
 	oauthConfig oauth2.Config
 	verifier    *oidc.IDTokenVerifier
+	jwtVerifier *oidc.IDTokenVerifier
 	stateSecret []byte
 	httpClient  *http.Client
 }
@@ -51,6 +53,7 @@ type OIDCIdentity struct {
 	Name              string
 	PreferredUsername string
 	Claims            map[string]any
+	AccessClaims      map[string]any
 }
 
 func NewOIDCAuthenticator(cfg config.OIDCConfig, stateSecret []byte) (*OIDCAuthenticator, error) {
@@ -71,6 +74,7 @@ func NewOIDCAuthenticator(cfg config.OIDCConfig, stateSecret []byte) (*OIDCAuthe
 			Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
 		},
 		verifier:    provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
+		jwtVerifier: provider.Verifier(&oidc.Config{SkipClientIDCheck: true}),
 		stateSecret: stateSecret,
 		httpClient:  client,
 	}, nil
@@ -137,6 +141,7 @@ func (a *OIDCAuthenticator) Exchange(ctx context.Context, code, state string) (*
 	}
 
 	return &OIDCIdentity{
+		AccessClaims:      a.accessTokenClaims(ctx, token.AccessToken, stringValue(claims["sub"])),
 		Subject:           stringValue(claims["sub"]),
 		Email:             stringValue(claims["email"]),
 		EmailVerified:     boolValue(claims["email_verified"]),
@@ -144,6 +149,24 @@ func (a *OIDCAuthenticator) Exchange(ctx context.Context, code, state string) (*
 		PreferredUsername: firstNonEmpty(stringValue(claims["preferred_username"]), stringValue(claims["nickname"])),
 		Claims:            claims,
 	}, stateClaims.Next, nil
+}
+
+func (a *OIDCAuthenticator) accessTokenClaims(ctx context.Context, raw, subject string) map[string]any {
+	if a.jwtVerifier == nil || strings.Count(raw, ".") != 2 || subject == "" {
+		return nil
+	}
+	parsed, err := a.jwtVerifier.Verify(ctx, raw)
+	if err != nil || parsed.Subject != subject {
+		return nil
+	}
+	var claims map[string]any
+	if err := parsed.Claims(&claims); err != nil {
+		return nil
+	}
+	if stringValue(claims["azp"]) != a.cfg.ClientID && !slices.Contains(parsed.Audience, a.cfg.ClientID) {
+		return nil
+	}
+	return claims
 }
 
 func (a *OIDCAuthenticator) ValidateAllowedEmailDomain(email string) error {
@@ -163,13 +186,12 @@ func (a *OIDCAuthenticator) ValidateAllowedEmailDomain(email string) error {
 	return ErrOIDCEmailBlocked
 }
 
-func (a *OIDCAuthenticator) IsAdmin(claims map[string]any) bool {
+func (a *OIDCAuthenticator) IsAdmin(claimSets ...map[string]any) bool {
 	if strings.TrimSpace(a.cfg.AdminRoleValue) == "" {
 		return false
 	}
-	values := extractClaimPathValues(claims, a.cfg.AdminRoleClaimPath)
-	for _, value := range values {
-		if value == a.cfg.AdminRoleValue {
+	for _, claims := range claimSets {
+		if slices.Contains(extractClaimPathValues(claims, a.cfg.AdminRoleClaimPath), a.cfg.AdminRoleValue) {
 			return true
 		}
 	}

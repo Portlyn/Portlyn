@@ -1,6 +1,14 @@
-export function formatDateTime(value?: string | null) {
+export function hasDate(value?: string | null): value is string {
   if (!value) {
-    return "Never";
+    return false;
+  }
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time > 0;
+}
+
+export function formatDateTime(value?: string | null, empty = "Never") {
+  if (!hasDate(value)) {
+    return empty;
   }
 
   return new Intl.DateTimeFormat("de-DE", {

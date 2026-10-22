@@ -23,6 +23,18 @@ func (s *Server) validateAndHydrateCertificate(ctx context.Context, item *domain
 		item.PrimaryDomain = normalizeHostname(item.PrimaryDomain)
 	}
 
+	if item.Type == domain.CertificateTypeWildcard && !strings.HasPrefix(item.PrimaryDomain, "*.") {
+		base := item.PrimaryDomain
+		item.PrimaryDomain = "*." + base
+		sans := []domain.CertificateSAN{{DomainName: base}}
+		for _, san := range item.SANs {
+			if name := normalizeHostname(san.DomainName); name != base && name != item.PrimaryDomain {
+				sans = append(sans, san)
+			}
+		}
+		item.SANs = sans
+	}
+
 	names, err := normalizeCertificateNames(item.PrimaryDomain, item.SANs)
 	if err != nil {
 		return err
@@ -36,9 +48,6 @@ func (s *Server) validateAndHydrateCertificate(ctx context.Context, item *domain
 		} else {
 			item.Type = domain.CertificateTypeSingle
 		}
-	}
-	if item.Type == domain.CertificateTypeWildcard && !strings.HasPrefix(item.PrimaryDomain, "*.") {
-		item.PrimaryDomain = "*." + strings.TrimPrefix(item.PrimaryDomain, "*.")
 	}
 	if item.Type != domain.CertificateTypeWildcard && strings.HasPrefix(item.PrimaryDomain, "*.") {
 		return fmt.Errorf("wildcard primary domains require certificate type wildcard")
