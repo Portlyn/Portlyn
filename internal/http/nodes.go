@@ -184,6 +184,8 @@ func (s *Server) handleHeartbeatNode(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		return
 	}
 
+	wasHealthy := node.Status == domain.NodeStatusOnline && node.LastHeartbeatCode == stdhttp.StatusOK
+	previousVersion := node.HeartbeatVersion
 	now := time.Now().UTC()
 	node.LastHeartbeatAt = &now
 	node.LastSeenAt = &now
@@ -231,13 +233,15 @@ func (s *Server) handleHeartbeatNode(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		s.handleStoreError(w, err)
 		return
 	}
-	_ = s.audit.LogRequest(r.Context(), r, nil, "node_heartbeat_accepted", "node", &node.ID, map[string]any{
-		"node_id":      node.ID,
-		"remote_addr":  node.LastHeartbeatIP,
-		"status_code":  stdhttp.StatusOK,
-		"auth_mode":    node.HeartbeatAuthMode,
-		"node_version": node.HeartbeatVersion,
-	})
+	if !wasHealthy || previousVersion != node.HeartbeatVersion {
+		_ = s.audit.LogRequest(r.Context(), r, nil, "node_heartbeat_accepted", "node", &node.ID, map[string]any{
+			"node_id":      node.ID,
+			"remote_addr":  node.LastHeartbeatIP,
+			"status_code":  stdhttp.StatusOK,
+			"auth_mode":    node.HeartbeatAuthMode,
+			"node_version": node.HeartbeatVersion,
+		})
+	}
 	writeJSON(w, stdhttp.StatusOK, node)
 }
 
