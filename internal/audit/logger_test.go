@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	stdhttp "net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -97,5 +98,38 @@ func TestLoggerLogHTTPAccessPersistsRequestMetadata(t *testing.T) {
 	got := writer.batches[0][0]
 	if got.Method != "GET" || got.Host != "example.com" || got.Path != "/app" {
 		t.Fatalf("unexpected request metadata: %#v", got)
+	}
+}
+
+type captureSink struct {
+	events []AuditEvent
+}
+
+func (s *captureSink) WriteEvent(_ context.Context, ev AuditEvent) error {
+	s.events = append(s.events, ev)
+	return nil
+}
+
+func TestLogRequestUsesClientIPResolver(t *testing.T) {
+	sink := &captureSink{}
+	logger := NewLogger(sink)
+	req := httptest.NewRequest("GET", "/api/v1/services", nil)
+	req.RemoteAddr = "10.10.11.14:50236"
+
+	_ = logger.LogRequest(context.Background(), req, nil, "list", "service", nil, nil)
+	logger.SetClientIPResolver(func(*stdhttp.Request) string { return "77.67.9.200" })
+	_ = logger.LogRequest(context.Background(), req, nil, "list", "service", nil, nil)
+	_ = logger.LogHTTPAccess(context.Background(), HTTPAccessEvent{Request: req, Action: "proxy_access"})
+
+	if len(sink.events) != 3 {
+		t.Fatalf("expected 3 events, got %d", len(sink.events))
+	}
+	if sink.events[0].RemoteAddr != "10.10.11.14:50236" {
+		t.Fatalf("expected raw remote addr without resolver, got %q", sink.events[0].RemoteAddr)
+	}
+	for _, ev := range sink.events[1:] {
+		if ev.RemoteAddr != "77.67.9.200" {
+			t.Fatalf("expected resolved client ip, got %q", ev.RemoteAddr)
+		}
 	}
 }
