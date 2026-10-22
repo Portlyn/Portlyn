@@ -18,6 +18,7 @@ import {
   verifyRoutePIN
 } from "@/lib/auth";
 import { sanitizeReturnTo } from "@/lib/safe-redirect";
+import { hostMatches, isWildcardHost } from "@/lib/service-host";
 import type { AuthConfigResponse, RouteAuthService } from "@/lib/types";
 
 function buildReturnTarget(service: RouteAuthService | null, returnTo: string | null): URL | null {
@@ -28,15 +29,21 @@ function buildReturnTarget(service: RouteAuthService | null, returnTo: string | 
   if (!serviceHost) {
     return null;
   }
-  let origin: URL;
+  const safeReturnTo = sanitizeReturnTo(returnTo, serviceHost);
   let target: URL;
   try {
-    origin = new URL(`${window.location.protocol}//${serviceHost}`);
-    target = new URL(sanitizeReturnTo(returnTo, serviceHost) ?? (service.path || "/"), origin);
+    if (isWildcardHost(serviceHost)) {
+      if (!safeReturnTo || safeReturnTo.startsWith("/")) {
+        return null;
+      }
+      target = new URL(safeReturnTo);
+    } else {
+      target = new URL(safeReturnTo ?? (service.path || "/"), `${window.location.protocol}//${serviceHost}`);
+    }
   } catch {
     return null;
   }
-  if (target.hostname !== origin.hostname) {
+  if (!hostMatches(serviceHost, target.hostname)) {
     return null;
   }
   if (target.protocol !== "http:" && target.protocol !== "https:") {

@@ -160,6 +160,7 @@ export function ServiceForm({
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <TextInput
                   label="Subdomain"
+                  placeholder="app, or * for every subdomain"
                   value={values.subdomain}
                   onChange={(event) => update("subdomain", event.currentTarget.value)}
                 />

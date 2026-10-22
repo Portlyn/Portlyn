@@ -1,3 +1,5 @@
+import { hostMatches } from "@/lib/service-host";
+
 function hasUnsafeUrlChars(value: string): boolean {
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);
@@ -57,8 +59,7 @@ export function sanitizeReturnTo(raw: string | null | undefined, domainName?: st
   if (parsed.username || parsed.password) {
     return null;
   }
-  const host = (domainName || "").trim().toLowerCase();
-  if (host && parsed.host.toLowerCase() === host) {
+  if (hostMatches(domainName, parsed.host)) {
     return parsed.toString();
   }
   return null;

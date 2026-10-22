@@ -17,7 +17,7 @@ import { AccessMethodBadge, AccessModeBadge, AuthPolicyBadge, StatusBadge } from
 import { buildServiceRequestPayload, legacyAuthPolicyFromAccessMode } from "@/lib/access-control";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
-import { serviceHostname } from "@/lib/service-host";
+import { isWildcardHost, serviceHostname } from "@/lib/service-host";
 import type { Domain, Group as UserGroup, Node as PortlynNode, Service, ServiceGroup, ServicePayload } from "@/lib/types";
 
 function ServiceDetailContent() {
@@ -173,7 +173,9 @@ function ServiceDetailContent() {
                 {service.service_status_error ? <Text c="danger" size="xs">{service.service_status_error}</Text> : null}
                 {canManage ? (
                   <Group gap="xs">
-                    <MagicLinkButton serviceId={service.id} serviceName={service.name} />
+                    {!isWildcardHost(serviceHostname(service)) ? (
+                      <MagicLinkButton serviceId={service.id} serviceName={service.name} />
+                    ) : null}
                     <Button variant="light" color="danger" onClick={() => setConfirmDelete(true)}>
                       Delete Service
                     </Button>

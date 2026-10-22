@@ -29,6 +29,10 @@ func (s *Server) handleIssueMagicLink(w stdhttp.ResponseWriter, r *stdhttp.Reque
 		s.handleStoreError(w, err)
 		return
 	}
+	if domain.IsWildcardHost(domain.ServiceHost(*service)) {
+		writeError(w, stdhttp.StatusBadRequest, "wildcard_service", "magic links need a service with a fixed hostname")
+		return
+	}
 	var req issueMagicLinkRequest
 	_ = decodeStrictJSON(r, &req)
 	ttl := 2 * time.Hour
