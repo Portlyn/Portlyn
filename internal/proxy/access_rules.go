@@ -78,14 +78,7 @@ func compileAccessRulePath(raw string) ([]string, bool) {
 	if value == "" {
 		return nil, false
 	}
-	if !strings.HasPrefix(value, "/") {
-		value = "/" + value
-	}
-	value = strings.TrimRight(value, "/")
-	if value == "" {
-		return []string{}, true
-	}
-	return strings.Split(strings.TrimPrefix(value, "/"), "/"), true
+	return strings.FieldsFunc(value, func(r rune) bool { return r == '/' }), true
 }
 
 func (r compiledAccessRule) matches(ip netip.Addr, path string) bool {

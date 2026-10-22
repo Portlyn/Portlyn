@@ -17,7 +17,7 @@ func TestAccessRulePathMatching(t *testing.T) {
 	rules, err := compileAccessRules([]domain.AccessRule{
 		{Name: "pub", Action: domain.AccessRuleAllow, Paths: []string{"/pub/*/pub"}},
 		{Name: "admin", Action: domain.AccessRuleAuthenticate, Paths: []string{"/admin/"}},
-		{Name: "deny", Action: domain.AccessRuleDeny, Paths: []string{"deny"}},
+		{Name: "deny", Action: domain.AccessRuleDeny, Paths: []string{"deny", "//double//slash/"}},
 	})
 	if err != nil {
 		t.Fatalf("compile: %v", err)
@@ -33,6 +33,7 @@ func TestAccessRulePathMatching(t *testing.T) {
 		"/Admin/users":     "admin",
 		"/administrator":   "",
 		"/deny":            "deny",
+		"/double/slash/x":  "deny",
 		"/":                "",
 	}
 	for path, want := range cases {
