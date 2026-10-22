@@ -8,9 +8,11 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"portlyn/internal/audit"
 	"portlyn/internal/clientcert"
 	"portlyn/internal/domain"
 )
@@ -286,5 +288,70 @@ func TestNodeHeartbeatMTLSHeaderFromLoopbackRequiresSignature(t *testing.T) {
 	}
 	if code := send(clientcert.Sign(server.cfg.SessionBridgeSecret, fingerprint)); code != http.StatusOK {
 		t.Fatalf("expected signed fingerprint header from loopback to be accepted, got %d", code)
+	}
+}
+
+type recordingAuditSink struct {
+	mu     sync.Mutex
+	events []audit.AuditEvent
+}
+
+func (s *recordingAuditSink) WriteEvent(_ context.Context, ev audit.AuditEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.events = append(s.events, ev)
+	return nil
+}
+
+func (s *recordingAuditSink) actions(action string) []audit.AuditEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []audit.AuditEvent
+	for _, ev := range s.events {
+		if ev.Action == action {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+func TestNodeHeartbeatAuditsOnlyStateChanges(t *testing.T) {
+	server, cleanup := newIntegrationServer(t)
+	defer cleanup()
+	sink := &recordingAuditSink{}
+	server.audit = audit.NewLogger(sink)
+	server.audit.SetClientIPResolver(server.clientIPForRequest)
+
+	node := &domain.Node{
+		Name:               "edge-3",
+		Status:             domain.NodeStatusUnknown,
+		HeartbeatAuthMode:  "token",
+		HeartbeatTokenHash: hashOpaqueToken("HEARTBEATTOKEN"),
+	}
+	if err := server.nodes.Create(context.Background(), node); err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+
+	send := func(body string) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/nodes/"+strconv.FormatUint(uint64(node.ID), 10)+"/heartbeat", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer HEARTBEATTOKEN")
+		rec := httptest.NewRecorder()
+		server.Router().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected heartbeat 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+	}
+
+	send(`{"version":"1.0.0"}`)
+	send(`{"version":"1.0.0"}`)
+	send(`{"version":"1.0.0"}`)
+	if got := len(sink.actions("node_heartbeat_accepted")); got != 1 {
+		t.Fatalf("expected one audit event for repeated healthy heartbeats, got %d", got)
+	}
+
+	send(`{"version":"1.0.1"}`)
+	if got := len(sink.actions("node_heartbeat_accepted")); got != 2 {
+		t.Fatalf("expected a version change to be audited, got %d events", got)
 	}
 }
