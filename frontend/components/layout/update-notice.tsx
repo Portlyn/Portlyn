@@ -8,7 +8,7 @@ import { useAuth } from "@/components/providers";
 import { apiFetch } from "@/lib/api";
 import type { UpdateStatus } from "@/lib/types";
 
-const REFRESH_MS = 60 * 60 * 1000;
+const REFRESH_MS = 10 * 60 * 1000;
 
 function updateCommand(status: UpdateStatus) {
   if (status.install_method === "docker") {
@@ -22,9 +22,10 @@ export function UpdateNotice() {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [opened, setOpened] = useState(false);
   const isAdmin = user?.role === "admin";
+  const setupPending = Boolean((user?.bootstrap_required || user?.must_change_password) && !user?.bootstrap_dismissed);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || setupPending) return;
     const load = () => {
       apiFetch<UpdateStatus>("/api/v1/system/update")
         .then(setStatus)
@@ -33,7 +34,7 @@ export function UpdateNotice() {
     load();
     const timer = window.setInterval(load, REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [isAdmin]);
+  }, [isAdmin, setupPending]);
 
   if (!isAdmin || !status?.update_available || !status.latest_version) {
     return null;
