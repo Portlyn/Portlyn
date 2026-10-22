@@ -115,7 +115,7 @@ func (r *Recorder) List(filter Filter, limit int) []Entry {
 	if r.full {
 		size = len(r.entries)
 	}
-	out := make([]Entry, 0, min(limit, size))
+	var out []Entry
 	for i := 0; i < size && len(out) < limit; i++ {
 		index := (r.next - 1 - i + len(r.entries)) % len(r.entries)
 		entry := r.entries[index]
