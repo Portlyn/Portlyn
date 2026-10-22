@@ -12,6 +12,15 @@ func (s *Server) autoIssueCertificateForDomain(ctx context.Context, dom *domain.
 		return nil
 	}
 
+	certs, err := s.certificates.List(ctx)
+	if err != nil {
+		s.logger.Warn("auto certificate: listing certificates failed", "error", err)
+		return nil
+	}
+	if domain.HostCoveredByCertificates(dom.Name, certs) {
+		return nil
+	}
+
 	provider := s.pickAutoCertProvider(ctx, explicitProviderID)
 	if provider == nil {
 		return nil
