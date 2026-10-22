@@ -53,3 +53,29 @@ func TestHostMatches(t *testing.T) {
 		}
 	}
 }
+
+func TestLoginAllowedOnHost(t *testing.T) {
+	wildcard := Service{Subdomain: "*", Domain: Domain{Name: "netinfo.ch"}, LoginHosts: JSONStringSlice{"allowed"}}
+	if !LoginAllowedOnHost(wildcard, "allowed.netinfo.ch") {
+		t.Fatal("expected a listed subdomain to allow login")
+	}
+	if LoginAllowedOnHost(wildcard, "blog.netinfo.ch") {
+		t.Fatal("expected an unlisted subdomain to refuse login")
+	}
+	exact := Service{Subdomain: "app", Domain: Domain{Name: "netinfo.ch"}}
+	if !LoginAllowedOnHost(exact, "app.netinfo.ch") {
+		t.Fatal("exact services always allow login")
+	}
+}
+
+func TestNormalizeLoginHosts(t *testing.T) {
+	got, err := NormalizeLoginHosts([]string{" Allowed ", "", "allowed", "isolation"})
+	if err != nil || len(got) != 2 || got[0] != "allowed" || got[1] != "isolation" {
+		t.Fatalf("unexpected result %v %v", got, err)
+	}
+	for _, bad := range []string{"a.b", "*", "-x", "a b"} {
+		if _, err := NormalizeLoginHosts([]string{bad}); err == nil {
+			t.Fatalf("expected %q to be rejected", bad)
+		}
+	}
+}

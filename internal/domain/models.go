@@ -461,6 +461,7 @@ type Service struct {
 	BlockedCountries     JSONStringSlice  `gorm:"type:text;not null;default:'[]'" json:"blocked_countries"`
 	AccessWindows        AccessWindowList `gorm:"type:text;not null;default:'[]'" json:"access_windows"`
 	AccessRules          AccessRuleList   `gorm:"type:text;not null;default:'[]'" json:"access_rules"`
+	LoginHosts           JSONStringSlice  `gorm:"type:text;not null;default:'[]'" json:"login_hosts"`
 	LastDeployedAt       *time.Time       `json:"last_deployed_at"`
 	DeploymentRevision   uint64           `gorm:"not null;default:0" json:"deployment_revision"`
 	Enabled              bool             `gorm:"not null;default:true" json:"enabled"`

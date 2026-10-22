@@ -130,6 +130,10 @@ func (m *Manager) authenticateProxyRequest(r *http.Request) (*domain.User, []uin
 }
 
 func (m *Manager) redirectToRouteLogin(w http.ResponseWriter, r *http.Request, route Route) {
+	if !domain.LoginAllowedOnHost(route.Service, normalizeHost(r.Host)) {
+		writeProxyError(w, http.StatusForbidden, "login_not_enabled", "login is not enabled for this subdomain")
+		return
+	}
 	location := m.auth.BuildRouteLoginURL(r.Context(), route.ServiceID, m.requestURL(r))
 	w.Header().Set("Location", location)
 	w.WriteHeader(http.StatusFound)

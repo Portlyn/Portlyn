@@ -53,6 +53,42 @@ func IsWildcardHost(host string) bool {
 	return strings.HasPrefix(host, "*.")
 }
 
+func LoginAllowedOnHost(service Service, host string) bool {
+	if !IsWildcardHost(ServiceHost(service)) {
+		return true
+	}
+	label, _, ok := strings.Cut(strings.ToLower(strings.TrimSpace(host)), ".")
+	if !ok || label == "" {
+		return false
+	}
+	for _, allowed := range service.LoginHosts {
+		if strings.EqualFold(strings.TrimSpace(allowed), label) {
+			return true
+		}
+	}
+	return false
+}
+
+func NormalizeLoginHosts(values []string) ([]string, error) {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, raw := range values {
+		label := strings.ToLower(strings.TrimSpace(raw))
+		if label == "" {
+			continue
+		}
+		if normalized, err := NormalizeSubdomain(label); err != nil || normalized != label || strings.ContainsAny(label, ".*") {
+			return nil, fmt.Errorf("login host %q must be a single subdomain label", raw)
+		}
+		if _, ok := seen[label]; ok {
+			continue
+		}
+		seen[label] = struct{}{}
+		out = append(out, label)
+	}
+	return out, nil
+}
+
 func HostMatches(pattern, host string) bool {
 	pattern = strings.ToLower(strings.TrimSpace(pattern))
 	host = strings.ToLower(strings.TrimSpace(host))

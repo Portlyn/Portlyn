@@ -301,6 +301,12 @@ func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
+	loginHosts, loginErr := domain.NormalizeLoginHosts(item.LoginHosts)
+	if loginErr != nil {
+		writeError(w, stdhttp.StatusBadRequest, "validation_error", loginErr.Error())
+		return
+	}
+	item.LoginHosts = loginHosts
 	if err := s.services.Create(r.Context(), item); err != nil {
 		s.internalError(w, err)
 		return
@@ -348,6 +354,7 @@ func buildServiceFromCreateRequest(req createServiceRequest, subdomain string, e
 		BlockedCountries:     normalizeCountryList(req.BlockedCountries),
 		AccessWindows:        toAccessWindows(req.AccessWindows),
 		AccessRules:          toAccessRules(req.AccessRules),
+		LoginHosts:           domain.JSONStringSlice(req.LoginHosts),
 		NodeID:               req.NodeID,
 	}
 }
@@ -468,6 +475,14 @@ func (s *Server) handleUpdateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 			writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
 			return
 		}
+	}
+	if req.LoginHosts != nil {
+		hosts, err := domain.NormalizeLoginHosts(*req.LoginHosts)
+		if err != nil {
+			writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
+			return
+		}
+		item.LoginHosts = hosts
 	}
 	if req.ClearNodeID != nil && *req.ClearNodeID {
 		item.NodeID = nil

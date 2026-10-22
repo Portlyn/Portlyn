@@ -110,6 +110,9 @@ func (s *Server) sessionBridgeHostAllowed(r *stdhttp.Request, user *domain.User,
 		candidates = append(candidates, item)
 	}
 	for _, item := range candidates {
+		if !domain.LoginAllowedOnHost(item, host) {
+			continue
+		}
 		policy, method, _, _ := proxy.EffectiveAccessForService(item)
 		if method != domain.AccessMethodSession && method != domain.AccessMethodOIDCOnly {
 			continue
@@ -268,7 +271,7 @@ func (s *Server) handleRouteVerifyEmailCode(w stdhttp.ResponseWriter, r *stdhttp
 	writeJSON(w, stdhttp.StatusOK, map[string]any{"ok": true, "bridge_url": bridgeURL})
 }
 
-var errWildcardReturnTarget = errors.New("open the service through one of its subdomains")
+var errWildcardReturnTarget = errors.New("login is not enabled for this subdomain")
 
 func (s *Server) buildRouteAccessBridgeURL(r *stdhttp.Request, service *domain.Service, method, email string) (string, error) {
 	host := domain.ServiceHost(*service)
@@ -281,7 +284,7 @@ func (s *Server) buildRouteAccessBridgeURL(r *stdhttp.Request, service *domain.S
 	}
 	if domain.IsWildcardHost(host) {
 		parsed, err := url.Parse(returnTo)
-		if err != nil || !domain.HostMatches(host, parsed.Hostname()) {
+		if err != nil || !domain.HostMatches(host, parsed.Hostname()) || !domain.LoginAllowedOnHost(*service, parsed.Hostname()) {
 			return "", errWildcardReturnTarget
 		}
 		host = strings.ToLower(parsed.Hostname())
