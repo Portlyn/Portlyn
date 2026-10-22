@@ -84,6 +84,8 @@ type Config struct {
 	AuthCacheTTL                    time.Duration
 	AuditBufferSize                 int
 	AccessLogBuffer                 int
+	UpdateCheck                     bool
+	UpdateCheckInterval             time.Duration
 	AccessLogPath                   string
 	AccessLogMaxSizeMB              int
 	AccessLogMaxFiles               int
@@ -239,6 +241,8 @@ func Load() (Config, error) {
 		AuthCacheTTL:                    getEnvDuration("AUTH_CACHE_TTL", 1*time.Minute),
 		AuditBufferSize:                 getEnvInt("AUDIT_BUFFER_SIZE", 1024),
 		AccessLogBuffer:                 getEnvInt("ACCESS_LOG_BUFFER", 2000),
+		UpdateCheck:                     getEnvBool("UPDATE_CHECK", true),
+		UpdateCheckInterval:             getEnvDuration("UPDATE_CHECK_INTERVAL", 12*time.Hour),
 		AccessLogPath:                   getEnv("ACCESS_LOG_PATH", ""),
 		AccessLogMaxSizeMB:              getEnvInt("ACCESS_LOG_MAX_SIZE_MB", 100),
 		AccessLogMaxFiles:               getEnvInt("ACCESS_LOG_MAX_FILES", 5),

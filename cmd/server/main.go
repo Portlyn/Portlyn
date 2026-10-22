@@ -31,6 +31,7 @@ import (
 	"portlyn/internal/security"
 	"portlyn/internal/store"
 	"portlyn/internal/tunnel"
+	"portlyn/internal/updatecheck"
 )
 
 var version = "dev"
@@ -444,6 +445,22 @@ func main() {
 	}
 	authService.StartCacheJanitor(rootCtx)
 	proxyManager.Start(rootCtx)
+	updateChecker := updatecheck.New(updatecheck.Options{
+		Repo:           updateRepo,
+		CurrentVersion: cfg.AppVersion,
+		Interval:       cfg.UpdateCheckInterval,
+		FirstDelay:     time.Minute,
+		Logger:         logger,
+		Enabled: func(ctx context.Context) bool {
+			if !cfg.UpdateCheck {
+				return false
+			}
+			settings, err := appSettingsStore.Get(ctx)
+			return err != nil || !settings.UpdateCheckDisabled
+		},
+	})
+	server.SetUpdateChecker(updateChecker)
+	updateChecker.Start(rootCtx)
 	if crowdSecClient.Enabled() {
 		crowdSecClient.Start(rootCtx)
 	}

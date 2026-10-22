@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	stdhttp "net/http"
 	"strings"
@@ -32,6 +33,11 @@ func (s *Server) handleUpdateAuthSettings(w stdhttp.ResponseWriter, r *stdhttp.R
 
 	if req.FrontendBaseURL != nil {
 		item.FrontendBaseURL = strings.TrimSpace(*req.FrontendBaseURL)
+	}
+	enablingUpdateCheck := false
+	if req.UpdateCheckEnabled != nil {
+		enablingUpdateCheck = *req.UpdateCheckEnabled && item.UpdateCheckDisabled
+		item.UpdateCheckDisabled = !*req.UpdateCheckEnabled
 	}
 	if req.AuthBrandName != nil {
 		item.AuthBrandName = strings.TrimSpace(*req.AuthBrandName)
@@ -193,6 +199,10 @@ func (s *Server) handleUpdateAuthSettings(w stdhttp.ResponseWriter, r *stdhttp.R
 		return
 	}
 
+	if enablingUpdateCheck && s.updates != nil {
+		go s.updates.CheckNow(context.WithoutCancel(r.Context()))
+	}
+
 	_ = s.audit.LogRequest(r.Context(), r, s.currentUserID(r), "update", "app_settings", &item.ID, map[string]any{"id": item.ID})
 	writeJSON(w, stdhttp.StatusOK, s.authSettingsResponse(item))
 }
@@ -219,6 +229,8 @@ func (s *Server) authSettingsResponse(item *domain.AppSettings) map[string]any {
 	return map[string]any{
 		"id":                             item.ID,
 		"frontend_base_url":              item.FrontendBaseURL,
+		"update_check_enabled":           !item.UpdateCheckDisabled,
+		"update_check_env_disabled":      !s.cfg.UpdateCheck,
 		"auth_brand_name":                item.AuthBrandName,
 		"auth_logo_url":                  item.AuthLogoURL,
 		"auth_background_color":          item.AuthBackgroundColor,

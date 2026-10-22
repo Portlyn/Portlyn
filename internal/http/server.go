@@ -29,6 +29,7 @@ import (
 	"portlyn/internal/security"
 	"portlyn/internal/store"
 	"portlyn/internal/tunnel"
+	"portlyn/internal/updatecheck"
 )
 
 type Server struct {
@@ -62,6 +63,7 @@ type Server struct {
 	exposureScanner  *scanner.Scanner
 	tunnel           *tunnel.Manager
 	accessLog        *accesslog.Recorder
+	updates          *updatecheck.Checker
 	webauthn         *auth.WebAuthnService
 	geoip            *geoip.Lookup
 	crowdsec         *security.CrowdSec
@@ -289,6 +291,7 @@ func (s *Server) Router() stdhttp.Handler {
 				r.Get("/settings/network", s.handleGetNetworkSettings)
 				r.Patch("/settings/network", s.handleUpdateNetworkSettings)
 				r.Get("/system/overview", s.handleSystemOverview)
+				r.Get("/system/update", s.handleUpdateStatus)
 				r.Get("/system/security-alerts", s.handleSecurityAlerts)
 				r.Get("/security/rotation/status", s.handleRotationStatus)
 				r.Post("/security/rotation/data-key/reencrypt", s.handleReencryptDataKey)

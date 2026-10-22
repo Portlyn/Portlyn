@@ -166,7 +166,9 @@ sudo portlyn update --version v1.2.3
 sudo portlyn update --no-restart # swap the binary but leave the service alone
 ```
 
-The same command exists for the node agent: `sudo portlyn-nodeagent update`. Backups are written next to the binary as `<path>.bak`. There are no automatic update checks. The CLI only contacts GitHub when you run the command.
+The same command exists for the node agent: `sudo portlyn-nodeagent update`. Backups are written next to the binary as `<path>.bak`.
+
+The hub looks up the latest release on GitHub every 12 hours and shows admins a notice in the dashboard when a newer one exists. It sends a plain request to the public release API and nothing else: no version, no instance id, no usage data. Nothing is installed without you running the update. Turn the check off under Settings, General, or for the whole instance with `UPDATE_CHECK=false`.
 
 ## Deployment topologies
 

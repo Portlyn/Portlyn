@@ -272,6 +272,10 @@ const optionalEnvReference = `
 #NODE_HEARTBEAT_AUTH_FAIL_RATE_LIMIT=20
 #NODE_HEARTBEAT_AUTH_FAIL_RATE_WINDOW=1m
 
+# Release check against GitHub every 12 hours, shown to admins in the dashboard
+#UPDATE_CHECK=true
+#UPDATE_CHECK_INTERVAL=12h
+
 # Access log of proxied requests, kept in memory for the dashboard and optionally written to a file
 #ACCESS_LOG_BUFFER=2000
 #ACCESS_LOG_PATH=/data/logs/access.log

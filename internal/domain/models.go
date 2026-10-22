@@ -644,6 +644,7 @@ type AppSettings struct {
 	CrowdSecAPIURL            string          `gorm:"size:512" json:"crowdsec_api_url"`
 	CrowdSecAPIKeyEncrypted   string          `gorm:"type:text" json:"-"`
 	CrowdSecPollIntervalSecs  int             `gorm:"not null;default:60" json:"crowdsec_poll_interval_secs"`
+	UpdateCheckDisabled       bool            `gorm:"not null;default:false" json:"update_check_disabled"`
 	CreatedAt                 time.Time       `json:"created_at"`
 	UpdatedAt                 time.Time       `json:"updated_at"`
 }

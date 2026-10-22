@@ -305,6 +305,7 @@ type routeVerifyEmailCodeRequest struct {
 
 type updateAuthSettingsRequest struct {
 	FrontendBaseURL           *string   `json:"frontend_base_url" validate:"omitempty,url"`
+	UpdateCheckEnabled        *bool     `json:"update_check_enabled"`
 	AuthBrandName             *string   `json:"auth_brand_name" validate:"omitempty,max=255"`
 	AuthLogoURL               *string   `json:"auth_logo_url" validate:"omitempty,max=1024"`
 	AuthBackgroundColor       *string   `json:"auth_background_color" validate:"omitempty,max=32"`
