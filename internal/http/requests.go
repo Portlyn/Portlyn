@@ -5,7 +5,7 @@ import (
 )
 
 type loginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
+	Email    string `json:"email" validate:"required,max=320"`
 	Password string `json:"password" validate:"required,min=8"`
 }
 
@@ -24,7 +24,7 @@ type verifyMFARequest struct {
 }
 
 type breakGlassLoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
+	Email    string `json:"email" validate:"required,max=320"`
 	Password string `json:"password" validate:"required,min=8"`
 	Token    string `json:"token" validate:"required,min=16,max=512"`
 }
