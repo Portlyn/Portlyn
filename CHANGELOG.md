@@ -4,6 +4,56 @@ All notable changes to this project should be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning for tagged releases.
 
+## [1.6.0] - 2026-10-23
+
+### Upgrade notes
+
+- The database gets three new migrations on startup (access rules, update
+  check setting, login hosts). Take a backup first as usual.
+- The dashboard now checks GitHub for new releases every 12 hours. Turn it off
+  in Settings or with `UPDATE_CHECK=false`.
+- Loopback is always a trusted proxy now, even with a custom
+  `TRUSTED_PROXY_CIDRS`.
+- Building from source needs Go 1.27.3 and Node 24.
+
+### Added
+
+- Access rules per service: allow, require login or deny by IP, CIDR and path.
+  Denied requests get a 403. The access tester shows which rule matched.
+- Access log page in the dashboard. Set `ACCESS_LOG_PATH` to also write it to
+  a rotating file.
+- Wildcard services with subdomain `*` or `*.lab`. Exact hosts still win. On a
+  wildcard service the route login only works on the subdomains listed under
+  "Login allowed on".
+- Update notice in the top bar when a new release is out.
+
+### Fixed
+
+- Audit events show the real client IP behind a trusted proxy, and node
+  heartbeats are only logged when the state changes.
+- Creating a domain no longer requests a certificate when an existing one
+  already covers it, and the automatic certificate can be turned off.
+- Cloudflare tokens pasted with quotes or a `Bearer` prefix work, and error
+  6111 has a readable message.
+- Wildcard certificates created from a base domain keep the base domain, and
+  the certificate form prefills the wildcard names.
+- Certificates without an expiry date no longer show 0001-01-01.
+- Validation errors name the field, and wildcard hostnames in the domain form
+  get a clear message.
+- The HTTPS listener starts with ACME turned off.
+- Enrolling a node while the tunnel is off fails with a clear error instead of
+  using up the token, the agent retries with backoff, and the nodes page warns
+  while the tunnel is off.
+- SMTP settings can be saved with SMTP turned off and no sender address.
+- The route login page no longer retries in a loop after the server refuses
+  the session bridge.
+- The OIDC admin role is also read from the access token.
+- `admin@localhost` from the local profile can log in.
+
+### Security
+
+- Updated Go, Node and all dependencies.
+
 ## [1.5.1] - 2026-09-23
 
 ### Fixed
