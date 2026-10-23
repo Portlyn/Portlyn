@@ -15,7 +15,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useAuth } from "@/components/providers";
 import { apiFetch, ApiError, getApiBaseUrl } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
-import type { Node, NodeEnrollmentToken, NodeEnrollmentTokenCreateResponse, NodePayload } from "@/lib/types";
+import type { Node, NodeEnrollmentToken, NodeEnrollmentTokenCreateResponse, NodePayload, TunnelSettings } from "@/lib/types";
 
 type InstallPlatform = "linux" | "macos" | "windows";
 
@@ -103,6 +103,7 @@ export default function NodesPage() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [nodeToDelete, setNodeToDelete] = useState<Node | null>(null);
   const [tokens, setTokens] = useState<NodeEnrollmentToken[]>([]);
+  const [tunnelReady, setTunnelReady] = useState(true);
   const [tokenDescription, setTokenDescription] = useState("");
   const [tokenTTL, setTokenTTL] = useState("86400");
   const [tokenSingleUse, setTokenSingleUse] = useState(true);
@@ -131,12 +132,14 @@ export default function NodesPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [nodeItems, enrollmentTokens] = await Promise.all([
+      const [nodeItems, enrollmentTokens, tunnel] = await Promise.all([
         apiFetch<Node[]>("/api/v1/nodes"),
-        canManage ? apiFetch<NodeEnrollmentToken[]>("/api/v1/node-enrollment-tokens") : Promise.resolve([])
+        canManage ? apiFetch<NodeEnrollmentToken[]>("/api/v1/node-enrollment-tokens") : Promise.resolve([]),
+        canManage ? apiFetch<TunnelSettings>("/api/v1/tunnel/settings").catch(() => null) : Promise.resolve(null)
       ]);
       setNodes(nodeItems);
       setTokens(enrollmentTokens);
+      setTunnelReady(!tunnel || (tunnel.enabled && tunnel.configured));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to load nodes.");
     } finally {
@@ -291,6 +294,11 @@ export default function NodesPage() {
       />
       {canManage ? (
         <Stack gap="md">
+          {!tunnelReady ? (
+            <Alert color="warning" variant="light" title="Tunnel is off">
+              Nodes cannot enroll until the tunnel is enabled under Settings, Network.
+            </Alert>
+          ) : null}
           <Card withBorder>
             <Stack gap="sm">
               <Group justify="space-between" align="center">

@@ -251,7 +251,7 @@ const optionalEnvReference = `
 #OIDC_ALLOW_PRIVATE_ISSUER=false
 
 # Proxy and client addresses
-#TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128
+#TRUSTED_PROXY_CIDRS=192.0.2.10/32
 #CORS_ALLOWED_ORIGINS=http://localhost,http://127.0.0.1
 #PROXY_ALLOW_PRIVATE_UPSTREAMS=true
 #REQUEST_CLIENT_CERT=false
