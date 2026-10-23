@@ -46,6 +46,12 @@ describe("sanitizeReturnTo", () => {
     expect(sanitizeReturnTo("https://evil.example/dash", "app.example.com")).toBeNull();
   });
 
+  it("accepts one subdomain level under a wildcard service host", () => {
+    expect(sanitizeReturnTo("https://lab.example.com/x", "*.example.com")).toBe("https://lab.example.com/x");
+    expect(sanitizeReturnTo("https://a.b.example.com/x", "*.example.com")).toBeNull();
+    expect(sanitizeReturnTo("https://example.com.evil.test/x", "*.example.com")).toBeNull();
+  });
+
   it("rejects absolute URLs when no host is expected", () => {
     expect(sanitizeReturnTo("https://app.example.com/dash")).toBeNull();
   });

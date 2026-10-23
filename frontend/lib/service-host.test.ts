@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { servicePublicURL } from "./service-host";
+import { hostMatches, servicePublicURL } from "./service-host";
 import type { Service } from "./types";
 
 function service(overrides: Partial<Service>): Partial<Service> {
@@ -29,5 +29,22 @@ describe("servicePublicURL", () => {
   it("returns nothing without a host", () => {
     expect(servicePublicURL({ path: "/" })).toBe("");
     expect(servicePublicURL(null)).toBe("");
+  });
+});
+
+describe("hostMatches", () => {
+  it("matches exact hosts", () => {
+    expect(hostMatches("app.example.com", "APP.example.com")).toBe(true);
+    expect(hostMatches("app.example.com", "other.example.com")).toBe(false);
+  });
+
+  it("matches one label under a wildcard", () => {
+    expect(hostMatches("*.example.com", "app.example.com")).toBe(true);
+    expect(hostMatches("*.example.com", "a.b.example.com")).toBe(false);
+    expect(hostMatches("*.example.com", "example.com")).toBe(false);
+  });
+
+  it("has no public url for wildcard services", () => {
+    expect(servicePublicURL(service({ hostname: "*.example.com" }))).toBe("");
   });
 });

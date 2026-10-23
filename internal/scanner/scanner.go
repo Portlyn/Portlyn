@@ -165,7 +165,7 @@ func (s *Scanner) RunOnce(ctx context.Context) {
 
 func (s *Scanner) ScanService(ctx context.Context, service domain.Service) *domain.ServiceExposureReport {
 	host := domain.ServiceHost(service)
-	if strings.TrimSpace(host) == "" {
+	if strings.TrimSpace(host) == "" || domain.IsWildcardHost(host) {
 		return nil
 	}
 	report := &domain.ServiceExposureReport{

@@ -48,7 +48,7 @@ export function ServiceTable({
                 </Text>
               </Table.Td>
               <Table.Td>
-                {serviceHostname(service) ? (
+                {servicePublicURL(service) ? (
                   <Anchor href={servicePublicURL(service)} target="_blank" rel="noopener noreferrer">
                     <Group gap={4} wrap="nowrap">
                       {serviceHostname(service)}
@@ -56,7 +56,7 @@ export function ServiceTable({
                     </Group>
                   </Anchor>
                 ) : (
-                  service.domain?.name || "-"
+                  serviceHostname(service) || service.domain?.name || "-"
                 )}
               </Table.Td>
               <Table.Td>{service.path}</Table.Td>

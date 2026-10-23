@@ -93,8 +93,24 @@ func (s *Server) sessionBridgeHostAllowed(r *stdhttp.Request, user *domain.User,
 	if err != nil {
 		return false, err
 	}
+	candidates := make([]domain.Service, 0, 1)
+	exact := false
 	for _, item := range services {
-		if !item.Enabled || strings.ToLower(domain.ServiceHost(item)) != host {
+		serviceHost := strings.ToLower(domain.ServiceHost(item))
+		if !item.Enabled || !domain.HostMatches(serviceHost, host) {
+			continue
+		}
+		if serviceHost == host && !exact {
+			candidates = candidates[:0]
+			exact = true
+		}
+		if exact && serviceHost != host {
+			continue
+		}
+		candidates = append(candidates, item)
+	}
+	for _, item := range candidates {
+		if !domain.LoginAllowedOnHost(item, host) {
 			continue
 		}
 		policy, method, _, _ := proxy.EffectiveAccessForService(item)
@@ -142,6 +158,10 @@ func (s *Server) handleRoutePIN(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		return
 	}
 	bridgeURL, err := s.buildRouteAccessBridgeURL(r, service, domain.AccessMethodPIN, "")
+	if errors.Is(err, errWildcardReturnTarget) {
+		writeError(w, stdhttp.StatusBadRequest, "invalid_return_target", err.Error())
+		return
+	}
 	if err != nil {
 		s.internalError(w, err)
 		return
@@ -238,6 +258,10 @@ func (s *Server) handleRouteVerifyEmailCode(w stdhttp.ResponseWriter, r *stdhttp
 		return
 	}
 	bridgeURL, err := s.buildRouteAccessBridgeURL(r, service, domain.AccessMethodEmailCode, req.Email)
+	if errors.Is(err, errWildcardReturnTarget) {
+		writeError(w, stdhttp.StatusBadRequest, "invalid_return_target", err.Error())
+		return
+	}
 	if err != nil {
 		s.internalError(w, err)
 		return
@@ -247,6 +271,8 @@ func (s *Server) handleRouteVerifyEmailCode(w stdhttp.ResponseWriter, r *stdhttp
 	writeJSON(w, stdhttp.StatusOK, map[string]any{"ok": true, "bridge_url": bridgeURL})
 }
 
+var errWildcardReturnTarget = errors.New("login is not enabled for this subdomain")
+
 func (s *Server) buildRouteAccessBridgeURL(r *stdhttp.Request, service *domain.Service, method, email string) (string, error) {
 	host := domain.ServiceHost(*service)
 	if strings.TrimSpace(host) == "" {
@@ -255,6 +281,13 @@ func (s *Server) buildRouteAccessBridgeURL(r *stdhttp.Request, service *domain.S
 	returnTo := strings.TrimSpace(r.URL.Query().Get("returnTo"))
 	if returnTo == "" {
 		returnTo = strings.TrimSpace(r.Header.Get("X-Portlyn-Return-To"))
+	}
+	if domain.IsWildcardHost(host) {
+		parsed, err := url.Parse(returnTo)
+		if err != nil || !domain.HostMatches(host, parsed.Hostname()) || !domain.LoginAllowedOnHost(*service, parsed.Hostname()) {
+			return "", errWildcardReturnTarget
+		}
+		host = strings.ToLower(parsed.Hostname())
 	}
 	token, err := s.auth.IssueRouteAccessBridgeToken(service.ID, host, method, email, returnTo)
 	if err != nil {

@@ -139,6 +139,12 @@ func (s *Server) handleUpsertService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
+	loginHosts, loginErr := domain.NormalizeLoginHosts(item.LoginHosts)
+	if loginErr != nil {
+		writeError(w, stdhttp.StatusBadRequest, "validation_error", loginErr.Error())
+		return
+	}
+	item.LoginHosts = loginHosts
 
 	created := existing == nil
 	if existing != nil {

@@ -64,6 +64,13 @@ func (c *InMemoryConfigCache) InvalidateHost(_ context.Context, host string) err
 	return nil
 }
 
+func (c *InMemoryConfigCache) InvalidateAll(context.Context) error {
+	c.mu.Lock()
+	c.items = make(map[string]memoryCacheEntry)
+	c.mu.Unlock()
+	return nil
+}
+
 type RedisConfigCache struct {
 	client *redis.Client
 	prefix string
@@ -103,6 +110,27 @@ func (c *RedisConfigCache) SetRoutesForHost(ctx context.Context, host string, ro
 
 func (c *RedisConfigCache) InvalidateHost(ctx context.Context, host string) error {
 	return c.client.Del(ctx, c.key(host)).Err()
+}
+
+func (c *RedisConfigCache) InvalidateAll(ctx context.Context) error {
+	iter := c.client.Scan(ctx, 0, c.prefix+":*", 500).Iterator()
+	keys := make([]string, 0, 500)
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+		if len(keys) == cap(keys) {
+			if err := c.client.Del(ctx, keys...).Err(); err != nil {
+				return err
+			}
+			keys = keys[:0]
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return err
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	return c.client.Del(ctx, keys...).Err()
 }
 
 func (c *RedisConfigCache) key(host string) string {

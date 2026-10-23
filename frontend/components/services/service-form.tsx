@@ -12,6 +12,7 @@ import {
   Stack,
   Switch,
   Tabs,
+  TagsInput,
   Text,
   TextInput,
   Textarea
@@ -74,6 +75,7 @@ export function ServiceForm({
   const [blocklistText, setBlocklistText] = useState(listToLines(initialValues?.ip_blocklist));
   const [emailWhitelistText, setEmailWhitelistText] = useState(listToLines(initialValues?.access_method_config?.allowed_emails));
   const [windowDraft, setWindowDraft] = useState<AccessWindow>(blankWindow);
+  const [loginHostError, setLoginHostError] = useState<string | null>(null);
   const [riskAssessment, setRiskAssessment] = useState<RiskAssessment | null>(null);
   const [pendingValues, setPendingValues] = useState<ServicePayload | null>(null);
 
@@ -160,6 +162,7 @@ export function ServiceForm({
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <TextInput
                   label="Subdomain"
+                  placeholder="app, or * for every subdomain"
                   value={values.subdomain}
                   onChange={(event) => update("subdomain", event.currentTarget.value)}
                 />
@@ -175,6 +178,25 @@ export function ServiceForm({
                   Public host: {hostnamePreview || "Select a root domain"}
                 </Text>
               </Grid.Col>
+              {values.subdomain.trim().startsWith("*") ? (
+                <Grid.Col span={12}>
+                  <TagsInput
+                    label="Login allowed on"
+                    description="Subdomains that may use login. Requests that need a login are refused on all others."
+                    placeholder={values.login_hosts.length === 0 ? "None, e.g. app" : undefined}
+                    value={values.login_hosts}
+                    splitChars={[",", " ", ";"]}
+                    acceptValueOnBlur
+                    error={loginHostError}
+                    onChange={(next) => {
+                      const valid = next.map((item) => item.trim().toLowerCase()).filter(Boolean);
+                      const rejected = valid.find((item) => !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(item));
+                      setLoginHostError(rejected ? `${rejected} is not a single subdomain label` : null);
+                      update("login_hosts", [...new Set(valid.filter((item) => item !== rejected))]);
+                    }}
+                  />
+                </Grid.Col>
+              ) : null}
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <Select
                   label="TLS Mode"

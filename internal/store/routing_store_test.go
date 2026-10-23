@@ -113,3 +113,60 @@ func TestDomainCandidatesForHostRejectsAbusiveHosts(t *testing.T) {
 		}
 	}
 }
+
+func TestRoutingStoreResolvesWildcardHosts(t *testing.T) {
+	dir := t.TempDir()
+	db, err := NewDatabase(config.Config{
+		DatabaseDriver: "sqlite",
+		DatabasePath:   filepath.Join(dir, "portlyn.db"),
+		JWTSecret:      "12345678901234567890123456789012",
+	})
+	if err != nil {
+		t.Fatalf("new database: %v", err)
+	}
+	if err := Migrate(context.Background(), db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	t.Cleanup(func() {
+		sqlDB, _ := db.DB()
+		if sqlDB != nil {
+			_ = sqlDB.Close()
+		}
+	})
+
+	ctx := context.Background()
+	rootDomain := &domain.Domain{Name: "netinfo.ch", Type: "root"}
+	if err := NewDomainStore(db).Create(ctx, rootDomain); err != nil {
+		t.Fatalf("create domain: %v", err)
+	}
+	services := NewServiceStore(db)
+	for _, item := range []*domain.Service{
+		{Name: "catch all", DomainID: rootDomain.ID, Subdomain: "*", Path: "/", TargetURL: "http://10.0.0.1", TLSMode: "offload", Enabled: true},
+		{Name: "blocked", DomainID: rootDomain.ID, Subdomain: "blocked", Path: "/", TargetURL: "http://10.0.0.2", TLSMode: "offload", Enabled: true},
+	} {
+		if err := services.Create(ctx, item); err != nil {
+			t.Fatalf("create service: %v", err)
+		}
+	}
+
+	store := NewRoutingStore(db)
+	cases := map[string]string{
+		"allowed.netinfo.ch": "catch all",
+		"blocked.netinfo.ch": "blocked",
+		"a.b.netinfo.ch":     "",
+		"netinfo.ch":         "",
+	}
+	for host, want := range cases {
+		routes, err := store.GetRoutesForHost(ctx, host)
+		if err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+		got := ""
+		if len(routes) > 0 {
+			got = routes[0].ServiceName
+		}
+		if got != want || len(routes) > 1 {
+			t.Errorf("%s: expected %q, got %q (%d routes)", host, want, got, len(routes))
+		}
+	}
+}

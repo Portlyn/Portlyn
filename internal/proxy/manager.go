@@ -249,7 +249,11 @@ func (m *Manager) Start(ctx context.Context) {
 					if !ok {
 						return
 					}
-					m.localCache.Remove(normalizeHost(event.Host))
+					if host := normalizeHost(event.Host); domain.IsWildcardHost(host) {
+						m.localCache.Purge()
+					} else {
+						m.localCache.Remove(host)
+					}
 				}
 			}
 		}()
@@ -264,9 +268,18 @@ func (m *Manager) SyncAllServicesFromDB(context.Context) error {
 func (m *Manager) InvalidateHost(ctx context.Context, host string) error {
 	started := time.Now()
 	host = normalizeHost(host)
-	m.localCache.Remove(host)
+	wildcard := domain.IsWildcardHost(host)
+	if wildcard {
+		m.localCache.Purge()
+	} else {
+		m.localCache.Remove(host)
+	}
 	if m.cache != nil {
-		if err := m.cache.InvalidateHost(ctx, host); err != nil {
+		invalidate := func() error { return m.cache.InvalidateHost(ctx, host) }
+		if wildcard {
+			invalidate = func() error { return m.cache.InvalidateAll(ctx) }
+		}
+		if err := invalidate(); err != nil {
 			return err
 		}
 	}

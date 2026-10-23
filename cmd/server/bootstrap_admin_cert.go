@@ -30,10 +30,14 @@ func activeCertChallenge(ctx context.Context, dnsProviders *store.DNSProviderSto
 }
 
 func enqueuePendingCertificate(ctx context.Context, certificates *store.CertificateStore, domainID uint, host, challengeType string, dnsProviderID *uint, logger *slog.Logger) {
+	certType := domain.CertificateTypeSingle
+	if domain.IsWildcardHost(host) {
+		certType = domain.CertificateTypeWildcard
+	}
 	cert := &domain.Certificate{
 		DomainID:      domainID,
 		PrimaryDomain: host,
-		Type:          domain.CertificateTypeSingle,
+		Type:          certType,
 		Status:        domain.CertificateStatusPending,
 		ChallengeType: challengeType,
 		DNSProviderID: dnsProviderID,
@@ -113,6 +117,10 @@ func ensureServiceCertificates(ctx context.Context, cfg config.Config, services 
 			continue
 		}
 		if domain.HostCoveredByCertificates(host, certs) {
+			continue
+		}
+		if domain.IsWildcardHost(host) && challengeType != domain.CertificateChallengeDNS01 {
+			logger.Warn("wildcard service needs a dns provider for its certificate", "host", host)
 			continue
 		}
 		enqueuePendingCertificate(ctx, certificates, service.DomainID, host, challengeType, dnsProviderID, logger)

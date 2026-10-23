@@ -188,6 +188,7 @@ type createServiceRequest struct {
 	BlockedCountries   []string                  `json:"blocked_countries"`
 	AccessWindows      []accessWindowRequest     `json:"access_windows"`
 	AccessRules        []accessRuleRequest       `json:"access_rules" validate:"max=100,dive"`
+	LoginHosts         []string                  `json:"login_hosts" validate:"max=100"`
 	NodeID             *uint                     `json:"node_id"`
 	Node               string                    `json:"node" validate:"omitempty,max=255"`
 	ClearNodeID        *bool                     `json:"clear_node_id"`
@@ -218,6 +219,7 @@ type updateServiceRequest struct {
 	BlockedCountries   *[]string                  `json:"blocked_countries"`
 	AccessWindows      *[]accessWindowRequest     `json:"access_windows"`
 	AccessRules        *[]accessRuleRequest       `json:"access_rules" validate:"omitempty,max=100,dive"`
+	LoginHosts         *[]string                  `json:"login_hosts" validate:"omitempty,max=100"`
 	NodeID             *uint                      `json:"node_id"`
 	Node               *string                    `json:"node" validate:"omitempty,max=255"`
 	ClearNodeID        *bool                      `json:"clear_node_id"`

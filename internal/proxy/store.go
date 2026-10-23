@@ -15,6 +15,7 @@ type ConfigCache interface {
 	GetRoutesForHost(ctx context.Context, host string) ([]RouteConfig, bool, error)
 	SetRoutesForHost(ctx context.Context, host string, routes []RouteConfig, ttl time.Duration) error
 	InvalidateHost(ctx context.Context, host string) error
+	InvalidateAll(ctx context.Context) error
 }
 
 type RouteChangedEvent struct {
