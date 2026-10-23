@@ -81,6 +81,27 @@ export interface AccessRule {
   paths: string[];
 }
 
+export interface AccessLogEntry {
+  time: string;
+  request_id: string;
+  method: string;
+  host: string;
+  path: string;
+  status: number;
+  latency_ms: number;
+  bytes: number;
+  remote_addr: string;
+  user_agent: string;
+  referer?: string;
+  outcome: string;
+  reason: string;
+  service_id?: number;
+  service_name?: string;
+  user_id?: number;
+  user_email?: string;
+  access_rule?: string;
+}
+
 export interface AccessPolicy {
   access_mode: AccessMode;
   allowed_roles: UserRole[];

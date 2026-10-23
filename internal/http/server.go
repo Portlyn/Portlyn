@@ -17,6 +17,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
 
+	"portlyn/internal/accesslog"
 	"portlyn/internal/acme"
 	"portlyn/internal/audit"
 	"portlyn/internal/auth"
@@ -62,6 +63,7 @@ type Server struct {
 	exposureReports  *store.ExposureReportStore
 	exposureScanner  *scanner.Scanner
 	tunnel           *tunnel.Manager
+	accessLog        *accesslog.Recorder
 	webauthn         *auth.WebAuthnService
 	geoip            *geoip.Lookup
 	crowdsec         *security.CrowdSec
@@ -284,6 +286,7 @@ func (s *Server) Router() stdhttp.Handler {
 				r.Get("/services/{id}", s.handleGetService)
 				r.Get("/services/{id}/last-denials", s.handleListServiceDenials)
 				r.Post("/services/{id}/explain", s.handleExplainServiceAccess)
+				r.Get("/access-logs", s.handleListAccessLogs)
 				r.Get("/audit-logs", s.handleListAuditLogs)
 				r.Get("/audit-logs/verify", s.handleVerifyAuditChain)
 				r.Get("/settings/auth", s.handleGetAuthSettings)

@@ -16,6 +16,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"portlyn/internal/accesslog"
 	"portlyn/internal/acme"
 	"portlyn/internal/audit"
 	"portlyn/internal/auth"
@@ -332,6 +333,18 @@ func main() {
 		}
 	}
 
+	accessLog, err := accesslog.New(accesslog.Options{
+		Capacity:     cfg.AccessLogBuffer,
+		FilePath:     cfg.AccessLogPath,
+		MaxFileBytes: int64(cfg.AccessLogMaxSizeMB) << 20,
+		MaxFiles:     cfg.AccessLogMaxFiles,
+		Logger:       logger,
+	})
+	if err != nil {
+		logger.Error("failed to open access log", "error", err)
+		os.Exit(1)
+	}
+
 	proxyManager := proxy.NewManager(
 		routingStore,
 		configCache,
@@ -358,6 +371,7 @@ func main() {
 			CrowdSecFailOpen:            cfg.CrowdSecFailOpen,
 			BlockPrivateUpstreams:       !cfg.AllowPrivateUpstreams,
 			ClientCertHeaderSecret:      cfg.SessionBridgeSecret,
+			AccessLog:                   accessLog,
 		},
 	)
 
@@ -407,6 +421,7 @@ func main() {
 		bootWarnings,
 		healthChecks...,
 	)
+	server.SetAccessLog(accessLog)
 
 	if migrated, err := server.MigrateDNSProviderSecrets(context.Background()); err != nil {
 		logger.Error("failed to migrate dns provider secrets", "error", err)
@@ -531,6 +546,7 @@ func main() {
 	defer cancel()
 	acmeManager.StopWorker()
 	auditSink.Close()
+	accessLog.Close()
 	if redisClient != nil {
 		_ = redisClient.Close()
 	}

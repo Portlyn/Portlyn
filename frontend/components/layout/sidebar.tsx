@@ -8,6 +8,7 @@ import {
   IconGlobe,
   IconGridDots,
   IconKey,
+  IconListDetails,
   IconLock,
   IconSettings,
   IconShieldCheck,
@@ -60,6 +61,7 @@ const navSections: Array<{ section: string; items: NavItem[] }> = [
     items: [
       { label: "System", href: "/system", icon: IconActivity, roles: ["admin"] },
       { label: "Exposure", href: "/exposure", icon: IconShieldCheck, roles: ["admin"] },
+      { label: "Access Log", href: "/access-log", icon: IconListDetails, roles: ["admin"] },
       { label: "Audit Logs", href: "/audit-logs", icon: IconFileText, roles: ["admin"] },
       { label: "Audit Webhooks", href: "/audit-webhooks", icon: IconWebhook, roles: ["admin"] },
       { label: "Access Tester", href: "/access-tester", icon: IconShieldCheck, roles: ["admin"] }

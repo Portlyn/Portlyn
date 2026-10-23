@@ -84,6 +84,10 @@ type Config struct {
 	AuthRateLimit                   RateLimitConfig
 	AuthCacheTTL                    time.Duration
 	AuditBufferSize                 int
+	AccessLogBuffer                 int
+	AccessLogPath                   string
+	AccessLogMaxSizeMB              int
+	AccessLogMaxFiles               int
 	AuditBatchSize                  int
 	AuditFlushInterval              time.Duration
 	AuditDropPolicy                 string
@@ -235,6 +239,10 @@ func Load() (Config, error) {
 		},
 		AuthCacheTTL:                    getEnvDuration("AUTH_CACHE_TTL", 1*time.Minute),
 		AuditBufferSize:                 getEnvInt("AUDIT_BUFFER_SIZE", 1024),
+		AccessLogBuffer:                 getEnvInt("ACCESS_LOG_BUFFER", 2000),
+		AccessLogPath:                   getEnv("ACCESS_LOG_PATH", ""),
+		AccessLogMaxSizeMB:              getEnvInt("ACCESS_LOG_MAX_SIZE_MB", 100),
+		AccessLogMaxFiles:               getEnvInt("ACCESS_LOG_MAX_FILES", 5),
 		AuditBatchSize:                  getEnvInt("AUDIT_BATCH_SIZE", 128),
 		AuditFlushInterval:              getEnvDuration("AUDIT_FLUSH_INTERVAL", 250*time.Millisecond),
 		AuditDropPolicy:                 strings.ToLower(getEnv("AUDIT_DROP_POLICY", "sync_fallback")),
