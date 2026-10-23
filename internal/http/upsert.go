@@ -135,6 +135,10 @@ func (s *Server) handleUpsertService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
+	if err := validateAccessRules(item.AccessRules); err != nil {
+		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
 
 	created := existing == nil
 	if existing != nil {

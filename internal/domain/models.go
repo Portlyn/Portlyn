@@ -157,6 +157,40 @@ func (s *AccessWindowList) Scan(value any) error {
 	return scanJSONValue(value, s)
 }
 
+const (
+	AccessRuleAllow        = "allow"
+	AccessRuleAuthenticate = "authenticate"
+	AccessRuleDeny         = "deny"
+)
+
+type AccessRule struct {
+	Name    string          `json:"name"`
+	Action  string          `json:"action"`
+	Sources JSONStringSlice `json:"sources"`
+	Paths   JSONStringSlice `json:"paths"`
+}
+
+type AccessRuleList []AccessRule
+
+func (s AccessRuleList) Value() (driver.Value, error) {
+	if len(s) == 0 {
+		return "[]", nil
+	}
+	bytes, err := json.Marshal(s)
+	if err != nil {
+		return nil, err
+	}
+	return string(bytes), nil
+}
+
+func (s *AccessRuleList) Scan(value any) error {
+	if value == nil {
+		*s = AccessRuleList{}
+		return nil
+	}
+	return scanJSONValue(value, s)
+}
+
 type AccessPolicy struct {
 	AccessMode           string          `json:"access_mode"`
 	AllowedRoles         JSONStringSlice `json:"allowed_roles"`
@@ -426,6 +460,7 @@ type Service struct {
 	AllowedCountries     JSONStringSlice  `gorm:"type:text;not null;default:'[]'" json:"allowed_countries"`
 	BlockedCountries     JSONStringSlice  `gorm:"type:text;not null;default:'[]'" json:"blocked_countries"`
 	AccessWindows        AccessWindowList `gorm:"type:text;not null;default:'[]'" json:"access_windows"`
+	AccessRules          AccessRuleList   `gorm:"type:text;not null;default:'[]'" json:"access_rules"`
 	LastDeployedAt       *time.Time       `json:"last_deployed_at"`
 	DeploymentRevision   uint64           `gorm:"not null;default:0" json:"deployment_revision"`
 	Enabled              bool             `gorm:"not null;default:true" json:"enabled"`

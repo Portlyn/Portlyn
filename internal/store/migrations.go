@@ -85,6 +85,18 @@ var migrations = []Migration{
 			return db.Migrator().DropColumn(&domain.Service{}, "Enabled")
 		},
 	},
+	{
+		ID: "0003_service_access_rules",
+		Up: func(db *gorm.DB) error {
+			if db.Migrator().HasColumn(&domain.Service{}, "access_rules") {
+				return nil
+			}
+			return db.Migrator().AddColumn(&domain.Service{}, "AccessRules")
+		},
+		Down: func(db *gorm.DB) error {
+			return db.Migrator().DropColumn(&domain.Service{}, "AccessRules")
+		},
+	},
 }
 
 // Each migration commits together with its bookkeeping row, so a crash

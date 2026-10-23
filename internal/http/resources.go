@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"fmt"
 	stdhttp "net/http"
 	"net/netip"
 	"net/url"
@@ -296,6 +297,10 @@ func (s *Server) handleCreateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
+	if err := validateAccessRules(item.AccessRules); err != nil {
+		writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
 	if err := s.services.Create(r.Context(), item); err != nil {
 		s.internalError(w, err)
 		return
@@ -342,6 +347,7 @@ func buildServiceFromCreateRequest(req createServiceRequest, subdomain string, e
 		AllowedCountries:     normalizeCountryList(req.AllowedCountries),
 		BlockedCountries:     normalizeCountryList(req.BlockedCountries),
 		AccessWindows:        toAccessWindows(req.AccessWindows),
+		AccessRules:          toAccessRules(req.AccessRules),
 		NodeID:               req.NodeID,
 	}
 }
@@ -455,6 +461,13 @@ func (s *Server) handleUpdateService(w stdhttp.ResponseWriter, r *stdhttp.Reques
 	}
 	if req.AccessWindows != nil {
 		item.AccessWindows = toAccessWindows(*req.AccessWindows)
+	}
+	if req.AccessRules != nil {
+		item.AccessRules = toAccessRules(*req.AccessRules)
+		if err := validateAccessRules(item.AccessRules); err != nil {
+			writeError(w, stdhttp.StatusBadRequest, "validation_error", err.Error())
+			return
+		}
 	}
 	if req.ClearNodeID != nil && *req.ClearNodeID {
 		item.NodeID = nil
@@ -656,6 +669,33 @@ func toAccessWindows(values []accessWindowRequest) domain.AccessWindowList {
 		})
 	}
 	return out
+}
+
+func toAccessRules(values []accessRuleRequest) domain.AccessRuleList {
+	out := make(domain.AccessRuleList, 0, len(values))
+	for _, value := range values {
+		out = append(out, domain.AccessRule{
+			Name:    domainString(value.Name),
+			Action:  strings.ToLower(domainString(value.Action)),
+			Sources: normalizeStringList(value.Sources),
+			Paths:   normalizeStringList(value.Paths),
+		})
+	}
+	return out
+}
+
+func validateAccessRules(rules domain.AccessRuleList) error {
+	for i, rule := range rules {
+		if _, _, err := proxy.ParseAccessRuleSources(rule.Sources); err != nil {
+			return fmt.Errorf("access rule %d: %w", i+1, err)
+		}
+		for _, path := range rule.Paths {
+			if len(path) > 512 || strings.ContainsAny(path, " ?#\t") {
+				return fmt.Errorf("access rule %d: invalid path %q", i+1, path)
+			}
+		}
+	}
+	return nil
 }
 
 func domainString(value string) string {

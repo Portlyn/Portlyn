@@ -124,6 +124,10 @@ func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
 	if err != nil {
 		return Route{}, fmt.Errorf("compile access windows for service %d: %w", config.ServiceID, err)
 	}
+	accessRules, err := compileAccessRules(config.AccessRules)
+	if err != nil {
+		return Route{}, fmt.Errorf("compile access rules for service %d: %w", config.ServiceID, err)
+	}
 	revision := config.DeploymentRevision
 	if revision == 0 {
 		revision = atomic.AddUint64(&m.revision, 1)
@@ -177,6 +181,7 @@ func (m *Manager) routeFromConfig(config RouteConfig) (Route, error) {
 		AllowedCountries:      append([]string{}, config.AllowedCountries...),
 		BlockedCountries:      append([]string{}, config.BlockedCountries...),
 		CompiledWindows:       compiledWindows,
+		AccessRules:           accessRules,
 		DeploymentRevision:    revision,
 		ReverseProxyHandler:   proxy,
 	}, nil

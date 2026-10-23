@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Card, Grid, Group, Loader, Paper, SimpleGrid, Stack, Tabs, Text } from "@mantine/core";
+import { Alert, Button, Card, Divider, Grid, Group, Loader, Paper, SimpleGrid, Stack, Table, Tabs, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -8,6 +8,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorState } from "@/components/error-state";
 import { useAuth } from "@/components/providers";
+import { AccessRuleActionBadge } from "@/components/services/access-rules-editor";
 import { MagicLinkButton } from "@/components/services/magic-link-button";
 import { ServiceForm } from "@/components/services/service-form";
 import { ServiceDiagnostics } from "@/components/services/service-diagnostics";
@@ -310,6 +311,38 @@ function ServiceDetailContent() {
                 <Alert color="brand" variant="light">
                   Access method is inherited from service group <strong>{service.inherited_from_group.name}</strong>.
                 </Alert>
+              ) : null}
+              {service.access_rules && service.access_rules.length > 0 ? (
+                <>
+                  <Divider />
+                  <Text fw={600}>Access rules</Text>
+                  <Table.ScrollContainer minWidth={560}>
+                    <Table>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>#</Table.Th>
+                          <Table.Th>Name</Table.Th>
+                          <Table.Th>Source IPs</Table.Th>
+                          <Table.Th>Paths</Table.Th>
+                          <Table.Th>Action</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {service.access_rules.map((rule, index) => (
+                          <Table.Tr key={index}>
+                            <Table.Td>{index + 1}</Table.Td>
+                            <Table.Td>{rule.name || "-"}</Table.Td>
+                            <Table.Td>{rule.sources.length > 0 ? rule.sources.join(", ") : "Any"}</Table.Td>
+                            <Table.Td>{rule.paths.length > 0 ? rule.paths.join(", ") : "Any"}</Table.Td>
+                            <Table.Td>
+                              <AccessRuleActionBadge action={rule.action} />
+                            </Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  </Table.ScrollContainer>
+                </>
               ) : null}
             </Stack>
           </Paper>

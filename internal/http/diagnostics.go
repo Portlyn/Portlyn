@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	stdhttp "net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"time"
 
 	"portlyn/internal/domain"
+	"portlyn/internal/proxy"
 	"portlyn/internal/store"
 )
 
@@ -179,6 +181,45 @@ func (s *Server) handleExplainServiceAccess(w stdhttp.ResponseWriter, r *stdhttp
 		}
 	}
 
+	ruleAction := ""
+	if len(item.AccessRules) > 0 {
+		switch {
+		case !clientAddrValid:
+			steps = append(steps, explainStep{
+				Name:    "access_rules",
+				Status:  "info",
+				Message: "Enter a client IP to evaluate the access rules.",
+			})
+		default:
+			path := strings.TrimSpace(req.Path)
+			if path == "" {
+				path = "/"
+			}
+			if index, ok := proxy.FirstMatchingAccessRule(item.AccessRules, clientAddr, path); ok {
+				rule := item.AccessRules[index-1]
+				ruleAction = rule.Action
+				label := "Rule #" + strconv.Itoa(index)
+				if rule.Name != "" {
+					label += " (" + rule.Name + ")"
+				}
+				switch rule.Action {
+				case domain.AccessRuleDeny:
+					steps = append(steps, explainStep{Name: "access_rules", Status: "fail", Message: label + " denies the request."})
+					allowed = false
+					if decision == "allowed" {
+						decision = "deny_access_rule"
+					}
+				case domain.AccessRuleAllow:
+					steps = append(steps, explainStep{Name: "access_rules", Status: "ok", Message: label + " allows the request without login."})
+				default:
+					steps = append(steps, explainStep{Name: "access_rules", Status: "info", Message: label + " requires login."})
+				}
+			} else {
+				steps = append(steps, explainStep{Name: "access_rules", Status: "info", Message: "No access rule matches; the access mode decides."})
+			}
+		}
+	}
+
 	if len(item.AccessWindows) > 0 {
 		window_hit := windowMatchesAt(item.AccessWindows, checkAt)
 		steps = append(steps, explainStep{
@@ -198,7 +239,14 @@ func (s *Server) handleExplainServiceAccess(w stdhttp.ResponseWriter, r *stdhttp
 	if mode == "" {
 		mode = "authenticated"
 	}
+	if ruleAction == domain.AccessRuleAuthenticate && mode == "public" {
+		mode = "authenticated"
+	}
+	if ruleAction == domain.AccessRuleAllow || ruleAction == domain.AccessRuleDeny {
+		mode = "rule"
+	}
 	switch mode {
+	case "rule":
 	case "public":
 		steps = append(steps, explainStep{
 			Name:    "access_mode",

@@ -70,6 +70,7 @@ export function ServiceDiagnostics({ serviceId }: { serviceId: number | string }
 
   const [userEmail, setUserEmail] = useState("");
   const [clientIP, setClientIP] = useState("");
+  const [path, setPath] = useState("");
   const [explainResult, setExplainResult] = useState<ExplainResponse | null>(null);
   const [explaining, setExplaining] = useState(false);
   const [explainError, setExplainError] = useState<string | null>(null);
@@ -100,6 +101,7 @@ export function ServiceDiagnostics({ serviceId }: { serviceId: number | string }
         body: JSON.stringify({
           user_email: userEmail.trim() || undefined,
           client_ip: clientIP.trim() || undefined,
+          path: path.trim() || undefined,
         }),
       });
       setExplainResult(result);
@@ -139,6 +141,7 @@ export function ServiceDiagnostics({ serviceId }: { serviceId: number | string }
               value={clientIP}
               onChange={(event) => setClientIP(event.currentTarget.value)}
             />
+            <TextInput label="Path" placeholder="/" value={path} onChange={(event) => setPath(event.currentTarget.value)} />
           </Group>
 
           {explainError ? (

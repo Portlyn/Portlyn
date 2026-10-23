@@ -168,6 +168,7 @@ func serviceResponse(item domain.Service, health serviceHealthInfo, cert acme.Ce
 		"allowed_countries":              item.AllowedCountries,
 		"blocked_countries":              item.BlockedCountries,
 		"access_windows":                 item.AccessWindows,
+		"access_rules":                   item.AccessRules,
 		"node_id":                        item.NodeID,
 		"last_deployed_at":               item.LastDeployedAt,
 		"deployment_revision":            item.DeploymentRevision,

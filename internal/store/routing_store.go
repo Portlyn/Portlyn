@@ -106,6 +106,7 @@ func (s *SQLRoutingStore) UpsertRoute(ctx context.Context, route routing.RouteCo
 	service.IPAllowlist = append(domain.JSONStringSlice(nil), route.AllowCIDRs...)
 	service.IPBlocklist = append(domain.JSONStringSlice(nil), route.BlockCIDRs...)
 	service.AccessWindows = append(domain.AccessWindowList(nil), route.AccessWindows...)
+	service.AccessRules = append(domain.AccessRuleList(nil), route.AccessRules...)
 
 	if route.ServiceID != 0 {
 		service.ID = route.ServiceID
@@ -173,6 +174,7 @@ func (s *SQLRoutingStore) toRouteConfigs(services []domain.Service) []routing.Ro
 			AllowedCountries:      append([]string{}, service.AllowedCountries...),
 			BlockedCountries:      append([]string{}, service.BlockedCountries...),
 			AccessWindows:         append([]domain.AccessWindow{}, service.AccessWindows...),
+			AccessRules:           append([]domain.AccessRule{}, service.AccessRules...),
 			DeploymentRevision:    service.DeploymentRevision,
 			LastDeployedAt:        service.LastDeployedAt,
 		})

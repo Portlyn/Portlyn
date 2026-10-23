@@ -35,6 +35,7 @@ type RouteConfig struct {
 	AllowedCountries      []string              `json:"allowed_countries"`
 	BlockedCountries      []string              `json:"blocked_countries"`
 	AccessWindows         []domain.AccessWindow `json:"access_windows"`
+	AccessRules           []domain.AccessRule   `json:"access_rules"`
 	DeploymentRevision    uint64                `json:"deployment_revision"`
 	LastDeployedAt        *time.Time            `json:"last_deployed_at,omitempty"`
 }
