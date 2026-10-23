@@ -73,7 +73,7 @@ export function CertificateTable({
               <Table.Td>{certificate.issuer === "letsencrypt_staging" ? "LE Staging" : "LE Prod"}</Table.Td>
               <Table.Td><StatusBadge status={certificate.status} /></Table.Td>
               <Table.Td>{formatDateTime(certificate.issued_at)}</Table.Td>
-              <Table.Td>{formatDateTime(certificate.expires_at)}</Table.Td>
+              <Table.Td>{formatDateTime(certificate.expires_at, "-")}</Table.Td>
               <Table.Td>{formatDateTime(certificate.next_renewal_at)}</Table.Td>
               <Table.Td>{formatDateTime(certificate.last_checked_at)}</Table.Td>
               <Table.Td>{certificate.dns_provider?.name || "-"}</Table.Td>

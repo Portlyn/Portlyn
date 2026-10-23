@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -154,7 +155,7 @@ func Load() (Config, error) {
 		BootstrapAdminEnabled:           getEnvBool("BOOTSTRAP_ADMIN_ENABLED", false),
 		BootstrapAdminAllowRemote:       getEnvBool("BOOTSTRAP_ADMIN_ALLOW_REMOTE", false),
 		ProxyHTTPAddr:                   getEnv("PROXY_HTTP_ADDR", ":80"),
-		ProxyHTTPSAddr:                  getEnv("PROXY_HTTPS_ADDR", ":443"),
+		ProxyHTTPSAddr:                  getEnvAllowEmpty("PROXY_HTTPS_ADDR", ":443"),
 		RedisURL:                        strings.TrimSpace(os.Getenv("REDIS_URL")),
 		DatabaseDriver:                  strings.ToLower(getEnv("DATABASE_DRIVER", "")),
 		DatabaseURL:                     strings.TrimSpace(os.Getenv("DATABASE_URL")),
@@ -173,7 +174,7 @@ func Load() (Config, error) {
 		RefreshTokenTTL:                 getEnvDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),
 		LogLevel:                        getEnvLogLevel("LOG_LEVEL", slog.LevelInfo),
 		AllowedOrigins:                  getEnvList("CORS_ALLOWED_ORIGINS", []string{"http://localhost", "http://127.0.0.1"}),
-		TrustedProxyCIDRs:               getEnvList("TRUSTED_PROXY_CIDRS", []string{"127.0.0.1/32", "::1/128"}),
+		TrustedProxyCIDRs:               withLoopbackCIDRs(getEnvList("TRUSTED_PROXY_CIDRS", nil)),
 		ExposeAuthTokens:                getEnvBool("EXPOSE_AUTH_TOKENS", false),
 		AdminEmail:                      strings.TrimSpace(os.Getenv("ADMIN_EMAIL")),
 		AdminPassword:                   os.Getenv("ADMIN_PASSWORD"),
@@ -502,6 +503,14 @@ func getEnv(key, fallback string) string {
 	return value
 }
 
+func getEnvAllowEmpty(key, fallback string) string {
+	value, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback
+	}
+	return strings.TrimSpace(value)
+}
+
 func getSecretEnv(key string, generated map[string]string, allowInsecureDevMode bool) string {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value != "" {
@@ -557,6 +566,16 @@ func getEnvLogLevel(key string, fallback slog.Level) slog.Level {
 		}
 		return fallback
 	}
+}
+
+func withLoopbackCIDRs(cidrs []string) []string {
+	out := append([]string(nil), cidrs...)
+	for _, loopback := range []string{"127.0.0.1/32", "::1/128"} {
+		if !slices.Contains(out, loopback) {
+			out = append(out, loopback)
+		}
+	}
+	return out
 }
 
 func getEnvList(key string, fallback []string) []string {
