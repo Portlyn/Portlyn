@@ -4,6 +4,7 @@ import { Burger, Button, Group, Paper, Stack, Text } from "@mantine/core";
 import { IconLogout2 } from "@tabler/icons-react";
 import { usePathname } from "next/navigation";
 
+import { UpdateNotice } from "@/components/layout/update-notice";
 import { useAuth, UserAvatar } from "@/components/providers";
 
 const titles: Record<string, string> = {
@@ -44,6 +45,7 @@ export function Topbar({ opened, onToggle }: { opened: boolean; onToggle: () => 
       </Group>
 
       <Group gap="sm" wrap="nowrap">
+        <UpdateNotice />
         <Paper p="xs" bg="rgba(255,255,255,0.03)">
           <Group gap="sm" wrap="nowrap">
             <UserAvatar />

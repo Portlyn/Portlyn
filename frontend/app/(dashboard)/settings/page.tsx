@@ -27,6 +27,7 @@ import type { AuthSettings, SystemOverview } from "@/lib/types";
 
 type AuthSettingsForm = {
   frontend_base_url: string;
+  update_check_enabled: boolean;
   auth_brand_name: string;
   auth_logo_url: string;
   auth_background_color: string;
@@ -82,6 +83,7 @@ type AuthSettingsForm = {
 function toForm(settings: AuthSettings): AuthSettingsForm {
   return {
     frontend_base_url: settings.frontend_base_url || "",
+    update_check_enabled: settings.update_check_enabled ?? true,
     auth_brand_name: settings.auth_brand_name || "Portlyn",
     auth_logo_url: settings.auth_logo_url || "/logo.png",
     auth_background_color: settings.auth_background_color || "#0d0e11",
@@ -243,6 +245,17 @@ export default function SettingsPage() {
                   description="Used for route-login redirects and OIDC flow handoff."
                   value={form.frontend_base_url}
                   onChange={(event) => update("frontend_base_url", event.currentTarget.value)}
+                />
+                <Checkbox
+                  label="Check for new releases"
+                  description={
+                    settings?.update_check_env_disabled
+                      ? "Turned off for this instance by UPDATE_CHECK=false."
+                      : "Asks GitHub every 12 hours. Nothing is installed automatically."
+                  }
+                  checked={form.update_check_enabled && !settings?.update_check_env_disabled}
+                  disabled={settings?.update_check_env_disabled}
+                  onChange={(event) => update("update_check_enabled", event.currentTarget.checked)}
                 />
                 {overview ? (
                   <Stack gap="sm">

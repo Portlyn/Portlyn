@@ -1018,6 +1018,12 @@ paths:
       responses:
         "200": { description: List }
 
+  /system/update:
+    get:
+      summary: Installed and latest release, from the periodic update check (admin only)
+      responses:
+        "200": { description: Update status }
+
   /system/overview:
     get:
       summary: System overview, health, counts and warnings

@@ -97,6 +97,18 @@ var migrations = []Migration{
 			return db.Migrator().DropColumn(&domain.Service{}, "AccessRules")
 		},
 	},
+	{
+		ID: "0004_app_settings_update_check",
+		Up: func(db *gorm.DB) error {
+			if db.Migrator().HasColumn(&domain.AppSettings{}, "update_check_disabled") {
+				return nil
+			}
+			return db.Migrator().AddColumn(&domain.AppSettings{}, "UpdateCheckDisabled")
+		},
+		Down: func(db *gorm.DB) error {
+			return db.Migrator().DropColumn(&domain.AppSettings{}, "UpdateCheckDisabled")
+		},
+	},
 }
 
 // Each migration commits together with its bookkeeping row, so a crash

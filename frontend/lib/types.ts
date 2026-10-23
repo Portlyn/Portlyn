@@ -539,9 +539,21 @@ export interface AuthUISettings {
   forbidden_retry_label: string;
 }
 
+export interface UpdateStatus {
+  enabled: boolean;
+  current_version: string;
+  latest_version?: string;
+  update_available: boolean;
+  release_url?: string;
+  checked_at?: string;
+  install_method: "docker" | "binary";
+}
+
 export interface AuthSettings {
   id: number;
   frontend_base_url: string;
+  update_check_enabled: boolean;
+  update_check_env_disabled: boolean;
   auth_brand_name: string;
   auth_logo_url: string;
   auth_background_color: string;
