@@ -125,26 +125,25 @@ func main() {
 		log.Fatalf("load state: %v", err)
 	}
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
 	if !state.provisioned() {
-		enrollmentToken, err := resolveEnrollmentToken(*token, *tokenFile)
-		if err != nil {
-			log.Fatalf("read enrollment token: %v", err)
+		p := &provisioner{
+			client:          client,
+			api:             api,
+			name:            *name,
+			description:     *description,
+			version:         *versionFlag,
+			enrollmentToken: func() (string, error) { return resolveEnrollmentToken(*token, *tokenFile) },
+			save:            func(next *agentState) error { return saveState(resolvedStatePath, next) },
 		}
-		if enrollmentToken == "" {
-			log.Fatal("no saved state found: provide an enrollment token via --token-file, systemd credentials or --token for the first run")
-		}
-		state, err = provision(client, api, enrollmentToken, *name, *description, *versionFlag)
+		state, err = p.run(ctx, state)
 		if err != nil {
 			log.Fatalf("provision: %v", err)
 		}
-		if err := saveState(resolvedStatePath, state); err != nil {
-			log.Fatalf("save state: %v", err)
-		}
 		log.Printf("node enrolled and tunnel provisioned: node_id=%d tunnel_ip=%s", state.NodeID, state.TunnelIP)
 	}
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 
 	tunnelIP, err := netip.ParseAddr(state.TunnelIP)
 	if err != nil {
@@ -228,39 +227,6 @@ func main() {
 	}
 }
 
-func provision(client *http.Client, api, token, name, description, version string) (*agentState, error) {
-	id, _, heartbeatToken, err := enrollNode(client, api, token, name, description, version)
-	if err != nil {
-		return nil, fmt.Errorf("enroll: %w", err)
-	}
-	keys, err := tunnel.GenerateKeyPair()
-	if err != nil {
-		return nil, fmt.Errorf("generate keypair: %w", err)
-	}
-	boot, err := selfBootstrap(client, api, heartbeatToken, id, keys.PublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap: %w", err)
-	}
-	keepalive := boot.Keepalive
-	if keepalive <= 0 {
-		keepalive = 25
-	}
-	return &agentState{
-		NodeID:          id,
-		HeartbeatToken:  heartbeatToken,
-		WGPrivateKey:    keys.PrivateKey,
-		WGPublicKey:     keys.PublicKey,
-		TunnelIP:        boot.TunnelIP,
-		ServerPublicKey: boot.ServerPublicKey,
-		ServerEndpoint:  boot.ServerEndpoint,
-		ServerTunnelIP:  strings.TrimSpace(boot.ServerTunnelIP),
-		PresharedKey:    boot.PresharedKey,
-		AllowedIPs:      boot.AllowedIPs,
-		Subnets:         boot.AdvertisedSubnets,
-		Keepalive:       keepalive,
-	}, nil
-}
-
 func enrollNode(client *http.Client, api, token, name, description, version string) (uint, string, string, error) {
 	payload := enrollRequest{Token: token, Name: name, Description: description, Version: version}
 	body, err := json.Marshal(payload)
@@ -279,7 +245,7 @@ func enrollNode(client *http.Client, api, token, name, description, version stri
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		buf, _ := readBody(resp)
-		return 0, "", "", fmt.Errorf("enroll failed: %s: %s", resp.Status, string(buf))
+		return 0, "", "", &statusError{step: "enroll", code: resp.StatusCode, body: strings.TrimSpace(string(buf))}
 	}
 	var result enrollResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -308,7 +274,7 @@ func selfBootstrap(client *http.Client, api, heartbeatToken string, nodeID uint,
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		buf, _ := readBody(resp)
-		return nil, fmt.Errorf("bootstrap failed: %s: %s", resp.Status, string(buf))
+		return nil, &statusError{step: "bootstrap", code: resp.StatusCode, body: strings.TrimSpace(string(buf))}
 	}
 	var result selfBootstrapResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {

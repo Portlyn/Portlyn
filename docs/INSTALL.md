@@ -201,6 +201,16 @@ NODE_TRUST_FORWARDED_PROTO=true
 
 Use **DNS-01** (Cloudflare provider) so issuance does not depend on inbound `:80`. Set `TRUSTED_PROXY_CIDRS` to Cloudflare's published ranges so the hub trusts `X-Forwarded-For`/`-Proto` from Cloudflare only. Set the Cloudflare SSL mode to *Full (strict)*.
 
+### Behind your own reverse proxy
+
+If another proxy (nginx, HAProxy, Traefik) forwards to the hub, list its address in `TRUSTED_PROXY_CIDRS` and make it send `X-Forwarded-For`. The hub walks that header from right to left and uses the first address that is not trusted, so a chain like Cloudflare, your proxy, Portlyn needs both your proxy and the Cloudflare ranges listed. Loopback is always trusted, since the dashboard reaches the API over `127.0.0.1`.
+
+```env
+TRUSTED_PROXY_CIDRS=10.10.11.14/32
+```
+
+Changes to `.env` apply after `docker compose up -d`.
+
 ### C) Behind NAT/CGNAT or another load balancer (no inbound)
 
 No inbound port reaches the hub (home lab, CGNAT), so HTTP-01 is impossible. This is the node-agent scenario: the machine dials out over WireGuard.

@@ -244,6 +244,17 @@ type BootstrapResult struct {
 	AdvertisedSubnets []string
 }
 
+func (m *Manager) ServerReady(ctx context.Context) error {
+	settings, err := m.settings.Get(ctx)
+	if err != nil {
+		return err
+	}
+	if !settings.TunnelEnabled || strings.TrimSpace(settings.TunnelServerPublicKey) == "" || strings.TrimSpace(settings.TunnelServerEndpoint) == "" {
+		return ErrInvalidServerSettings
+	}
+	return nil
+}
+
 func (m *Manager) BootstrapNode(ctx context.Context, nodeID uint, opts BootstrapOptions) (*BootstrapResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

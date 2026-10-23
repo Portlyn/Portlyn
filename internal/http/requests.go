@@ -5,7 +5,7 @@ import (
 )
 
 type loginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
+	Email    string `json:"email" validate:"required,max=320"`
 	Password string `json:"password" validate:"required,min=8"`
 }
 
@@ -24,7 +24,7 @@ type verifyMFARequest struct {
 }
 
 type breakGlassLoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
+	Email    string `json:"email" validate:"required,max=320"`
 	Password string `json:"password" validate:"required,min=8"`
 	Token    string `json:"token" validate:"required,min=16,max=512"`
 }
@@ -354,7 +354,7 @@ type updateAuthSettingsRequest struct {
 	SMTPPort                  *int      `json:"smtp_port" validate:"omitempty,gte=1,lte=65535"`
 	SMTPUsername              *string   `json:"smtp_username" validate:"omitempty,max=255"`
 	SMTPPassword              *string   `json:"smtp_password"`
-	SMTPFromEmail             *string   `json:"smtp_from_email" validate:"omitempty,email"`
+	SMTPFromEmail             *string   `json:"smtp_from_email" validate:"omitempty,max=255"`
 	SMTPFromName              *string   `json:"smtp_from_name" validate:"omitempty,max=255"`
 	SMTPEncryption            *string   `json:"smtp_encryption" validate:"omitempty,oneof=none starttls implicit_tls"`
 	SMTPInsecureSkipVerify    *bool     `json:"smtp_insecure_skip_verify"`

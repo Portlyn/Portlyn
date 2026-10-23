@@ -732,6 +732,7 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 			StatusCode:   statusCode,
 			Latency:      latency,
 			Details:      details,
+			RemoteAddr:   remoteAddr,
 		})
 	}
 }

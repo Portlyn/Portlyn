@@ -98,6 +98,7 @@ function RouteLoginContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOIDCSubmitting, setIsOIDCSubmitting] = useState(false);
   const [isBridging, setIsBridging] = useState(false);
+  const [bridgeFailedFor, setBridgeFailedFor] = useState<typeof user | undefined>(undefined);
 
   useEffect(() => {
     if (!serviceId) {
@@ -119,25 +120,24 @@ function RouteLoginContent() {
   }, [serviceId]);
 
   useEffect(() => {
-    if (!service || isBridging) {
+    if (!service || isBridging || bridgeFailedFor === user) {
       return;
     }
+    const onBridgeError = (err: unknown) => {
+      setError(err instanceof ApiError || err instanceof Error ? err.message : "Unable to continue to the protected route.");
+      setBridgeFailedFor(user);
+      setIsBridging(false);
+    };
     if (service.access_method === "oidc_only" && isAuthenticated && user?.auth_provider === "oidc") {
       setIsBridging(true);
-      void bridgeSessionToTarget(service, returnTo).catch((err) => {
-        setError(err instanceof ApiError || err instanceof Error ? err.message : "Unable to continue to the protected route.");
-        setIsBridging(false);
-      });
+      void bridgeSessionToTarget(service, returnTo).catch(onBridgeError);
       return;
     }
     if (service.access_method === "session" && isAuthenticated) {
       setIsBridging(true);
-      void bridgeSessionToTarget(service, returnTo).catch((err) => {
-        setError(err instanceof ApiError || err instanceof Error ? err.message : "Unable to continue to the protected route.");
-        setIsBridging(false);
-      });
+      void bridgeSessionToTarget(service, returnTo).catch(onBridgeError);
     }
-  }, [isAuthenticated, isBridging, params, returnTo, service, user]);
+  }, [bridgeFailedFor, isAuthenticated, isBridging, params, returnTo, service, user]);
 
   const handlePIN = async () => {
     if (!service) return;
