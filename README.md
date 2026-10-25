@@ -53,7 +53,7 @@ The hub runs as a standalone binary on a Linux host or as a Docker Compose stack
 - User groups and service groups for reusable policy
 - Access windows with timezone aware weekday and time ranges
 - IP allow and block lists, GeoIP allow and block lists per service
-- CrowdSec LAPI integration with periodic decisions pull
+- CrowdSec LAPI integration with periodic decisions pull and usage metrics for `cscli metrics`
 
 ### Identity
 
