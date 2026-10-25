@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -105,6 +106,11 @@ func main() {
 		case "help", "--help", "-h":
 			printUsage()
 			return
+		default:
+			fmt.Fprintf(os.Stderr, "unknown command %q", os.Args[1])
+			fmt.Fprintln(os.Stderr)
+			printUsageTo(os.Stderr)
+			os.Exit(2)
 		}
 	}
 	cfg, err := config.Load()
@@ -599,7 +605,11 @@ func portFromAddr(addr string) string {
 }
 
 func printUsage() {
-	fmt.Println(`portlyn ` + version + `
+	printUsageTo(os.Stdout)
+}
+
+func printUsageTo(w io.Writer) {
+	fmt.Fprintln(w, `portlyn `+version+`
 
 Usage:
   portlyn               start the server (requires .env)
