@@ -254,6 +254,8 @@ type AuditChainResult struct {
 	Verified   int64  `json:"verified"`
 	LatestID   uint   `json:"latest_id"`
 	LatestHash string `json:"latest_hash"`
+	AnchorID   uint   `json:"anchor_id,omitempty"`
+	Pruned     int64  `json:"pruned,omitempty"`
 }
 
 type AuditCompactionResult struct {
@@ -295,6 +297,9 @@ func (s *AuditStore) Compact(ctx context.Context) (AuditCompactionResult, error)
 	const batchSize = 500
 	result := AuditCompactionResult{}
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := deleteAuditCheckpoint(tx); err != nil {
+			return err
+		}
 		prevHash := ""
 		var lastID uint
 		for {
@@ -348,6 +353,16 @@ func (s *AuditStore) VerifyChain(ctx context.Context) (AuditChainResult, error) 
 	result := AuditChainResult{}
 	prevHash := ""
 	var lastID uint
+	checkpoint, err := s.Checkpoint(ctx)
+	if err != nil {
+		return result, err
+	}
+	if checkpoint != nil {
+		prevHash = checkpoint.LastHash
+		lastID = checkpoint.LastID
+		result.AnchorID = checkpoint.LastID
+		result.Pruned = checkpoint.Pruned
+	}
 	for {
 		var batch []domain.AuditLog
 		if err := s.db.WithContext(ctx).
