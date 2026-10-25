@@ -20,6 +20,7 @@ type Entry struct {
 	LatencyMs   int64     `json:"latency_ms"`
 	Bytes       int       `json:"bytes"`
 	RemoteAddr  string    `json:"remote_addr"`
+	PeerAddr    string    `json:"peer_addr"`
 	UserAgent   string    `json:"user_agent"`
 	Referer     string    `json:"referer,omitempty"`
 	Outcome     string    `json:"outcome"`

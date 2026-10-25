@@ -91,6 +91,7 @@ export interface AccessLogEntry {
   latency_ms: number;
   bytes: number;
   remote_addr: string;
+  peer_addr?: string;
   user_agent: string;
   referer?: string;
   outcome: string;

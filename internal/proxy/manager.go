@@ -617,6 +617,11 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 	if remoteAddr == "" {
 		remoteAddr = r.RemoteAddr
 	}
+	peerAddr := r.RemoteAddr
+	if peer, err := parseClientIP(r.RemoteAddr); err == nil {
+		peerAddr = peer.String()
+	}
+	clientIPTrusted := remoteAddr != peerAddr
 	args := []any{
 		"component", "proxy",
 		"kind", "proxy_access",
@@ -631,6 +636,8 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 		"outcome", outcome,
 		"reason", reason,
 		"remote_addr", remoteAddr,
+		"peer_addr", peerAddr,
+		"client_ip_trusted", clientIPTrusted,
 		"user_agent", r.UserAgent(),
 	}
 
@@ -642,6 +649,9 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 		"outcome": outcome,
 		"reason":  reason,
 		"bytes":   writer.BytesWritten(),
+	}
+	if clientIPTrusted {
+		details["peer_addr"] = peerAddr
 	}
 
 	if route != nil {
@@ -686,6 +696,7 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 			LatencyMs:  latency.Milliseconds(),
 			Bytes:      writer.BytesWritten(),
 			RemoteAddr: remoteAddr,
+			PeerAddr:   peerAddr,
 			UserAgent:  r.UserAgent(),
 			Referer:    r.Referer(),
 			Outcome:    outcome,
