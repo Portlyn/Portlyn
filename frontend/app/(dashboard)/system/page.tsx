@@ -112,10 +112,13 @@ export default function SystemPage() {
           <Stack gap="xs">
             <Text fw={600}>Cluster Health</Text>
             {overview.health.cluster.length === 0 ? <Text size="sm" c="dimmed">No cluster warnings.</Text> : overview.health.cluster.map((item) => (
-              <Group key={`cluster-${item.name}`} justify="space-between">
-                <Text size="sm">{item.name}</Text>
-                <StatusBadge status={item.level} />
-              </Group>
+              <Stack key={`cluster-${item.name}`} gap={2}>
+                <Group justify="space-between">
+                  <Text size="sm">{item.name}</Text>
+                  <StatusBadge status={item.level} />
+                </Group>
+                {item.level !== "ok" && item.summary ? <Text size="xs" c="dimmed">{item.summary}</Text> : null}
+              </Stack>
             ))}
           </Stack>
         </Card>

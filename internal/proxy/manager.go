@@ -54,6 +54,8 @@ type Manager struct {
 	clientCertHeaderSecret    string
 	accessLog                 *accesslog.Recorder
 	deniedAudit               *denialThrottle
+	forwarders                *forwarderDetector
+	forwarderHook             func(context.Context, domain.ForwarderReport)
 }
 
 type RuntimeRoute struct {
@@ -205,6 +207,7 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 	}
 
 	return &Manager{
+		forwarders:                newForwarderDetector(),
 		routes:                    routingStore,
 		services:                  options.ServiceDeploymentStore,
 		cache:                     cache,
@@ -236,6 +239,9 @@ func NewManager(routingStore RoutingStore, cache ConfigCache, bus ConfigBus, aut
 
 func (m *Manager) Start(ctx context.Context) {
 	m.startOnce.Do(func() {
+		if m.forwarders != nil {
+			go m.runForwarderDetection(ctx)
+		}
 		if m.bus == nil {
 			return
 		}
@@ -665,6 +671,7 @@ func (m *Manager) logAccess(r *http.Request, writer middleware.WrapResponseWrite
 			"access_method", route.EffectiveMethod,
 			"deployment_revision", route.DeploymentRevision,
 		)
+		m.observeForwarder(r, normalizeHost(r.Host))
 		resourceID = &route.ServiceID
 		resourceType = "service"
 		details["service_name"] = route.ServiceName

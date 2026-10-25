@@ -58,6 +58,29 @@ type Scanner struct {
 	interval   time.Duration
 	cancel     context.CancelFunc
 	wg         sync.WaitGroup
+	forwarders func() domain.ForwarderReport
+}
+
+func (s *Scanner) SetForwarderReport(source func() domain.ForwarderReport) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.forwarders = source
+}
+
+func (s *Scanner) untrustedForwarder(host string) bool {
+	s.mu.Lock()
+	source := s.forwarders
+	s.mu.Unlock()
+	if source == nil {
+		return false
+	}
+	host = strings.ToLower(strings.TrimSpace(host))
+	for _, finding := range source().Findings {
+		if finding.Host == host {
+			return true
+		}
+	}
+	return false
 }
 
 func NewScanner(services ServiceProvider, reports ReportStore, logger *slog.Logger) *Scanner {
@@ -243,6 +266,9 @@ func (s *Scanner) ScanService(ctx context.Context, service domain.Service) *doma
 	}
 	if service.AccessMode == domain.AccessModePublic {
 		findings = append(findings, "service_is_public")
+	}
+	if s.untrustedForwarder(host) {
+		findings = append(findings, "untrusted_forwarder")
 	}
 
 	report.Score = computeScore(report, findings)

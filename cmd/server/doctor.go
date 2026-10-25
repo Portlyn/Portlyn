@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"portlyn/internal/config"
+	"portlyn/internal/store"
 )
 
 func runDoctor(args []string) error {
@@ -30,11 +33,57 @@ func runDoctor(args []string) error {
 		fmt.Println()
 	}
 	issues := cfg.ValidationIssues()
+	if !hasValidationErrors(issues) {
+		issues = append(issues, forwarderIssues(cfg)...)
+	}
 	errCount := printValidationIssues(os.Stdout, issues, quiet)
 	if errCount > 0 {
 		return fmt.Errorf("%d configuration error(s) must be fixed before Portlyn can start", errCount)
 	}
 	return nil
+}
+
+func hasValidationErrors(issues []config.ValidationIssue) bool {
+	for _, issue := range issues {
+		if issue.Level == "error" {
+			return true
+		}
+	}
+	return false
+}
+
+const forwarderReportMaxAge = time.Hour
+
+func forwarderIssues(cfg config.Config) []config.ValidationIssue {
+	if cfg.DatabaseDriver == "sqlite" {
+		if _, err := os.Stat(cfg.DatabasePath); err != nil {
+			return nil
+		}
+	}
+	db, err := store.NewDatabase(cfg)
+	if err != nil {
+		return nil
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		defer sqlDB.Close()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	report, err := store.NewForwarderReportStore(db).Load(ctx)
+	if err != nil || report == nil || time.Since(report.CheckedAt) > forwarderReportMaxAge {
+		return nil
+	}
+	issues := make([]config.ValidationIssue, 0, len(report.Findings))
+	for _, finding := range report.Findings {
+		issues = append(issues, config.ValidationIssue{
+			Level:   "warn",
+			Field:   "TRUSTED_PROXY_CIDRS",
+			Code:    "untrusted_forwarder",
+			Message: finding.Message(),
+			Hint:    "add the CDN's published ranges (or " + finding.Prefix + " if it is your own proxy) to TRUSTED_PROXY_CIDRS",
+		})
+	}
+	return issues
 }
 
 func noEnvContext() bool {
