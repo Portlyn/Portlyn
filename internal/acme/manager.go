@@ -314,12 +314,14 @@ func (m *Manager) TLSConfig() *tls.Config {
 func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	serverName := normalizeDomain(hello.ServerName)
 	if serverName != "" {
-		cert, err := m.tlsStore.GetCertificate(context.Background(), serverName)
+		ctx, cancel := context.WithTimeout(helloContext(hello), handshakeLookupTimeout)
+		defer cancel()
+		cert, err := m.tlsStore.GetCertificate(ctx, serverName)
 		if err == nil && cert != nil {
 			return cert, nil
 		}
 		if wildcardName := wildcardDomainForHost(serverName); wildcardName != "" {
-			cert, err = m.tlsStore.GetCertificate(context.Background(), wildcardName)
+			cert, err = m.tlsStore.GetCertificate(ctx, wildcardName)
 			if err == nil && cert != nil {
 				return cert, nil
 			}
@@ -354,6 +356,17 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 		}
 	}
 	return nil, fmt.Errorf("no tls certificate available")
+}
+
+const handshakeLookupTimeout = 3 * time.Second
+
+func helloContext(hello *tls.ClientHelloInfo) context.Context {
+	if hello != nil {
+		if ctx := hello.Context(); ctx != nil {
+			return ctx
+		}
+	}
+	return context.Background()
 }
 
 func localIPFromHello(hello *tls.ClientHelloInfo) string {
@@ -484,7 +497,7 @@ func (m *Manager) loadStaticCertificate() error {
 }
 
 func (m *Manager) lookupStoredCertificateExpiry(ctx context.Context, serverName string) (time.Time, error) {
-	cert, err := m.tlsStore.GetCertificate(ctx, serverName)
+	cert, err := m.tlsStore.LoadCertificate(ctx, serverName)
 	if err != nil {
 		return time.Time{}, err
 	}
