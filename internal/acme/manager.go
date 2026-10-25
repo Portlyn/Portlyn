@@ -190,7 +190,7 @@ func (m *Manager) SyncCertificate(ctx context.Context, item *domain.Certificate)
 		return item, nil
 	}
 
-	magic, issuer, names, err := m.configForCertificate(ctx, item)
+	magic, issuer, names, stop, err := m.configForCertificate(ctx, item)
 	if err != nil {
 		item.Status = domain.CertificateStatusFailed
 		item.LastError = err.Error()
@@ -200,6 +200,8 @@ func (m *Manager) SyncCertificate(ctx context.Context, item *domain.Certificate)
 		m.recordSync("sync", item.LastError, started, item)
 		return item, nil
 	}
+
+	defer stop()
 
 	if err := magic.ManageSync(ctx, names); err != nil {
 		item.Status = domain.CertificateStatusFailed
@@ -521,19 +523,8 @@ func (m *Manager) newHTTPChallengeConfig() (*certmagic.Config, *certmagic.ACMEIs
 	return magic, issuer, nil
 }
 
-func (m *Manager) configForCertificate(ctx context.Context, item *domain.Certificate) (*certmagic.Config, *certmagic.ACMEIssuer, []string, error) {
+func (m *Manager) configForCertificate(ctx context.Context, item *domain.Certificate) (*certmagic.Config, *certmagic.ACMEIssuer, []string, func(), error) {
 	names := certificateNames(item)
-	var magic *certmagic.Config
-	cache := certmagic.NewCache(certmagic.CacheOptions{
-		GetConfigForCert: func(certmagic.Certificate) (*certmagic.Config, error) {
-			return magic, nil
-		},
-	})
-
-	cfg := certmagic.Config{
-		Storage: m.storage,
-	}
-	magic = certmagic.New(cache, cfg)
 	issuerTemplate := certmagic.ACMEIssuer{
 		CA:                      certificateAuthorityURL(item.Issuer, m.cfg.ACMECAURL),
 		Email:                   m.cfg.ACMEEmail,
@@ -541,15 +532,15 @@ func (m *Manager) configForCertificate(ctx context.Context, item *domain.Certifi
 	}
 	if item.ChallengeType == domain.CertificateChallengeDNS01 {
 		if item.DNSProviderID == nil || *item.DNSProviderID == 0 {
-			return nil, nil, nil, fmt.Errorf("dns-01 requires a dns provider")
+			return nil, nil, nil, nil, fmt.Errorf("dns-01 requires a dns provider")
 		}
 		provider, err := m.dnsProviders.GetByID(ctx, *item.DNSProviderID)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		appender, deleter, err := buildDNSProvider(m.cfg.DataEncryptionSecrets(), provider)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		issuerTemplate.DNS01Solver = &certmagic.DNS01Solver{
 			DNSManager: certmagic.DNSManager{
@@ -558,9 +549,17 @@ func (m *Manager) configForCertificate(ctx context.Context, item *domain.Certifi
 			},
 		}
 	}
+
+	var magic *certmagic.Config
+	cache := certmagic.NewCache(certmagic.CacheOptions{
+		GetConfigForCert: func(certmagic.Certificate) (*certmagic.Config, error) {
+			return magic, nil
+		},
+	})
+	magic = certmagic.New(cache, certmagic.Config{Storage: m.storage})
 	issuer := certmagic.NewACMEIssuer(magic, issuerTemplate)
 	magic.Issuers = []certmagic.Issuer{issuer}
-	return magic, issuer, names, nil
+	return magic, issuer, names, cache.Stop, nil
 }
 
 func (m *Manager) persistManagedCertificate(ctx context.Context, issuerKey string, names []string) error {
