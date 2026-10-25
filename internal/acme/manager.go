@@ -159,6 +159,7 @@ func (m *Manager) SyncCertificate(ctx context.Context, item *domain.Certificate)
 			}
 		}()
 	}
+	defer m.recordRetryState(ctx, item)
 	item.LastCheckedAt = &now
 	if item.Domain.Name == "" {
 		loaded, err := m.domains.GetByID(ctx, item.DomainID)
@@ -247,6 +248,18 @@ func (m *Manager) SyncCertificate(ctx context.Context, item *domain.Certificate)
 	}
 	m.recordSync("sync", "", started, item)
 	return item, nil
+}
+
+func (m *Manager) recordRetryState(ctx context.Context, item *domain.Certificate) {
+	if item.ID == 0 {
+		return
+	}
+	failures, next := nextRetryState(item, time.Now(), m.cfg.ACMERenewWithin)
+	if err := m.certificates.UpdateRetryState(context.WithoutCancel(ctx), item.ID, failures, next); err != nil {
+		return
+	}
+	item.FailureCount = failures
+	item.NextAttemptAt = next
 }
 
 func (m *Manager) ImportPEMCertificate(ctx context.Context, item *domain.Certificate, certPEM, keyPEM, issuerKey string) (*domain.Certificate, error) {
