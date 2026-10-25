@@ -270,6 +270,8 @@ func (s *Server) handleUpdateCertificate(w stdhttp.ResponseWriter, r *stdhttp.Re
 		return
 	}
 
+	item.FailureCount = 0
+	item.NextAttemptAt = nil
 	if err := s.certificates.Update(r.Context(), item); err != nil {
 		s.internalError(w, err)
 		return
