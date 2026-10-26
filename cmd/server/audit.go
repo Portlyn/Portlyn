@@ -4,7 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"portlyn/internal/config"
 	"portlyn/internal/store"
@@ -70,4 +72,30 @@ func runAuditSubcommand(args []string) error {
 	fmt.Printf("verified=%d latest_id=%d\n", verify.Verified, verify.LatestID)
 	fmt.Println("done")
 	return nil
+}
+
+const (
+	auditRetentionFirstRun = time.Minute
+	auditRetentionInterval = time.Hour
+)
+
+func runAuditRetention(ctx context.Context, auditStore *store.AuditStore, days int, logger *slog.Logger) {
+	timer := time.NewTimer(auditRetentionFirstRun)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		before := time.Now().UTC().AddDate(0, 0, -days)
+		result, err := auditStore.PruneBefore(ctx, before)
+		switch {
+		case err != nil && ctx.Err() == nil:
+			logger.Error("audit retention failed", "error", err)
+		case result.Removed > 0:
+			logger.Info("audit retention pruned entries", "removed", result.Removed, "anchor_id", result.LastID, "older_than", before)
+		}
+		timer.Reset(auditRetentionInterval)
+	}
 }

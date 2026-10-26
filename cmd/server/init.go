@@ -287,6 +287,7 @@ const optionalEnvReference = `
 #AUDIT_BATCH_SIZE=128
 #AUDIT_FLUSH_INTERVAL=250ms
 #AUDIT_DROP_POLICY=sync_fallback
+#AUDIT_RETENTION_DAYS=0
 #AUDIT_WEBHOOK_ALLOW_PRIVATE_TARGETS=false
 
 # Alerting thresholds, counted within ALERT_WINDOW
