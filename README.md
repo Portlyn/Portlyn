@@ -53,7 +53,7 @@ The hub runs as a standalone binary on a Linux host or as a Docker Compose stack
 - User groups and service groups for reusable policy
 - Access windows with timezone aware weekday and time ranges
 - IP allow and block lists, GeoIP allow and block lists per service
-- CrowdSec LAPI integration with periodic decisions pull
+- CrowdSec LAPI integration with periodic decisions pull and usage metrics for `cscli metrics`
 
 ### Identity
 
@@ -85,7 +85,7 @@ The hub runs as a standalone binary on a Linux host or as a Docker Compose stack
 
 ### Audit and operations
 
-- Hash chained audit log with previous hash verification
+- Hash chained audit log with previous hash verification and optional retention (`AUDIT_RETENTION_DAYS`)
 - Webhook fan out to Slack, Discord, ntfy, and generic JSON, signed with HMAC-SHA256
 - Per service exposure scanner with DNS, TLS, header, redirect, and auth posture checks
 - Access tester and per request decision trace for troubleshooting policy denials

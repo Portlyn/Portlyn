@@ -146,6 +146,8 @@ export interface Certificate {
   next_renewal_at: string | null;
   renewal_window_days: number;
   is_auto_renew: boolean;
+  failure_count: number;
+  next_attempt_at: string | null;
   dns_provider_id: number | null;
   dns_provider?: DNSProvider | null;
   last_checked_at: string | null;

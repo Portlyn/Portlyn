@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 
@@ -46,6 +48,7 @@ func (s *AuditStore) Create(ctx context.Context, item *domain.AuditLog) error {
 		if err != nil {
 			return err
 		}
+		sanitizeAuditLog(item)
 		item.PrevHash = prevHash
 		item.Hash = computeAuditHash(s.hmacKey, prevHash, item)
 		return tx.WithContext(ctx).Create(item).Error
@@ -62,6 +65,7 @@ func (s *AuditStore) CreateBatch(ctx context.Context, items []domain.AuditLog) e
 			return err
 		}
 		for i := range items {
+			sanitizeAuditLog(&items[i])
 			items[i].PrevHash = prevHash
 			items[i].Hash = computeAuditHash(s.hmacKey, prevHash, &items[i])
 			prevHash = items[i].Hash
@@ -136,28 +140,87 @@ func latestAuditHash(db *gorm.DB) (string, error) {
 	return latest.Hash, nil
 }
 
+const (
+	legacyInvalidUTF8Marker = string(rune(0xFDD0))
+	legacyInvalidUTF8Escape = `\` + "ufffd"
+)
+
 func computeAuditHash(key []byte, prevHash string, item *domain.AuditLog) string {
-	payload := map[string]any{
+	encoded, _ := json.Marshal(auditHashPayload(prevHash, item, string(utf8.RuneError)))
+	return signAuditPayload(key, encoded)
+}
+
+func computeLegacyAuditHash(key []byte, prevHash string, item *domain.AuditLog) string {
+	encoded, _ := json.Marshal(auditHashPayload(prevHash, item, legacyInvalidUTF8Marker))
+	encoded = bytes.ReplaceAll(encoded, []byte(legacyInvalidUTF8Marker), []byte(legacyInvalidUTF8Escape))
+	return signAuditPayload(key, encoded)
+}
+
+func auditHashPayload(prevHash string, item *domain.AuditLog, invalid string) map[string]any {
+	clean := func(value string) string { return replaceInvalidUTF8(value, invalid) }
+	return map[string]any{
 		"prev_hash":     prevHash,
 		"timestamp":     item.Timestamp.UTC().Format(time.RFC3339Nano),
-		"request_id":    item.RequestID,
+		"request_id":    clean(item.RequestID),
 		"user_id":       item.UserID,
-		"action":        item.Action,
-		"resource_type": item.ResourceType,
+		"action":        clean(item.Action),
+		"resource_type": clean(item.ResourceType),
 		"resource_id":   item.ResourceID,
-		"method":        item.Method,
-		"host":          item.Host,
-		"path":          item.Path,
+		"method":        clean(item.Method),
+		"host":          clean(item.Host),
+		"path":          clean(item.Path),
 		"status_code":   item.StatusCode,
 		"latency_ms":    item.LatencyMs,
-		"remote_addr":   item.RemoteAddr,
-		"user_agent":    item.UserAgent,
-		"details":       item.Details,
+		"remote_addr":   clean(item.RemoteAddr),
+		"user_agent":    clean(item.UserAgent),
+		"details":       clean(item.Details),
 	}
-	encoded, _ := json.Marshal(payload)
+}
+
+func signAuditPayload(key, encoded []byte) string {
 	mac := hmac.New(sha256.New, key)
 	_, _ = mac.Write(encoded)
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func replaceInvalidUTF8(value, replacement string) string {
+	if utf8.ValidString(value) {
+		return value
+	}
+	var b strings.Builder
+	b.Grow(len(value))
+	for i := 0; i < len(value); {
+		r, size := utf8.DecodeRuneInString(value[i:])
+		if r == utf8.RuneError && size == 1 {
+			b.WriteString(replacement)
+		} else {
+			b.WriteString(value[i : i+size])
+		}
+		i += size
+	}
+	return b.String()
+}
+
+func auditLogHasInvalidUTF8(item *domain.AuditLog) bool {
+	for _, value := range []string{item.RequestID, item.Action, item.ResourceType, item.Method, item.Host, item.Path, item.RemoteAddr, item.UserAgent, item.Details} {
+		if !utf8.ValidString(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeAuditLog(item *domain.AuditLog) {
+	valid := func(value string) string { return replaceInvalidUTF8(value, string(utf8.RuneError)) }
+	item.RequestID = valid(item.RequestID)
+	item.Action = valid(item.Action)
+	item.ResourceType = valid(item.ResourceType)
+	item.Method = valid(item.Method)
+	item.Host = valid(item.Host)
+	item.Path = valid(item.Path)
+	item.RemoteAddr = valid(item.RemoteAddr)
+	item.UserAgent = valid(item.UserAgent)
+	item.Details = valid(item.Details)
 }
 
 func VerifyAuditHashChain(key []byte, items []domain.AuditLog) error {
@@ -178,8 +241,8 @@ func verifyAuditChainSegment(key []byte, prevHash string, items []domain.AuditLo
 		if item.PrevHash != prevHash {
 			return "", fmt.Errorf("audit chain mismatch at id %d", item.ID)
 		}
-		expected := computeAuditHash(key, prevHash, item)
-		if item.Hash != expected {
+		if item.Hash != computeAuditHash(key, prevHash, item) &&
+			(!auditLogHasInvalidUTF8(item) || item.Hash != computeLegacyAuditHash(key, prevHash, item)) {
 			return "", fmt.Errorf("audit hash mismatch at id %d", item.ID)
 		}
 		prevHash = item.Hash
@@ -191,6 +254,8 @@ type AuditChainResult struct {
 	Verified   int64  `json:"verified"`
 	LatestID   uint   `json:"latest_id"`
 	LatestHash string `json:"latest_hash"`
+	AnchorID   uint   `json:"anchor_id,omitempty"`
+	Pruned     int64  `json:"pruned,omitempty"`
 }
 
 type AuditCompactionResult struct {
@@ -232,6 +297,9 @@ func (s *AuditStore) Compact(ctx context.Context) (AuditCompactionResult, error)
 	const batchSize = 500
 	result := AuditCompactionResult{}
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := deleteAuditCheckpoint(tx); err != nil {
+			return err
+		}
 		prevHash := ""
 		var lastID uint
 		for {
@@ -285,6 +353,16 @@ func (s *AuditStore) VerifyChain(ctx context.Context) (AuditChainResult, error) 
 	result := AuditChainResult{}
 	prevHash := ""
 	var lastID uint
+	checkpoint, err := s.Checkpoint(ctx)
+	if err != nil {
+		return result, err
+	}
+	if checkpoint != nil {
+		prevHash = checkpoint.LastHash
+		lastID = checkpoint.LastID
+		result.AnchorID = checkpoint.LastID
+		result.Pruned = checkpoint.Pruned
+	}
 	for {
 		var batch []domain.AuditLog
 		if err := s.db.WithContext(ctx).

@@ -22,6 +22,10 @@ production security posture by itself.
   - `NODE_ALLOW_MTLS_HEADER_FALLBACK=false` unless explicitly required behind trusted infrastructure
   - keep enrollment and heartbeat auth-fail rate limits enabled (`NODE_ENROLL_RATE_*`, `NODE_HEARTBEAT_AUTH_FAIL_RATE_*`)
 
+## Audit log size
+
+The audit log grows with traffic and is kept forever by default. Set `AUDIT_RETENTION_DAYS` to drop entries older than that many days. The cleanup runs hourly while the server is up, always removes the oldest entries first and stores a signed checkpoint, so hash chain verification continues from there. SQLite reuses the freed pages; run `portlyn audit compact` once offline if you want the file itself to shrink.
+
 ## Exposure model
 
 - Treat the admin UI and API as privileged surfaces.

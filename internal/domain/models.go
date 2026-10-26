@@ -382,6 +382,8 @@ type Certificate struct {
 	NextRenewalAt     *time.Time       `json:"next_renewal_at"`
 	RenewalWindowDays int              `gorm:"not null;default:30" json:"renewal_window_days"`
 	IsAutoRenew       bool             `gorm:"not null;default:true" json:"is_auto_renew"`
+	FailureCount      int              `gorm:"not null;default:0" json:"failure_count"`
+	NextAttemptAt     *time.Time       `gorm:"index" json:"next_attempt_at"`
 	DNSProviderID     *uint            `gorm:"index" json:"dns_provider_id"`
 	DNSProvider       *DNSProvider     `json:"dns_provider,omitempty"`
 	SANs              []CertificateSAN `gorm:"constraint:OnDelete:CASCADE" json:"sans,omitempty"`

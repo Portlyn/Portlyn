@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -105,6 +106,11 @@ func main() {
 		case "help", "--help", "-h":
 			printUsage()
 			return
+		default:
+			fmt.Fprintf(os.Stderr, "unknown command %q", os.Args[1])
+			fmt.Fprintln(os.Stderr)
+			printUsageTo(os.Stderr)
+			os.Exit(2)
 		}
 	}
 	cfg, err := config.Load()
@@ -307,6 +313,7 @@ func main() {
 	geoipLookup := geoip.NewLookup()
 	crowdSecClient := security.NewCrowdSec()
 	crowdSecClient.SetLogger(logger)
+	crowdSecClient.SetVersion(cfg.AppVersion)
 	if currentSettings, err := appSettingsStore.Get(context.Background()); err == nil {
 		if path := strings.TrimSpace(currentSettings.GeoIPDBPath); path != "" {
 			if err := geoipLookup.Load(path); err != nil {
@@ -564,6 +571,9 @@ func main() {
 	if cfg.ACMELeader {
 		acmeManager.StartWorker(rootCtx)
 	}
+	if cfg.AuditRetentionDays > 0 {
+		go runAuditRetention(rootCtx, auditStore, cfg.AuditRetentionDays, logger)
+	}
 	<-rootCtx.Done()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -606,7 +616,11 @@ func portFromAddr(addr string) string {
 }
 
 func printUsage() {
-	fmt.Println(`portlyn ` + version + `
+	printUsageTo(os.Stdout)
+}
+
+func printUsageTo(w io.Writer) {
+	fmt.Fprintln(w, `portlyn `+version+`
 
 Usage:
   portlyn               start the server (requires .env)

@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -25,22 +26,34 @@ type CrowdSec struct {
 	interval   time.Duration
 	startup    bool
 	logger     *slog.Logger
+	version    string
+	startedAt  time.Time
 
 	syncMu      sync.RWMutex
 	lastSuccess time.Time
 	synced      bool
 
 	decisionsMu     sync.RWMutex
-	ipDecisions     map[string]string
+	ipDecisions     map[string]decisionEntry
 	prefixDecisions []decisionPrefix
+
+	processed atomic.Uint64
+	droppedMu sync.Mutex
+	dropped   map[string]uint64
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
+type decisionEntry struct {
+	reason string
+	origin string
+}
+
 type decisionPrefix struct {
 	prefix netip.Prefix
 	reason string
+	origin string
 }
 
 type Decision struct {
@@ -61,7 +74,8 @@ type decisionsStream struct {
 func NewCrowdSec() *CrowdSec {
 	return &CrowdSec{
 		httpClient:  &http.Client{Timeout: 10 * time.Second, Transport: ssrfGuardedTransport()},
-		ipDecisions: make(map[string]string),
+		ipDecisions: make(map[string]decisionEntry),
+		dropped:     make(map[string]uint64),
 		interval:    60 * time.Second,
 	}
 }
@@ -124,10 +138,12 @@ func (c *CrowdSec) Start(ctx context.Context) {
 	innerCtx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 	c.startup = true
+	c.startedAt = time.Now().UTC()
 	c.mu.Unlock()
 
-	c.wg.Add(1)
+	c.wg.Add(2)
 	go c.loop(innerCtx)
+	go c.metricsLoop(innerCtx)
 }
 
 func (c *CrowdSec) Stop() {
@@ -245,8 +261,9 @@ func (c *CrowdSec) addLocked(dec Decision) {
 	if reason == "" {
 		reason = dec.Origin
 	}
+	origin := decisionOrigin(dec)
 	if strings.EqualFold(dec.Scope, "ip") {
-		c.ipDecisions[value] = reason
+		c.ipDecisions[value] = decisionEntry{reason: reason, origin: origin}
 		return
 	}
 	if strings.EqualFold(dec.Scope, "range") {
@@ -254,8 +271,19 @@ func (c *CrowdSec) addLocked(dec Decision) {
 		if err != nil {
 			return
 		}
-		c.prefixDecisions = append(c.prefixDecisions, decisionPrefix{prefix: prefix.Masked(), reason: reason})
+		c.prefixDecisions = append(c.prefixDecisions, decisionPrefix{prefix: prefix.Masked(), reason: reason, origin: origin})
 	}
+}
+
+func decisionOrigin(dec Decision) string {
+	origin := strings.TrimSpace(dec.Origin)
+	if strings.EqualFold(origin, "lists") && dec.Scenario != "" {
+		return "lists:" + dec.Scenario
+	}
+	if origin == "" {
+		return "unknown"
+	}
+	return origin
 }
 
 func (c *CrowdSec) removeLocked(dec Decision) {
@@ -294,17 +322,23 @@ func (c *CrowdSec) IsBlocked(ip net.IP) (bool, string) {
 	if addr.Is4In6() {
 		addr = addr.Unmap()
 	}
+	c.recordProcessed()
 	c.decisionsMu.RLock()
-	defer c.decisionsMu.RUnlock()
-	if reason, ok := c.ipDecisions[ip.String()]; ok {
-		return true, reason
-	}
-	for _, prefix := range c.prefixDecisions {
-		if prefix.prefix.Contains(addr) {
-			return true, prefix.reason
+	entry, ok := c.ipDecisions[ip.String()]
+	if !ok {
+		for _, prefix := range c.prefixDecisions {
+			if prefix.prefix.Contains(addr) {
+				entry, ok = decisionEntry{reason: prefix.reason, origin: prefix.origin}, true
+				break
+			}
 		}
 	}
-	return false, ""
+	c.decisionsMu.RUnlock()
+	if !ok {
+		return false, ""
+	}
+	c.recordDropped(entry.origin)
+	return true, entry.reason
 }
 
 func (c *CrowdSec) Stats() (int, int) {
