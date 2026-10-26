@@ -14,6 +14,8 @@ type CertificateRenewer interface {
 	SyncCertificate(ctx context.Context, item *domain.Certificate) (*domain.Certificate, error)
 }
 
+const syncTimeout = 10 * time.Minute
+
 type AcmeWorker struct {
 	store       CertificateStore
 	metaStore   *store.CertificateStore
@@ -23,6 +25,7 @@ type AcmeWorker struct {
 	logger      *slog.Logger
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
+	now         func() time.Time
 }
 
 func NewAcmeWorker(store CertificateStore, metaStore *store.CertificateStore, renewer CertificateRenewer, interval, renewWithin time.Duration, logger *slog.Logger) *AcmeWorker {
@@ -39,6 +42,7 @@ func NewAcmeWorker(store CertificateStore, metaStore *store.CertificateStore, re
 		interval:    interval,
 		renewWithin: renewWithin,
 		logger:      logger,
+		now:         time.Now,
 	}
 }
 
@@ -78,7 +82,8 @@ func (w *AcmeWorker) loop(ctx context.Context) {
 }
 
 func (w *AcmeWorker) runOnce(ctx context.Context) {
-	pending, err := w.metaStore.ListPending(ctx, 32)
+	now := w.now().UTC()
+	pending, err := w.metaStore.ListPending(ctx, now, 32)
 	if err != nil {
 		if w.logger != nil {
 			w.logger.Error("list pending certificates failed", "error", err)
@@ -86,12 +91,10 @@ func (w *AcmeWorker) runOnce(ctx context.Context) {
 		return
 	}
 	for i := range pending {
-		if _, err := w.renewer.SyncCertificate(ctx, &pending[i]); err != nil && w.logger != nil {
-			w.logger.Error("pending certificate sync failed", "certificate_id", pending[i].ID, "error", err)
-		}
+		w.sync(ctx, &pending[i], "pending certificate sync failed")
 	}
 
-	expiring, err := w.metaStore.ListExpiringBefore(ctx, time.Now().UTC().Add(w.renewWithin))
+	expiring, err := w.metaStore.ListExpiringBefore(ctx, now.Add(w.renewWithin), now)
 	if err != nil {
 		if w.logger != nil {
 			w.logger.Error("list expiring certificates failed", "error", err)
@@ -102,10 +105,14 @@ func (w *AcmeWorker) runOnce(ctx context.Context) {
 		if !expiring[i].IsAutoRenew {
 			continue
 		}
-		expiring[i].Status = domain.CertificateStatusRenewing
-		_ = w.metaStore.Update(ctx, &expiring[i])
-		if _, err := w.renewer.SyncCertificate(ctx, &expiring[i]); err != nil && w.logger != nil {
-			w.logger.Error("expiring certificate sync failed", "certificate_id", expiring[i].ID, "error", err)
-		}
+		w.sync(ctx, &expiring[i], "expiring certificate sync failed")
+	}
+}
+
+func (w *AcmeWorker) sync(ctx context.Context, item *domain.Certificate, failureMessage string) {
+	syncCtx, cancel := context.WithTimeout(ctx, syncTimeout)
+	defer cancel()
+	if _, err := w.renewer.SyncCertificate(syncCtx, item); err != nil && w.logger != nil {
+		w.logger.Error(failureMessage, "certificate_id", item.ID, "error", err)
 	}
 }

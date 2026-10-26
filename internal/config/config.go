@@ -93,6 +93,7 @@ type Config struct {
 	AuditBatchSize                  int
 	AuditFlushInterval              time.Duration
 	AuditDropPolicy                 string
+	AuditRetentionDays              int
 	AuditWebhookAllowPrivateTargets bool
 	RouteCacheTTL                   time.Duration
 	RouteLocalCacheTTL              time.Duration
@@ -250,6 +251,7 @@ func Load() (Config, error) {
 		AuditBatchSize:                  getEnvInt("AUDIT_BATCH_SIZE", 128),
 		AuditFlushInterval:              getEnvDuration("AUDIT_FLUSH_INTERVAL", 250*time.Millisecond),
 		AuditDropPolicy:                 strings.ToLower(getEnv("AUDIT_DROP_POLICY", "sync_fallback")),
+		AuditRetentionDays:              getEnvInt("AUDIT_RETENTION_DAYS", 0),
 		AuditWebhookAllowPrivateTargets: getEnvBool("AUDIT_WEBHOOK_ALLOW_PRIVATE_TARGETS", false),
 		RouteCacheTTL:                   getEnvDuration("ROUTE_CACHE_TTL", 30*time.Second),
 		RouteLocalCacheTTL:              getEnvDuration("ROUTE_LOCAL_CACHE_TTL", 5*time.Second),
@@ -440,6 +442,9 @@ func (cfg *Config) ValidationIssues() []ValidationIssue {
 	}
 	if cfg.AlertNodeHeartbeatFailThreshold <= 0 {
 		add("error", "ALERT_NODE_HEARTBEAT_FAIL_THRESHOLD", "invalid_alert_node_heartbeat_fail_threshold", "ALERT_NODE_HEARTBEAT_FAIL_THRESHOLD must be greater than zero")
+	}
+	if cfg.AuditRetentionDays < 0 {
+		add("error", "AUDIT_RETENTION_DAYS", "invalid_audit_retention_days", "AUDIT_RETENTION_DAYS must be zero (keep forever) or a number of days")
 	}
 	if cfg.AlertAuditAnomalyThreshold <= 0 {
 		add("error", "ALERT_AUDIT_ANOMALY_THRESHOLD", "invalid_alert_audit_anomaly_threshold", "ALERT_AUDIT_ANOMALY_THRESHOLD must be greater than zero")

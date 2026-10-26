@@ -563,6 +563,9 @@ func main() {
 	if cfg.ACMELeader {
 		acmeManager.StartWorker(rootCtx)
 	}
+	if cfg.AuditRetentionDays > 0 {
+		go runAuditRetention(rootCtx, auditStore, cfg.AuditRetentionDays, logger)
+	}
 	<-rootCtx.Done()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

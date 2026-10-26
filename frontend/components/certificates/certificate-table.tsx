@@ -78,7 +78,16 @@ export function CertificateTable({
               <Table.Td>{formatDateTime(certificate.last_checked_at)}</Table.Td>
               <Table.Td>{certificate.dns_provider?.name || "-"}</Table.Td>
               <Table.Td>{certificate.is_auto_renew ? "Enabled" : "Disabled"}</Table.Td>
-              <Table.Td><Text c="dimmed" size="sm">{certificate.last_error || "-"}</Text></Table.Td>
+              <Table.Td>
+                <Stack gap={2}>
+                  <Text c="dimmed" size="sm">{certificate.last_error || "-"}</Text>
+                  {certificate.failure_count > 0 ? (
+                    <Text c="dimmed" size="xs">
+                      {certificate.failure_count} failed {certificate.failure_count === 1 ? "attempt" : "attempts"}, next {formatDateTime(certificate.next_attempt_at)}
+                    </Text>
+                  ) : null}
+                </Stack>
+              </Table.Td>
               {canManage ? (
                 <Table.Td>
                   <Stack align="flex-end" gap="xs">

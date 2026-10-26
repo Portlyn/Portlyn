@@ -273,6 +273,11 @@ export default function CertificatesPage() {
               <Text size="sm" c={inspectedCertificate.last_error ? "red.3" : "dimmed"}>
                 {inspectedCertificate.last_error || "No recent certificate error."}
               </Text>
+              {inspectedCertificate.failure_count > 0 ? (
+                <Text size="sm" c="dimmed">
+                  {inspectedCertificate.failure_count} failed {inspectedCertificate.failure_count === 1 ? "attempt" : "attempts"} in a row. Next automatic attempt: {formatDateTime(inspectedCertificate.next_attempt_at)}. Retries slow down to once a day.
+                </Text>
+              ) : null}
             </Stack>
           </Stack>
         </Card>
