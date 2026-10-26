@@ -216,6 +216,7 @@ export default function AccessLogPage() {
                 ["Path", selected.path],
                 ["Service", selected.service_name ? `${selected.service_name} (#${selected.service_id})` : "-"],
                 ["Client IP", selected.remote_addr],
+                ["Connected from", selected.peer_addr || "-"],
                 ["User", selected.user_email || "-"],
                 ["User agent", selected.user_agent || "-"],
                 ["Referer", selected.referer || "-"],

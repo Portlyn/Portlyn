@@ -451,6 +451,13 @@ func main() {
 		server.SetNodeRateLimiter(rate.NewRedisLimiter(redisClient, "portlyn:node:ratelimit"))
 	}
 	authService.StartCacheJanitor(rootCtx)
+	forwarderReports := store.NewForwarderReportStore(db)
+	proxyManager.SetForwarderReportHook(func(ctx context.Context, report domain.ForwarderReport) {
+		if err := forwarderReports.Save(ctx, report); err != nil && ctx.Err() == nil {
+			logger.Warn("saving forwarder report failed", "error", err)
+		}
+	})
+	exposureScanner.SetForwarderReport(proxyManager.ForwarderReport)
 	proxyManager.Start(rootCtx)
 	updateChecker := updatecheck.New(updatecheck.Options{
 		Repo:           updateRepo,

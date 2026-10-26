@@ -15,6 +15,7 @@ production security posture by itself.
 - Keep `METRICS_PUBLIC=false` unless `/metrics` is protected by a dedicated network/auth layer.
 - Keep internal admin and observability binds local by default (`PORTLYN_API_BIND_ADDR=127.0.0.1`, `LOKI_BIND_ADDR=127.0.0.1`, `GRAFANA_BIND_ADDR=127.0.0.1`).
 - Set `TRUSTED_PROXY_CIDRS` only to the exact CIDR ranges of your TLS-terminating load balancers. Leave it empty when Portlyn receives traffic directly.
+- Behind a CDN, add the CDN's published edge ranges to `TRUSTED_PROXY_CIDRS`. Otherwise the edge counts as the client, so geo rules and CrowdSec decisions hit the CDN instead of the visitor. Portlyn warns about this in the log, on the System page, in `portlyn doctor` and in the exposure report. Access log lines carry `remote_addr` (resolved client) and `peer_addr` (socket peer) separately.
 - Keep node transport hardening enabled:
   - `NODE_REQUIRE_HTTPS=true`
   - `NODE_TRUST_FORWARDED_PROTO=false` unless behind a trusted TLS-terminating proxy listed in `TRUSTED_PROXY_CIDRS`

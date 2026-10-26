@@ -231,7 +231,7 @@ func (s *Server) writeHealth(w http.ResponseWriter, r *http.Request, kind string
 
 	ready := s.evaluateReadiness(ctx)
 	services := s.evaluateServiceStatus(ctx)
-	cluster := s.evaluateClusterStatus(ctx)
+	cluster := append(s.evaluateClusterStatus(ctx), s.evaluateForwarderStatus()...)
 	summary := summarizeConditions(append(append([]StatusCondition{}, ready...), append(services, cluster...)...))
 	status := overallHealthLevel(summary)
 	statusCode := http.StatusOK
@@ -295,6 +295,25 @@ func (s *Server) evaluateReadiness(ctx context.Context) []StatusCondition {
 		results = append(results, condition)
 	}
 	return results
+}
+
+func (s *Server) evaluateForwarderStatus() []StatusCondition {
+	if s.proxy == nil {
+		return nil
+	}
+	report := s.proxy.ForwarderReport()
+	out := make([]StatusCondition, 0, len(report.Findings))
+	for _, finding := range report.Findings {
+		out = append(out, StatusCondition{
+			Name:      "untrusted_forwarder:" + finding.Host,
+			Scope:     "proxy",
+			Level:     HealthLevelWarn,
+			Summary:   finding.Message(),
+			Reason:    "untrusted_forwarder",
+			CheckedAt: report.CheckedAt,
+		})
+	}
+	return out
 }
 
 func (s *Server) evaluateServiceStatus(ctx context.Context) []StatusCondition {
