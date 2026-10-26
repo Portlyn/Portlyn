@@ -313,6 +313,7 @@ func main() {
 	geoipLookup := geoip.NewLookup()
 	crowdSecClient := security.NewCrowdSec()
 	crowdSecClient.SetLogger(logger)
+	crowdSecClient.SetVersion(cfg.AppVersion)
 	if currentSettings, err := appSettingsStore.Get(context.Background()); err == nil {
 		if path := strings.TrimSpace(currentSettings.GeoIPDBPath); path != "" {
 			if err := geoipLookup.Load(path); err != nil {
