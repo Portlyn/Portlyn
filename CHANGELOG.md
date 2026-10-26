@@ -4,6 +4,40 @@ All notable changes to this project should be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning for tagged releases.
 
+## [1.7.0] - 2026-10-27
+
+### Upgrade notes
+
+- One new migration on startup (certificate retry state). Take a backup first
+  as usual.
+- Audit retention is off by default. Set `AUDIT_RETENTION_DAYS` to drop older
+  entries; run `portlyn audit compact` once offline if the database file
+  should shrink.
+- Behind a CDN, add its edge ranges to `TRUSTED_PROXY_CIDRS`. Portlyn now warns
+  when it sees forwarded traffic from a network that is not listed.
+- Proxy access log lines have a new `peer_addr` field next to `remote_addr`.
+
+### Added
+
+- `AUDIT_RETENTION_DAYS` removes old audit entries while the server runs. A
+  signed checkpoint keeps the hash chain verifiable.
+- Warning for an undeclared CDN or proxy in the log, on the System page, in
+  `portlyn doctor` and in the exposure report.
+- The CrowdSec bouncer reports usage metrics, so it shows up in
+  `cscli metrics` and the console.
+- The certificate list shows failed attempts and the next automatic retry.
+
+### Fixed
+
+- A single failing certificate no longer takes the proxy down. Failed renewals
+  back off from 5 minutes to once a day, handshakes are served from memory and
+  no longer wait on the database, and certificate syncs no longer leak
+  background workers.
+- Certificate status changes are only logged when the status really changes.
+- The audit chain no longer breaks on rows with invalid UTF-8 after a Go
+  update.
+- An unknown CLI command prints the usage instead of starting the server.
+
 ## [1.6.0] - 2026-10-23
 
 ### Upgrade notes
