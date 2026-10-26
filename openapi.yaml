@@ -202,6 +202,8 @@ components:
         expires_at: { type: string, format: date-time }
         next_renewal_at: { type: string, format: date-time, nullable: true }
         is_auto_renew: { type: boolean }
+        failure_count: { type: integer, description: Consecutive failed syncs. Reset by a successful sync, retry, renew or edit. }
+        next_attempt_at: { type: string, format: date-time, nullable: true, description: Earliest automatic sync. Failed syncs back off from 5 minutes up to 24 hours. }
         dns_provider_id: { type: integer, nullable: true }
     CertificateCreate:
       type: object

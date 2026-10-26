@@ -32,6 +32,7 @@ type CertificateStore interface {
 type DBCertificateStore struct {
 	db          *gorm.DB
 	dataSecrets [][]byte
+	cache       *certificateCache
 }
 
 func NewDBCertificateStore(db *gorm.DB, dataSecrets []string) *DBCertificateStore {
@@ -43,16 +44,22 @@ func NewDBCertificateStore(db *gorm.DB, dataSecrets []string) *DBCertificateStor
 		}
 		normalized = append(normalized, []byte(trimmed))
 	}
-	return &DBCertificateStore{db: db, dataSecrets: normalized}
+	return &DBCertificateStore{db: db, dataSecrets: normalized, cache: newCertificateCache()}
 }
 
 func (s *DBCertificateStore) DeleteCertificate(ctx context.Context, domainName string) error {
+	name := normalizeDomain(domainName)
+	defer s.cache.invalidate(name)
 	return s.db.WithContext(ctx).
-		Where("domain = ?", normalizeDomain(domainName)).
+		Where("domain = ?", name).
 		Delete(&domain.StoredTLSCertificate{}).Error
 }
 
 func (s *DBCertificateStore) GetCertificate(ctx context.Context, domainName string) (*tls.Certificate, error) {
+	return s.cache.get(ctx, normalizeDomain(domainName), s.LoadCertificate)
+}
+
+func (s *DBCertificateStore) LoadCertificate(ctx context.Context, domainName string) (*tls.Certificate, error) {
 	var item domain.StoredTLSCertificate
 	err := s.db.WithContext(ctx).Where("domain = ?", normalizeDomain(domainName)).First(&item).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -88,6 +95,7 @@ func (s *DBCertificateStore) StoreCertificate(ctx context.Context, domainName st
 	if err != nil {
 		return err
 	}
+	defer s.cache.invalidate(normalizeDomain(domainName))
 	if len(s.dataSecrets) > 0 && !secureconfig.IsEncryptedBytes(keyPEM) {
 		encryptedKey, encryptErr := secureconfig.EncryptBytesV2(s.dataSecrets[0], keyPEM)
 		if encryptErr != nil {
@@ -141,6 +149,7 @@ func (s *DBCertificateStore) StorePEM(ctx context.Context, domainName, issuerKey
 		return err
 	}
 
+	defer s.cache.invalidate(normalizeDomain(domainName))
 	record := domain.StoredTLSCertificate{
 		Domain:       normalizeDomain(domainName),
 		IssuerKey:    issuerKey,
@@ -205,6 +214,9 @@ func (s *DBCertificateStore) MigrateStoredPrivateKeys(ctx context.Context) (int,
 			return updated, err
 		}
 		updated++
+	}
+	if updated > 0 {
+		s.cache.invalidateAll()
 	}
 	return updated, nil
 }

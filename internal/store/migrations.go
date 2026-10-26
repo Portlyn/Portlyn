@@ -121,6 +121,31 @@ var migrations = []Migration{
 			return db.Migrator().DropColumn(&domain.Service{}, "LoginHosts")
 		},
 	},
+	{
+		ID: "0006_certificate_retry_state",
+		Up: func(db *gorm.DB) error {
+			if !db.Migrator().HasColumn(&domain.Certificate{}, "failure_count") {
+				if err := db.Migrator().AddColumn(&domain.Certificate{}, "FailureCount"); err != nil {
+					return err
+				}
+			}
+			if !db.Migrator().HasColumn(&domain.Certificate{}, "next_attempt_at") {
+				if err := db.Migrator().AddColumn(&domain.Certificate{}, "NextAttemptAt"); err != nil {
+					return err
+				}
+			}
+			if db.Migrator().HasIndex(&domain.Certificate{}, "NextAttemptAt") {
+				return nil
+			}
+			return db.Migrator().CreateIndex(&domain.Certificate{}, "NextAttemptAt")
+		},
+		Down: func(db *gorm.DB) error {
+			if err := db.Migrator().DropColumn(&domain.Certificate{}, "NextAttemptAt"); err != nil {
+				return err
+			}
+			return db.Migrator().DropColumn(&domain.Certificate{}, "FailureCount")
+		},
+	},
 }
 
 // Each migration commits together with its bookkeeping row, so a crash
