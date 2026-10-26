@@ -159,6 +159,7 @@ func (m *Manager) SyncCertificate(ctx context.Context, item *domain.Certificate)
 			}
 		}()
 	}
+	defer m.recordRetryState(ctx, item)
 	item.LastCheckedAt = &now
 	if item.Domain.Name == "" {
 		loaded, err := m.domains.GetByID(ctx, item.DomainID)
@@ -190,7 +191,7 @@ func (m *Manager) SyncCertificate(ctx context.Context, item *domain.Certificate)
 		return item, nil
 	}
 
-	magic, issuer, names, err := m.configForCertificate(ctx, item)
+	magic, issuer, names, stop, err := m.configForCertificate(ctx, item)
 	if err != nil {
 		item.Status = domain.CertificateStatusFailed
 		item.LastError = err.Error()
@@ -200,6 +201,8 @@ func (m *Manager) SyncCertificate(ctx context.Context, item *domain.Certificate)
 		m.recordSync("sync", item.LastError, started, item)
 		return item, nil
 	}
+
+	defer stop()
 
 	if err := magic.ManageSync(ctx, names); err != nil {
 		item.Status = domain.CertificateStatusFailed
@@ -245,6 +248,18 @@ func (m *Manager) SyncCertificate(ctx context.Context, item *domain.Certificate)
 	}
 	m.recordSync("sync", "", started, item)
 	return item, nil
+}
+
+func (m *Manager) recordRetryState(ctx context.Context, item *domain.Certificate) {
+	if item.ID == 0 {
+		return
+	}
+	failures, next := nextRetryState(item, time.Now(), m.cfg.ACMERenewWithin)
+	if err := m.certificates.UpdateRetryState(context.WithoutCancel(ctx), item.ID, failures, next); err != nil {
+		return
+	}
+	item.FailureCount = failures
+	item.NextAttemptAt = next
 }
 
 func (m *Manager) ImportPEMCertificate(ctx context.Context, item *domain.Certificate, certPEM, keyPEM, issuerKey string) (*domain.Certificate, error) {
@@ -312,12 +327,14 @@ func (m *Manager) TLSConfig() *tls.Config {
 func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	serverName := normalizeDomain(hello.ServerName)
 	if serverName != "" {
-		cert, err := m.tlsStore.GetCertificate(context.Background(), serverName)
+		ctx, cancel := context.WithTimeout(helloContext(hello), handshakeLookupTimeout)
+		defer cancel()
+		cert, err := m.tlsStore.GetCertificate(ctx, serverName)
 		if err == nil && cert != nil {
 			return cert, nil
 		}
 		if wildcardName := wildcardDomainForHost(serverName); wildcardName != "" {
-			cert, err = m.tlsStore.GetCertificate(context.Background(), wildcardName)
+			cert, err = m.tlsStore.GetCertificate(ctx, wildcardName)
 			if err == nil && cert != nil {
 				return cert, nil
 			}
@@ -352,6 +369,17 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 		}
 	}
 	return nil, fmt.Errorf("no tls certificate available")
+}
+
+const handshakeLookupTimeout = 3 * time.Second
+
+func helloContext(hello *tls.ClientHelloInfo) context.Context {
+	if hello != nil {
+		if ctx := hello.Context(); ctx != nil {
+			return ctx
+		}
+	}
+	return context.Background()
 }
 
 func localIPFromHello(hello *tls.ClientHelloInfo) string {
@@ -482,7 +510,7 @@ func (m *Manager) loadStaticCertificate() error {
 }
 
 func (m *Manager) lookupStoredCertificateExpiry(ctx context.Context, serverName string) (time.Time, error) {
-	cert, err := m.tlsStore.GetCertificate(ctx, serverName)
+	cert, err := m.tlsStore.LoadCertificate(ctx, serverName)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -521,19 +549,8 @@ func (m *Manager) newHTTPChallengeConfig() (*certmagic.Config, *certmagic.ACMEIs
 	return magic, issuer, nil
 }
 
-func (m *Manager) configForCertificate(ctx context.Context, item *domain.Certificate) (*certmagic.Config, *certmagic.ACMEIssuer, []string, error) {
+func (m *Manager) configForCertificate(ctx context.Context, item *domain.Certificate) (*certmagic.Config, *certmagic.ACMEIssuer, []string, func(), error) {
 	names := certificateNames(item)
-	var magic *certmagic.Config
-	cache := certmagic.NewCache(certmagic.CacheOptions{
-		GetConfigForCert: func(certmagic.Certificate) (*certmagic.Config, error) {
-			return magic, nil
-		},
-	})
-
-	cfg := certmagic.Config{
-		Storage: m.storage,
-	}
-	magic = certmagic.New(cache, cfg)
 	issuerTemplate := certmagic.ACMEIssuer{
 		CA:                      certificateAuthorityURL(item.Issuer, m.cfg.ACMECAURL),
 		Email:                   m.cfg.ACMEEmail,
@@ -541,15 +558,15 @@ func (m *Manager) configForCertificate(ctx context.Context, item *domain.Certifi
 	}
 	if item.ChallengeType == domain.CertificateChallengeDNS01 {
 		if item.DNSProviderID == nil || *item.DNSProviderID == 0 {
-			return nil, nil, nil, fmt.Errorf("dns-01 requires a dns provider")
+			return nil, nil, nil, nil, fmt.Errorf("dns-01 requires a dns provider")
 		}
 		provider, err := m.dnsProviders.GetByID(ctx, *item.DNSProviderID)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		appender, deleter, err := buildDNSProvider(m.cfg.DataEncryptionSecrets(), provider)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		issuerTemplate.DNS01Solver = &certmagic.DNS01Solver{
 			DNSManager: certmagic.DNSManager{
@@ -558,9 +575,17 @@ func (m *Manager) configForCertificate(ctx context.Context, item *domain.Certifi
 			},
 		}
 	}
+
+	var magic *certmagic.Config
+	cache := certmagic.NewCache(certmagic.CacheOptions{
+		GetConfigForCert: func(certmagic.Certificate) (*certmagic.Config, error) {
+			return magic, nil
+		},
+	})
+	magic = certmagic.New(cache, certmagic.Config{Storage: m.storage})
 	issuer := certmagic.NewACMEIssuer(magic, issuerTemplate)
 	magic.Issuers = []certmagic.Issuer{issuer}
-	return magic, issuer, names, nil
+	return magic, issuer, names, cache.Stop, nil
 }
 
 func (m *Manager) persistManagedCertificate(ctx context.Context, issuerKey string, names []string) error {

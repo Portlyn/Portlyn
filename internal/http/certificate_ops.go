@@ -10,8 +10,7 @@ func (s *Server) handleRetryCertificate(w stdhttp.ResponseWriter, r *stdhttp.Req
 	if !ok {
 		return
 	}
-	item.Status = "pending"
-	item.LastError = ""
+	item.FailureCount = 0
 	if _, err := s.acme.SyncCertificate(r.Context(), item); err != nil {
 		s.internalError(w, err)
 		return
@@ -25,8 +24,7 @@ func (s *Server) handleRenewCertificate(w stdhttp.ResponseWriter, r *stdhttp.Req
 	if !ok {
 		return
 	}
-	item.Status = "renewing"
-	item.LastCheckedAt = ptrTime(time.Now().UTC())
+	item.FailureCount = 0
 	if _, err := s.acme.SyncCertificate(r.Context(), item); err != nil {
 		s.internalError(w, err)
 		return
