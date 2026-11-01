@@ -48,6 +48,19 @@ type SubnetProxy struct {
 	Subnets     []netip.Prefix
 	Dial        DialFunc
 	AllowSource func(netip.Addr) bool
+	current     atomic.Pointer[[]netip.Prefix]
+}
+
+func (proxy *SubnetProxy) SetSubnets(subnets []netip.Prefix) {
+	copied := append([]netip.Prefix(nil), subnets...)
+	proxy.current.Store(&copied)
+}
+
+func (proxy *SubnetProxy) subnets() []netip.Prefix {
+	if current := proxy.current.Load(); current != nil {
+		return *current
+	}
+	return proxy.Subnets
 }
 
 func CreateNetStack(localAddrs []netip.Addr, mtu int) (tun.Device, *NetStack, error) {
@@ -72,14 +85,14 @@ func CreateNetStackWithProxy(localAddrs []netip.Addr, mtu int, proxy *SubnetProx
 	if err := dev.stack.SetTransportProtocolOption(tcp.ProtocolNumber, &sackEnabled); err != nil {
 		return nil, nil, fmt.Errorf("enable TCP SACK: %v", err)
 	}
-	if proxy != nil && len(proxy.Subnets) > 0 {
+	if proxy != nil {
 		dev.registerSubnetProxyHandlers(proxy)
 	}
 	dev.ep.AddNotify(dev)
 	if err := dev.stack.CreateNIC(nicID, dev.ep); err != nil {
 		return nil, nil, fmt.Errorf("CreateNIC: %v", err)
 	}
-	if proxy != nil && len(proxy.Subnets) > 0 {
+	if proxy != nil {
 		if err := dev.stack.SetPromiscuousMode(nicID, true); err != nil {
 			return nil, nil, fmt.Errorf("set promiscuous: %v", err)
 		}
@@ -230,7 +243,7 @@ func (n *NetStack) EnableForwarding() error {
 func (proxy *SubnetProxy) permits(id stack.TransportEndpointID) bool {
 	dst := netip.AddrFrom4(id.LocalAddress.As4())
 	inSubnet := false
-	for _, subnet := range proxy.Subnets {
+	for _, subnet := range proxy.subnets() {
 		if subnet.Contains(dst) {
 			inSubnet = true
 			break
