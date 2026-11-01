@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/netip"
 	"os"
@@ -255,7 +256,12 @@ func (proxy *SubnetProxy) permits(id stack.TransportEndpointID) bool {
 	if proxy.AllowSource == nil {
 		return true
 	}
-	return proxy.AllowSource(netip.AddrFrom4(id.RemoteAddress.As4()))
+	src := netip.AddrFrom4(id.RemoteAddress.As4())
+	if !proxy.AllowSource(src) {
+		log.Printf("subnet proxy: rejected %s -> %s:%d, source has no access to this node", src, dst, id.LocalPort)
+		return false
+	}
+	return true
 }
 
 func (n *NetStack) registerSubnetProxyHandlers(proxy *SubnetProxy) {
@@ -305,6 +311,7 @@ func proxyTCP(tunnelConn net.Conn, target string, dial DialFunc) {
 	defer tunnelConn.Close()
 	remote, err := dial("tcp", target)
 	if err != nil {
+		log.Printf("subnet proxy: dial tcp %s: %v", target, err)
 		return
 	}
 	defer remote.Close()
@@ -335,6 +342,7 @@ func proxyUDP(tunnelConn net.Conn, target string, dial DialFunc) {
 	defer tunnelConn.Close()
 	remote, err := dial("udp", target)
 	if err != nil {
+		log.Printf("subnet proxy: dial udp %s: %v", target, err)
 		return
 	}
 	defer remote.Close()
