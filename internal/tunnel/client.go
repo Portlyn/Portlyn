@@ -40,6 +40,7 @@ type Client struct {
 	options  ClientOptions
 	device   *device.Device
 	net      *NetStack
+	proxy    *SubnetProxy
 	tunnelIP netip.Addr
 	started  bool
 }
@@ -87,10 +88,7 @@ func (c *Client) Start(ctx context.Context) error {
 		return fmt.Errorf("tunnel client: resolve endpoint %q: %w", endpoint, err)
 	}
 
-	var proxy *SubnetProxy
-	if len(c.options.Subnets) > 0 {
-		proxy = &SubnetProxy{Subnets: c.options.Subnets, Dial: net.Dial, AllowSource: c.options.AllowSource}
-	}
+	proxy := &SubnetProxy{Subnets: c.options.Subnets, Dial: net.Dial, AllowSource: c.options.AllowSource}
 	tunDevice, netStack, err := CreateNetStackWithProxy([]netip.Addr{c.tunnelIP}, c.options.MTU, proxy)
 	if err != nil {
 		return fmt.Errorf("tunnel client: create tun: %w", err)
@@ -146,6 +144,7 @@ func (c *Client) Start(ctx context.Context) error {
 
 	c.device = dev
 	c.net = netStack
+	c.proxy = proxy
 	c.started = true
 
 	go func() {
@@ -153,6 +152,15 @@ func (c *Client) Start(ctx context.Context) error {
 		c.Stop()
 	}()
 	return nil
+}
+
+func (c *Client) SetSubnets(subnets []netip.Prefix) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.options.Subnets = subnets
+	if c.proxy != nil {
+		c.proxy.SetSubnets(subnets)
+	}
 }
 
 func (c *Client) ListenTCP(port int) (net.Listener, error) {
@@ -227,5 +235,6 @@ func (c *Client) Stop() {
 	}
 	c.device = nil
 	c.net = nil
+	c.proxy = nil
 	c.started = false
 }

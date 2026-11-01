@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/netip"
 	"os"
@@ -40,6 +41,7 @@ type NetStack struct {
 	closed         chan struct{}
 	closeOnce      sync.Once
 	mtu            int
+	listenAddr     tcpip.Address
 	inboundFilter  atomic.Pointer[PacketFilter]
 }
 
@@ -47,6 +49,19 @@ type SubnetProxy struct {
 	Subnets     []netip.Prefix
 	Dial        DialFunc
 	AllowSource func(netip.Addr) bool
+	current     atomic.Pointer[[]netip.Prefix]
+}
+
+func (proxy *SubnetProxy) SetSubnets(subnets []netip.Prefix) {
+	copied := append([]netip.Prefix(nil), subnets...)
+	proxy.current.Store(&copied)
+}
+
+func (proxy *SubnetProxy) subnets() []netip.Prefix {
+	if current := proxy.current.Load(); current != nil {
+		return *current
+	}
+	return proxy.Subnets
 }
 
 func CreateNetStack(localAddrs []netip.Addr, mtu int) (tun.Device, *NetStack, error) {
@@ -71,14 +86,14 @@ func CreateNetStackWithProxy(localAddrs []netip.Addr, mtu int, proxy *SubnetProx
 	if err := dev.stack.SetTransportProtocolOption(tcp.ProtocolNumber, &sackEnabled); err != nil {
 		return nil, nil, fmt.Errorf("enable TCP SACK: %v", err)
 	}
-	if proxy != nil && len(proxy.Subnets) > 0 {
+	if proxy != nil {
 		dev.registerSubnetProxyHandlers(proxy)
 	}
 	dev.ep.AddNotify(dev)
 	if err := dev.stack.CreateNIC(nicID, dev.ep); err != nil {
 		return nil, nil, fmt.Errorf("CreateNIC: %v", err)
 	}
-	if proxy != nil && len(proxy.Subnets) > 0 {
+	if proxy != nil {
 		if err := dev.stack.SetPromiscuousMode(nicID, true); err != nil {
 			return nil, nil, fmt.Errorf("set promiscuous: %v", err)
 		}
@@ -96,6 +111,9 @@ func CreateNetStackWithProxy(localAddrs []netip.Addr, mtu int, proxy *SubnetProx
 		}
 		if err := dev.stack.AddProtocolAddress(nicID, protoAddr, stack.AddressProperties{}); err != nil {
 			return nil, nil, fmt.Errorf("AddProtocolAddress(%v): %v", ip, err)
+		}
+		if dev.listenAddr.BitLen() == 0 {
+			dev.listenAddr = protoAddr.AddressWithPrefix.Address
 		}
 	}
 	dev.stack.AddRoute(tcpip.Route{Destination: header.IPv4EmptySubnet, NIC: nicID})
@@ -212,7 +230,7 @@ func (n *NetStack) DialContext(ctx context.Context, network, address string) (ne
 }
 
 func (n *NetStack) ListenTCP(port int) (net.Listener, error) {
-	full := tcpip.FullAddress{NIC: nicID, Port: uint16(port)}
+	full := tcpip.FullAddress{NIC: nicID, Addr: n.listenAddr, Port: uint16(port)}
 	return gonet.ListenTCP(n.stack, full, ipv4.ProtocolNumber)
 }
 
@@ -226,7 +244,7 @@ func (n *NetStack) EnableForwarding() error {
 func (proxy *SubnetProxy) permits(id stack.TransportEndpointID) bool {
 	dst := netip.AddrFrom4(id.LocalAddress.As4())
 	inSubnet := false
-	for _, subnet := range proxy.Subnets {
+	for _, subnet := range proxy.subnets() {
 		if subnet.Contains(dst) {
 			inSubnet = true
 			break
@@ -238,7 +256,12 @@ func (proxy *SubnetProxy) permits(id stack.TransportEndpointID) bool {
 	if proxy.AllowSource == nil {
 		return true
 	}
-	return proxy.AllowSource(netip.AddrFrom4(id.RemoteAddress.As4()))
+	src := netip.AddrFrom4(id.RemoteAddress.As4())
+	if !proxy.AllowSource(src) {
+		log.Printf("subnet proxy: rejected %s -> %s:%d, source has no access to this node", src, dst, id.LocalPort)
+		return false
+	}
+	return true
 }
 
 func (n *NetStack) registerSubnetProxyHandlers(proxy *SubnetProxy) {
@@ -288,6 +311,7 @@ func proxyTCP(tunnelConn net.Conn, target string, dial DialFunc) {
 	defer tunnelConn.Close()
 	remote, err := dial("tcp", target)
 	if err != nil {
+		log.Printf("subnet proxy: dial tcp %s: %v", target, err)
 		return
 	}
 	defer remote.Close()
@@ -318,6 +342,7 @@ func proxyUDP(tunnelConn net.Conn, target string, dial DialFunc) {
 	defer tunnelConn.Close()
 	remote, err := dial("udp", target)
 	if err != nil {
+		log.Printf("subnet proxy: dial udp %s: %v", target, err)
 		return
 	}
 	defer remote.Close()

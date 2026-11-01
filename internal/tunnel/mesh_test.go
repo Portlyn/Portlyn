@@ -137,7 +137,7 @@ func TestSubnetProxyRoundTrip(t *testing.T) {
 	// Build the client device manually so we can inject a dialer that reaches the
 	// in-process echo server instead of an unreachable LAN IP.
 	dial := func(network, _ string) (net.Conn, error) { return net.Dial(network, echoAddr) }
-	clientTun, _, err := CreateNetStackWithProxy([]netip.Addr{clientIP}, 1420, &SubnetProxy{
+	clientTun, clientNet, err := CreateNetStackWithProxy([]netip.Addr{clientIP}, 1420, &SubnetProxy{
 		Subnets: []netip.Prefix{netip.MustParsePrefix(lanSubnet)},
 		Dial:    dial,
 	})
@@ -162,6 +162,22 @@ func TestSubnetProxyRoundTrip(t *testing.T) {
 	if err := clientDevice.Up(); err != nil {
 		t.Fatalf("client up: %v", err)
 	}
+
+	serviceListener, err := clientNet.ListenTCP(80)
+	if err != nil {
+		t.Fatalf("service listen: %v", err)
+	}
+	t.Cleanup(func() { _ = serviceListener.Close() })
+	go func() {
+		for {
+			conn, err := serviceListener.Accept()
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write([]byte("service"))
+			conn.Close()
+		}
+	}()
 
 	clientCtx := context.Background()
 	target := "10.123.0.5:80"
@@ -192,9 +208,30 @@ func TestSubnetProxyRoundTrip(t *testing.T) {
 			continue
 		}
 		if string(buf[:n]) == "ping-mesh" {
+			assertTunnelService(t, srv, clientIP.String()+":80", "service")
 			return
 		}
 		lastErr = nil
 	}
 	t.Fatalf("subnet proxy round trip never succeeded: %v", lastErr)
+}
+
+func assertTunnelService(t *testing.T, srv *Server, target, want string) {
+	t.Helper()
+	dialCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, err := srv.DialContext(dialCtx, "tcp", target)
+	if err != nil {
+		t.Fatalf("dial tunnel service: %v", err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+	buf := make([]byte, 64)
+	n, err := conn.Read(buf)
+	if err != nil {
+		t.Fatalf("read tunnel service: %v", err)
+	}
+	if string(buf[:n]) != want {
+		t.Fatalf("tunnel service returned %q, want %q", buf[:n], want)
+	}
 }

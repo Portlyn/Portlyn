@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -202,6 +203,14 @@ func main() {
 			log.Print("hub tunnel ip unknown; relay connections are rejected until the hub reports it")
 		}
 		peers.setSources(result.AllowedSources)
+		if result.AdvertisedSubnets != nil && !slices.Equal(result.AdvertisedSubnets, state.Subnets) {
+			state.Subnets = result.AdvertisedSubnets
+			wgClient.SetSubnets(parseCIDRs(state.Subnets))
+			if err := saveState(resolvedStatePath, state); err != nil {
+				log.Printf("save state: %v", err)
+			}
+			log.Printf("subnet proxy now serving %v", state.Subnets)
+		}
 		fwd.reconcile(result.Targets)
 	}
 	refreshTargets()

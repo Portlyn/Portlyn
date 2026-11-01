@@ -31,3 +31,19 @@ func TestSubnetProxyPermits(t *testing.T) {
 		t.Fatal("expected unauthorized source to be rejected")
 	}
 }
+
+func TestSubnetProxySetSubnets(t *testing.T) {
+	proxy := &SubnetProxy{}
+	id := stack.TransportEndpointID{RemoteAddress: tcpip.AddrFrom4([4]byte{10, 42, 0, 1}), LocalAddress: tcpip.AddrFrom4([4]byte{192, 168, 178, 22})}
+	if proxy.permits(id) {
+		t.Fatal("expected a proxy without subnets to reject everything")
+	}
+	proxy.SetSubnets([]netip.Prefix{netip.MustParsePrefix("192.168.178.0/24")})
+	if !proxy.permits(id) {
+		t.Fatal("expected flow into a newly advertised subnet to be permitted")
+	}
+	proxy.SetSubnets(nil)
+	if proxy.permits(id) {
+		t.Fatal("expected flow to be rejected once the subnet is withdrawn")
+	}
+}
