@@ -4,6 +4,22 @@ All notable changes to this project should be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning for tagged releases.
 
+## [1.7.1] - 2026-11-01
+
+### Upgrade notes
+
+- Only the node agent changed. Update the agents on nodes that advertise
+  subnets.
+
+### Fixed
+
+- Client VPN traffic to a LAN port that a node service also uses (for example
+  8096) no longer gets rejected by the node.
+- The node agent picks up changed advertised subnets without being
+  provisioned again.
+- Rejected and failed subnet connections show up in the node agent log.
+- follow-redirects 1.16.2 in the frontend (GHSA-mrwp-f3q8-3g9p).
+
 ## [1.7.0] - 2026-10-27
 
 ### Upgrade notes
