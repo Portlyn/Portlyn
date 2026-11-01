@@ -40,6 +40,7 @@ type NetStack struct {
 	closed         chan struct{}
 	closeOnce      sync.Once
 	mtu            int
+	listenAddr     tcpip.Address
 	inboundFilter  atomic.Pointer[PacketFilter]
 }
 
@@ -96,6 +97,9 @@ func CreateNetStackWithProxy(localAddrs []netip.Addr, mtu int, proxy *SubnetProx
 		}
 		if err := dev.stack.AddProtocolAddress(nicID, protoAddr, stack.AddressProperties{}); err != nil {
 			return nil, nil, fmt.Errorf("AddProtocolAddress(%v): %v", ip, err)
+		}
+		if dev.listenAddr.BitLen() == 0 {
+			dev.listenAddr = protoAddr.AddressWithPrefix.Address
 		}
 	}
 	dev.stack.AddRoute(tcpip.Route{Destination: header.IPv4EmptySubnet, NIC: nicID})
@@ -212,7 +216,7 @@ func (n *NetStack) DialContext(ctx context.Context, network, address string) (ne
 }
 
 func (n *NetStack) ListenTCP(port int) (net.Listener, error) {
-	full := tcpip.FullAddress{NIC: nicID, Port: uint16(port)}
+	full := tcpip.FullAddress{NIC: nicID, Addr: n.listenAddr, Port: uint16(port)}
 	return gonet.ListenTCP(n.stack, full, ipv4.ProtocolNumber)
 }
 
